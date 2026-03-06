@@ -39,13 +39,28 @@ export default function UsersPage() {
   const canAccess = user?.role === 'admin';
 
   const isAdminUser = (u: UserRecord) => u.role === 'admin' && !u.employeeId;
-  const getDisplayName = (u: UserRecord) => (u.employeeId ? u.employeeId.name : u.email);
+  const getDisplayName = (u: UserRecord) => {
+    const emp = u.employeeId;
+    if (emp && typeof emp === 'object' && emp !== null && 'name' in emp && typeof (emp as { name?: string }).name === 'string') {
+      return (emp as { name: string }).name;
+    }
+    return u.email || '';
+  };
+  const getEmail = (u: UserRecord) =>
+    (u.employeeId && typeof u.employeeId === 'object' && 'email' in u.employeeId
+      ? (u.employeeId as { email?: string }).email
+      : null) ?? u.email ?? '';
+  const getEmployeeType = (u: UserRecord): string | null => {
+    const emp = u.employeeId;
+    if (!emp || typeof emp !== 'object' || emp === null || !('employeeType' in emp)) return null;
+    return (emp as { employeeType: string }).employeeType || null;
+  };
 
   const filteredUsers = (Array.isArray(users) ? users : []).filter((u) => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     if (q) {
       const name = getDisplayName(u).toLowerCase();
-      const email = (u.employeeId?.email ?? u.email).toLowerCase();
+      const email = getEmail(u).toLowerCase();
       if (!name.includes(q) && !email.includes(q)) return false;
     }
     if (filterByRole !== 'all' && u.role !== filterByRole) return false;
@@ -53,9 +68,7 @@ export default function UsersPage() {
       if (filterByEmployeeType === 'admin') {
         if (u.employeeId) return false;
       } else {
-        const empType = u.employeeId && typeof u.employeeId === 'object' && 'employeeType' in u.employeeId
-          ? (u.employeeId as { employeeType: string }).employeeType
-          : null;
+        const empType = getEmployeeType(u);
         if (!empType || empType !== filterByEmployeeType) return false;
       }
     }
@@ -81,8 +94,18 @@ export default function UsersPage() {
   const fetchUsers = () => {
     setLoading(true);
     fetch('/api/users')
-      .then((r) => r.json())
-      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .then((r) => {
+        if (!r.ok) throw new Error('Fetch failed');
+        return r.json();
+      })
+      .then((data) => {
+        const list = Array.isArray(data)
+          ? data
+          : (data && typeof data === 'object' && Array.isArray(data.users)
+            ? data.users
+            : []);
+        setUsers(list);
+      })
       .catch(() => setMessage({ type: 'error', text: t('error') }))
       .finally(() => setLoading(false));
   };
@@ -116,13 +139,13 @@ export default function UsersPage() {
   };
 
   const openViewUser = (u: UserRecord) => {
-    setEditAdminForm({ email: u.employeeId?.email ?? u.email, password: '', isActive: u.isActive, role: u.role });
+    setEditAdminForm({ email: getEmail(u), password: '', isActive: u.isActive, role: u.role });
     setEditingUserId(u._id);
     setModal('view');
   };
 
   const openEditUser = (u: UserRecord) => {
-    setEditAdminForm({ email: u.employeeId?.email ?? u.email, password: '', isActive: u.isActive, role: u.role });
+    setEditAdminForm({ email: getEmail(u), password: '', isActive: u.isActive, role: u.role });
     setEditingUserId(u._id);
     setModal('edit');
   };
@@ -280,11 +303,11 @@ export default function UsersPage() {
                   sortedUsers.map((u) => (
                     <tr key={u._id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-800">{getDisplayName(u)}</td>
-                      <td className="px-4 py-3 text-slate-800">{u.employeeId?.email ?? u.email}</td>
+                      <td className="px-4 py-3 text-slate-800">{getEmail(u)}</td>
                       <td className="px-4 py-3 text-slate-800">{t(u.role) || u.role}</td>
                       <td className="px-4 py-3 text-slate-800">
-                        {u.employeeId
-                          ? u.employeeId.employeeType === 'full_time'
+                        {getEmployeeType(u)
+                          ? getEmployeeType(u) === 'full_time'
                             ? t('fullTime')
                             : t('contractor')
                           : '—'}
@@ -324,14 +347,14 @@ export default function UsersPage() {
             sortedUsers.map((u) => (
               <div key={u._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{getDisplayName(u)}</h3>
-                <p className="text-sm text-slate-600">{u.employeeId?.email ?? u.email}</p>
+                <p className="text-sm text-slate-600">{getEmail(u)}</p>
                 <p className="text-sm text-slate-600">
                   {t('role')}: {t(u.role) || u.role}
                 </p>
                 <p className="text-sm text-slate-600">
                   {t('employeeType')}:{' '}
-                  {u.employeeId
-                    ? u.employeeId.employeeType === 'full_time'
+                  {getEmployeeType(u)
+                    ? getEmployeeType(u) === 'full_time'
                       ? t('fullTime')
                       : t('contractor')
                     : '—'}
@@ -435,10 +458,11 @@ export default function UsersPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeType')}</label>
                 <p className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-800">
-                  {(() => {
+                      {(() => {
                     const u = users.find((x) => x._id === editingUserId);
-                    return u?.employeeId
-                      ? u.employeeId.employeeType === 'full_time'
+                    const empType = u ? getEmployeeType(u) : null;
+                    return empType
+                      ? empType === 'full_time'
                         ? t('fullTime')
                         : t('contractor')
                       : '—';

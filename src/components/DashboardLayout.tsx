@@ -106,7 +106,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster'), icon: <RatesIcon /> }] : []),
   ];
 
-  const NavContent = () => (
+  const navContent = (
     <>
       {navItems.map((item) => (
         <Link
@@ -126,7 +126,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     </>
   );
 
-  const LogoutButton = () => (
+  const logoutButton = (
     <button
       onClick={() => {
         logout();
@@ -234,10 +234,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          <NavContent />
+          {navContent}
         </nav>
         <div className="border-t border-white/10 p-3 shrink-0">
-          <LogoutButton />
+          {logoutButton}
         </div>
       </aside>
 
@@ -246,10 +246,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         {/* Sidebar - desktop, below white header, no logo/name */}
         <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-uff-primary text-white border-r border-white/10">
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-            <NavContent />
+            {navContent}
           </nav>
           <div className="border-t border-white/10 p-3 shrink-0">
-            <LogoutButton />
+            {logoutButton}
           </div>
         </aside>
 

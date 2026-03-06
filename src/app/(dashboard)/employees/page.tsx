@@ -2,6 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-8 last:mb-0">
+      <h3 className="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-200">{title}</h3>
+      {children}
+    </section>
+  );
+}
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
@@ -324,13 +333,6 @@ export default function EmployeesPage() {
 
   /* Full-screen add/edit form */
   if (modal) {
-    const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
-      <section className="mb-8 last:mb-0">
-        <h3 className="text-base font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-200">{title}</h3>
-        {children}
-      </section>
-    );
-
     return (
       <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
         <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200">

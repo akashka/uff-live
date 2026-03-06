@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Locale } from '@/lib/translations';
 import { translations } from '@/lib/translations';
 
@@ -66,8 +66,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [locale]
   );
 
+  const value = useMemo(
+    () => ({ locale, setLocale, fontSize, increaseFont, decreaseFont, t }),
+    [locale, setLocale, fontSize, increaseFont, decreaseFont, t]
+  );
+
   return (
-    <AppContext.Provider value={{ locale, setLocale, fontSize, increaseFont, decreaseFont, t }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );

@@ -107,6 +107,8 @@ async function seed() {
 
   const contractors = employees.filter((e) => e.employeeType === 'contractor');
   const fullTimers = employees.filter((e) => e.employeeType === 'full_time');
+
+  // Ensure Users exist for admin and for all employees (for Users page)
   let adminUser = await User.findOne({ role: 'admin' }).lean();
   if (!adminUser) {
     const created = await User.create({
@@ -117,6 +119,25 @@ async function seed() {
     });
     adminUser = created.toObject();
     console.log('✓ Admin user created (admin@uff.com / Admin@123)');
+  }
+
+  const bcrypt = (await import('bcryptjs')).default;
+  const { generatePassword } = await import('../src/lib/utils');
+  for (const emp of employees) {
+    const empObj = emp as { _id: mongoose.Types.ObjectId; email: string };
+    const existingUser = await User.findOne({ employeeId: empObj._id });
+    if (!existingUser && !(await User.findOne({ email: empObj.email }))) {
+      const pwd = generatePassword(12);
+      const hashed = await bcrypt.hash(pwd, 12);
+      await User.create({
+        email: empObj.email,
+        password: hashed,
+        role: 'employee',
+        employeeId: empObj._id,
+        isActive: true,
+      });
+      console.log(`✓ User created for employee: ${empObj.email}`);
+    }
   }
 
   // 3. Rate Master - add if empty or fewer than 10
