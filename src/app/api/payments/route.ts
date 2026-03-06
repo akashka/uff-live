@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     let workRecordRefs: { workRecord: string; totalAmount: number }[] = [];
     if (paymentType === 'contractor' && Array.isArray(workRecordIds) && workRecordIds.length > 0) {
       const records = await WorkRecord.find({ _id: { $in: workRecordIds }, employee: employeeId }).lean();
-      workRecordRefs = records.map((r) => ({ workRecord: r._id.toString(), totalAmount: r.totalAmount || 0 }));
+      workRecordRefs = (records || []).map((r) => ({ workRecord: r._id.toString(), totalAmount: r.totalAmount || 0 }));
     }
 
     const payment = await Payment.create({

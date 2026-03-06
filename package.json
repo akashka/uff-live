@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "seed:admin": "tsx scripts/seed-admin.ts"
+    "seed:admin": "tsx scripts/seed-admin.ts",
+    "seed:dummy": "tsx scripts/seed-dummy-data.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

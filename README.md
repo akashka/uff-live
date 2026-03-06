@@ -47,6 +47,11 @@ A comprehensive Next.js application for managing URBAN FASHION FACTORY with mult
    Creates admin user and sample data (branches, employees, rates, work records, payments).
    **Admin credentials:** `admin@uff.com` / `Admin@123`
 
+   To add more dummy data (rates, work records, payments) to an existing DB:
+   ```bash
+   npm run seed:dummy
+   ```
+
 5. **Run development server**
    ```bash
    npm run dev
@@ -100,3 +105,5 @@ src/
 
 Email	admin@uff.com
 Password	Admin@123
+
+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

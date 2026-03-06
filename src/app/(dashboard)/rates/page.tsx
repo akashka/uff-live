@@ -57,7 +57,7 @@ export default function RatesPage() {
   const fetchRates = () => {
     fetch(`/api/rates?includeInactive=${includeInactive}`)
       .then((r) => r.json())
-      .then(setRates)
+      .then((data) => setRates(Array.isArray(data) ? data : []))
       .catch(() => setMessage({ type: 'error', text: t('error') }));
   };
 
@@ -66,26 +66,31 @@ export default function RatesPage() {
     fetchRates();
     fetch('/api/branches?includeInactive=false')
       .then((r) => r.json())
-      .then(setBranches)
+      .then((data) => setBranches(Array.isArray(data) ? data : []))
       .catch(() => {});
     setLoading(false);
   }, [includeInactive]);
 
   const openCreate = () => {
+    if (!Array.isArray(branches) || branches.length === 0) {
+      setMessage({ type: 'error', text: t('addBranchFirst') });
+      return;
+    }
     setForm({
       name: '',
       description: '',
       unit: 'per piece',
       sameForAll: true,
       amountForAll: 0,
-      branchRates: branches.map((b) => ({ branch: b._id, amount: 0 })) || [],
+      branchRates: (Array.isArray(branches) ? branches : []).map((b) => ({ branch: b._id, amount: 0 })) || [],
     });
     setModal('create');
     setEditingId(null);
   };
 
   const openEdit = (r: RateMaster) => {
-    const branchRates = branches.map((b) => {
+    if (!Array.isArray(branches) || branches.length === 0) return;
+    const branchRates = (branches as { _id: string }[]).map((b) => {
       const existing = r.branchRates?.find(
         (br) => (typeof br.branch === 'object' ? br.branch._id : br.branch) === b._id
       );
@@ -105,7 +110,8 @@ export default function RatesPage() {
   };
 
   const openView = (r: RateMaster) => {
-    const branchRates = branches.map((b) => {
+    if (!Array.isArray(branches) || branches.length === 0) return;
+    const branchRates = (branches as { _id: string }[]).map((b) => {
       const existing = r.branchRates?.find(
         (br) => (typeof br.branch === 'object' ? br.branch._id : br.branch) === b._id
       );
@@ -150,8 +156,9 @@ export default function RatesPage() {
   };
 
   const getBranchRatesPayload = () => {
+    if (!Array.isArray(branches) || branches.length === 0) return [];
     if (form.sameForAll) {
-      return branches.map((b) => ({ branch: b._id, amount: form.amountForAll }));
+      return (Array.isArray(branches) ? branches : []).map((b) => ({ branch: b._id, amount: form.amountForAll }));
     }
     return form.branchRates.filter((br) => br.amount >= 0);
   };
@@ -246,7 +253,7 @@ export default function RatesPage() {
     }).join(' | ');
   };
 
-  const filtered = rates.filter((r) => {
+  const filtered = (Array.isArray(rates) ? rates : []).filter((r) => {
     const q = search.toLowerCase();
     if (!q) return true;
     return r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q);
@@ -282,7 +289,7 @@ export default function RatesPage() {
           <button onClick={() => setImportModal(true)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium">
             {t('importFromExcel')}
           </button>
-          <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium">
+          <button onClick={openCreate} disabled={!Array.isArray(branches) || branches.length === 0} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed" title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}>
             {t('add')} {t('rate')}
           </button>
         </div>
@@ -410,7 +417,7 @@ export default function RatesPage() {
               </div>
 
               <div className="border-t border-slate-200 pt-4">
-                {branches.length === 0 && (
+                {(!Array.isArray(branches) || branches.length === 0) && (
                   <p className="text-uff-accent text-sm mb-3">{t('addBranchFirst')}</p>
                 )}
                 {modal !== 'view' && (
@@ -473,7 +480,7 @@ export default function RatesPage() {
                         </button>
                       </div>
                     )}
-                    {branches.map((b) => (
+                    {(Array.isArray(branches) ? branches : []).map((b) => (
                       <div key={b._id} className="flex items-center gap-2">
                         <span className="text-sm text-slate-600 w-32 truncate">{b.name}</span>
                         <input

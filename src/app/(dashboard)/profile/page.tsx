@@ -431,7 +431,7 @@ export default function ProfilePage() {
                 {emp.branches?.length > 0 && (
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-slate-700">{t('branches')}</label>
-                    <p className="mt-1 text-slate-800">{emp.branches.map((b: { name: string }) => b.name).join(', ')}</p>
+                    <p className="mt-1 text-slate-800">{(emp.branches || []).map((b: { name: string }) => b.name).join(', ') || '—'}</p>
                   </div>
                 )}
               </div>
@@ -459,7 +459,7 @@ export default function ProfilePage() {
                     {workRecords.length === 0 ? (
                       <p className="text-slate-600 text-sm">{t('noData')}</p>
                     ) : (
-                      workRecords.map((rec) => (
+                      (workRecords || []).map((rec) => (
                         <div key={rec._id} className="p-4 rounded-lg bg-uff-surface border border-slate-200">
                           <div className="flex justify-between text-sm mb-2">
                             <span className="font-medium">{(rec.branch as { name?: string })?.name}</span>
@@ -477,7 +477,7 @@ export default function ProfilePage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {(rec.workItems || []).map((wi, i) => (
+                              {(rec.workItems || []).map((wi: { rateName?: string; quantity?: number; amount?: number; ratePerUnit?: number }, i: number) => (
                                 <tr key={i} className="border-t border-slate-200">
                                   <td className="py-1">{wi.rateName}</td>
                                   <td className="text-right">{wi.quantity}</td>
@@ -510,7 +510,7 @@ export default function ProfilePage() {
                     {paymentHistory.length === 0 ? (
                       <p className="text-slate-600 text-sm">{t('noData')}</p>
                     ) : (
-                      paymentHistory.map((p) => (
+                      (paymentHistory || []).map((p) => (
                         <div key={p._id} className="p-4 rounded-lg bg-uff-surface border border-slate-200">
                           <div className="flex justify-between text-sm mb-2">
                             <span className="font-medium">{p.periodStart?.slice(0, 10)} – {p.periodEnd?.slice(0, 10)}</span>

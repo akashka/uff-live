@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       .sort({ paidAt: -1 })
       .lean();
 
-    const rows: { Amount: number; Beneficiary_Name: string; 'Beneficiary_Branch / IFSC Code': string; Beneficiary_Acc_No: string }[] = payments.map((p) => {
+    const rows: { Amount: number; Beneficiary_Name: string; 'Beneficiary_Branch / IFSC Code': string; Beneficiary_Acc_No: string }[] = (payments || []).map((p) => {
       const emp = p.employee as { name?: string; ifscCode?: string; accountNumber?: string; bankBranch?: string } | null;
       const ifsc = emp?.ifscCode || '';
       const acc = emp?.accountNumber || '';

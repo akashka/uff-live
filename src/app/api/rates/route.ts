@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       .lean();
 
     if (branchId) {
-      const withAmount = rates.map((r) => {
+      const withAmount = (rates || []).map((r) => {
         const br = (r.branchRates as { branch: unknown; amount: number }[] | undefined)?.find(
           (b) => String(b.branch) === branchId
         );

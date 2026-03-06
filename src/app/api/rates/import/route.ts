@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
           continue;
         }
       }
-      const branchRates = branches.map((b) => ({ branch: b._id, amount: item.rate }));
+      const branchRates = (branches || []).map((b) => ({ branch: b._id, amount: item.rate }));
       await RateMaster.create({
         name: item.name,
         description: item.description,

@@ -32,7 +32,7 @@ export default function BranchesPage() {
   const fetchBranches = () => {
     fetch(`/api/branches?includeInactive=${includeInactive}`)
       .then((r) => r.json())
-      .then(setBranches)
+      .then((data) => setBranches(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false));
   };
 
@@ -110,7 +110,7 @@ export default function BranchesPage() {
     }
   };
 
-  const filtered = branches.filter((b) => {
+  const filtered = (Array.isArray(branches) ? branches : []).filter((b) => {
     const q = search.toLowerCase();
     if (!q) return true;
     return b.name.toLowerCase().includes(q) || b.address.toLowerCase().includes(q) || (b.phoneNumber || '').includes(q);

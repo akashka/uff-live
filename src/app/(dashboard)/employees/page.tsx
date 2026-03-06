@@ -90,7 +90,7 @@ export default function EmployeesPage() {
   const fetchEmployees = () => {
     fetch(`/api/employees?includeInactive=${includeInactive}`)
       .then((r) => r.json())
-      .then(setEmployees)
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
       .catch(() => setMessage({ type: 'error', text: t('error') }));
   };
 
@@ -99,7 +99,7 @@ export default function EmployeesPage() {
     fetchEmployees();
     fetch('/api/branches?includeInactive=true')
       .then((r) => r.json())
-      .then(setBranches)
+      .then((data) => setBranches(Array.isArray(data) ? data : []))
       .catch(() => {});
     setLoading(false);
   }, [includeInactive]);
@@ -278,7 +278,7 @@ export default function EmployeesPage() {
     navigator.clipboard.writeText(pwd);
   };
 
-  const filteredEmployees = employees.filter((e) => {
+  const filteredEmployees = (Array.isArray(employees) ? employees : []).filter((e) => {
     const q = search.toLowerCase();
     if (!q) return true;
     return (
@@ -644,8 +644,11 @@ export default function EmployeesPage() {
             </FormSection>
 
             <FormSection title={t('selectBranches')}>
+              {branches.length === 0 && (
+                <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
+              )}
               <div className="flex flex-wrap gap-3">
-                {branches.map((b) => (
+                {(Array.isArray(branches) ? branches : []).map((b) => (
                   <label key={b._id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 ${modal !== 'view' ? 'hover:bg-slate-50 cursor-pointer' : 'bg-slate-50 cursor-default'}`}>
                     <input type="checkbox" checked={form.branches.includes(b._id)} onChange={() => toggleBranch(b._id)} disabled={modal === 'view'} className="rounded" />
                     <span className="text-sm text-slate-800">{b.name}</span>
@@ -678,7 +681,9 @@ export default function EmployeesPage() {
       <PageHeader title={t('employees')}>
         <button
           onClick={openCreate}
-          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+          disabled={branches.length === 0}
+          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
         >
           {t('add')} {t('employees')}
         </button>

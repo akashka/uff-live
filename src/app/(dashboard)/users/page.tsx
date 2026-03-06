@@ -39,7 +39,7 @@ export default function UsersPage() {
   const isAdminUser = (u: UserRecord) => u.role === 'admin' && !u.employeeId;
   const getDisplayName = (u: UserRecord) => (u.employeeId ? u.employeeId.name : u.email);
 
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = (Array.isArray(users) ? users : []).filter((u) => {
     const q = search.toLowerCase();
     if (q) {
       const name = getDisplayName(u).toLowerCase();
@@ -76,7 +76,7 @@ export default function UsersPage() {
   const fetchUsers = () => {
     fetch('/api/users')
       .then((r) => r.json())
-      .then(setUsers)
+      .then((data) => setUsers(Array.isArray(data) ? data : []))
       .catch(() => setMessage({ type: 'error', text: t('error') }));
   };
 

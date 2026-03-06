@@ -87,7 +87,7 @@ export default function WorkRecordsPage() {
     if (filterEnd) url += `periodEnd=${filterEnd}&`;
     fetch(url)
       .then((r) => r.json())
-      .then(setRecords)
+      .then((data) => setRecords(Array.isArray(data) ? data : []))
       .catch(() => setMessage({ type: 'error', text: t('error') }));
   };
 
@@ -96,11 +96,11 @@ export default function WorkRecordsPage() {
     setLoading(true);
     fetch('/api/employees?includeInactive=false')
       .then((r) => r.json())
-      .then((e: Employee[]) => setEmployees(e.filter((emp) => emp.employeeType === 'contractor')))
+      .then((e: Employee[]) => setEmployees(Array.isArray(e) ? e.filter((emp: Employee) => emp.employeeType === 'contractor') : []))
       .catch(() => {});
     fetch('/api/branches?includeInactive=false')
       .then((r) => r.json())
-      .then(setBranches)
+      .then((data) => setBranches(Array.isArray(data) ? data : []))
       .catch(() => {});
     fetchRecords();
     setLoading(false);
@@ -110,7 +110,7 @@ export default function WorkRecordsPage() {
     if (form.branchId) {
       fetch(`/api/rates?includeInactive=true&branch=${form.branchId}`)
         .then((r) => r.json())
-        .then(setRates)
+        .then((data) => setRates(Array.isArray(data) ? data : []))
         .catch(() => {});
     } else {
       setRates([]);
@@ -118,6 +118,10 @@ export default function WorkRecordsPage() {
   }, [form.branchId]);
 
   const openCreate = () => {
+    if (!Array.isArray(employees) || employees.length === 0) {
+      setMessage({ type: 'error', text: t('noContractors') });
+      return;
+    }
     setForm({
       employeeId: '',
       branchId: '',
@@ -162,7 +166,7 @@ export default function WorkRecordsPage() {
   };
 
   const addWorkItem = () => {
-    if (!form.branchId || rates.length === 0) return;
+    if (!form.branchId || !rates?.length) return;
     const rate = rates[0];
     setForm((f) => ({
       ...f,
@@ -184,7 +188,7 @@ export default function WorkRecordsPage() {
     setForm((f) => {
       const items = [...f.workItems];
       (items[idx] as Record<string, unknown>)[field] = value;
-      if (field === 'rateMasterId') {
+      if (field === 'rateMasterId' && rates?.length) {
         const rate = rates.find((r) => r._id === value);
         if (rate) {
           items[idx].rateName = rate.name;
@@ -276,11 +280,11 @@ export default function WorkRecordsPage() {
     }
   };
 
-  const employeeBranches = form.employeeId
-    ? employees.find((e) => e._id === form.employeeId)?.branches || []
+  const employeeBranches = form.employeeId && employees.length > 0
+    ? (employees.find((e) => e._id === form.employeeId)?.branches || [])
     : [];
 
-  const filtered = records.filter((r) => {
+  const filtered = (Array.isArray(records) ? records : []).filter((r) => {
     const q = search.toLowerCase();
     if (!q) return true;
     const empName = (r.employee as { name?: string })?.name || '';
@@ -321,7 +325,9 @@ export default function WorkRecordsPage() {
       <PageHeader title={t('workRecords')}>
         <button
           onClick={openCreate}
-          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+          disabled={!Array.isArray(employees) || employees.length === 0}
+          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          title={employees.length === 0 ? t('noContractors') : ''}
         >
           {t('add')} {t('workRecord')}
         </button>
@@ -341,7 +347,7 @@ export default function WorkRecordsPage() {
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
             <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
               <option value="">{t('all')}</option>
-              {employees.map((e) => (
+              {(Array.isArray(employees) ? employees : []).map((e) => (
                 <option key={e._id} value={e._id}>{e.name}</option>
               ))}
             </select>
@@ -429,8 +435,8 @@ export default function WorkRecordsPage() {
                     className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
                     required
                   >
-                    <option value="">Select...</option>
-                    {employees.map((e) => (
+                    <option value="">{!Array.isArray(employees) || employees.length === 0 ? t('noContractors') : 'Select...'}</option>
+                    {(Array.isArray(employees) ? employees : []).map((e) => (
                       <option key={e._id} value={e._id}>{e.name}</option>
                     ))}
                   </select>
@@ -444,8 +450,8 @@ export default function WorkRecordsPage() {
                     className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
                     required
                   >
-                    <option value="">Select...</option>
-                    {employeeBranches.map((b) => (
+                    <option value="">{employeeBranches.length === 0 && form.employeeId ? t('noBranches') : 'Select...'}</option>
+                    {(employeeBranches || []).map((b) => (
                       <option key={b._id} value={b._id}>{b.name}</option>
                     ))}
                   </select>
@@ -483,7 +489,7 @@ export default function WorkRecordsPage() {
                     <button
                       type="button"
                       onClick={addWorkItem}
-                      disabled={!form.branchId || rates.length === 0}
+                      disabled={!form.branchId || !rates?.length}
                       className="text-sm text-uff-accent hover:text-uff-accent-hover font-medium disabled:opacity-50"
                     >
                       + {t('add')}
@@ -499,7 +505,7 @@ export default function WorkRecordsPage() {
                         disabled={modal === 'view'}
                         className={`flex-1 px-2 py-1 border rounded text-sm ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
                       >
-                        {rates.map((r) => (
+                        {(Array.isArray(rates) ? rates : []).map((r) => (
                           <option key={r._id} value={r._id}>
                             {r.name} (₹{r.amountForBranch ?? 0}/{r.unit})
                           </option>

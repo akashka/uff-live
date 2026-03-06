@@ -114,7 +114,7 @@ export default function PaymentsPage() {
     if (params.toString()) url += '?' + params.toString();
     fetch(url)
       .then((r) => r.json())
-      .then(setPayments)
+      .then((data) => setPayments(Array.isArray(data) ? data : []))
       .catch(() => setMessage({ type: 'error', text: t('error') }));
   };
 
@@ -124,12 +124,16 @@ export default function PaymentsPage() {
     fetchPayments();
     fetch('/api/employees?includeInactive=false')
       .then((r) => r.json())
-      .then(setEmployees)
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
       .catch(() => {});
     setLoading(false);
   }, [canView, filterEmployee, filterRun]);
 
   const openAdd = (emp?: Employee) => {
+    if (employees.length === 0 && !emp?._id) {
+      setMessage({ type: 'error', text: t('noEmployees') });
+      return;
+    }
     const empId = emp?._id || '';
     const pType = emp?.employeeType === 'contractor' ? 'contractor' : 'full_time';
     setForm({
@@ -270,7 +274,7 @@ export default function PaymentsPage() {
     );
   }
 
-  const filtered = payments.filter((p) => {
+  const filtered = (Array.isArray(payments) ? payments : []).filter((p) => {
     const q = search.toLowerCase();
     if (!q) return true;
     const name = (p.employee as { name?: string })?.name || '';
@@ -306,7 +310,7 @@ export default function PaymentsPage() {
               <button onClick={() => setExportModal(true)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium">
                 {t('exportBankFormat')}
               </button>
-              <button onClick={() => openAdd()} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium">
+              <button onClick={() => openAdd()} disabled={!Array.isArray(employees) || employees.length === 0} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed" title={!Array.isArray(employees) || employees.length === 0 ? t('noEmployees') : ''}>
                 {t('add')} {t('payment')}
               </button>
             </>
@@ -326,7 +330,7 @@ export default function PaymentsPage() {
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
             <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
               <option value="">{t('all')}</option>
-              {employees.map((e) => (
+              {(Array.isArray(employees) ? employees : []).map((e) => (
                 <option key={e._id} value={e._id}>{e.name}</option>
               ))}
             </select>
@@ -437,8 +441,8 @@ export default function PaymentsPage() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   required
                 >
-                  <option value="">Select...</option>
-                  {employees.map((e) => (
+                  <option value="">{!Array.isArray(employees) || employees.length === 0 ? t('noEmployees') : 'Select...'}</option>
+                  {(Array.isArray(employees) ? employees : []).map((e) => (
                     <option key={e._id} value={e._id}>{e.name} ({e.employeeType === 'contractor' ? t('contractor') : t('fullTime')})</option>
                   ))}
                 </select>
