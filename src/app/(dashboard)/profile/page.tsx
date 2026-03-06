@@ -65,7 +65,7 @@ interface ProfileData {
 
 export default function ProfilePage() {
   const { t } = useApp();
-  const { user } = useAuth();
+  const { user, refetchUser } = useAuth();
   const [data, setData] = useState<ProfileData | null>(null);
   const [workRecords, setWorkRecords] = useState<WorkRecord[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);

@@ -60,7 +60,6 @@ export async function POST(req: NextRequest) {
       email,
       password: hashedPassword,
       role: 'admin',
-      employeeId: null,
       isActive: true,
     });
 

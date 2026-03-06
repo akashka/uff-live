@@ -44,7 +44,6 @@ async function seed() {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       role: 'admin',
-      employeeId: null,
       isActive: true,
     });
     console.log('✓ Admin user created:', ADMIN_EMAIL);

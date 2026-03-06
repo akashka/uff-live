@@ -472,7 +472,7 @@ export default function UsersPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-6">
-              {isAdminUser(users.find((x) => x._id === editingUserId) ?? { role: '', employeeId: null }) && (
+              {isAdminUser(users.find((x) => x._id === editingUserId) ?? { _id: '', email: '', role: '', employeeId: null, isActive: true, createdAt: '' }) && (
                 <button
                   onClick={() => {
                     const u = users.find((x) => x._id === editingUserId);

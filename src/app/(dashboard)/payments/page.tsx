@@ -93,6 +93,7 @@ export default function PaymentsPage() {
     addDeductRemarks: '',
     pfDeducted: 0,
     esiDeducted: 0,
+    advanceDeducted: 0,
     totalPayable: 0,
     paymentAmount: 0,
     paymentMode: 'cash' as string,
