@@ -20,10 +20,14 @@ export async function GET(req: NextRequest) {
       .lean();
 
     if (branchId) {
+      const branchIdStr = String(branchId);
       const withAmount = (rates || []).map((r) => {
-        const br = (r.branchRates as { branch: unknown; amount: number }[] | undefined)?.find(
-          (b) => String(b.branch) === branchId
-        );
+        const br = (r.branchRates as { branch: unknown; amount: number }[] | undefined)?.find((b) => {
+          const bid = b.branch && typeof b.branch === 'object' && '_id' in b.branch
+            ? String((b.branch as { _id: unknown })._id)
+            : String(b.branch);
+          return bid === branchIdStr;
+        });
         return { ...r, amountForBranch: br?.amount ?? 0 };
       });
       return NextResponse.json(withAmount);

@@ -164,7 +164,14 @@ function LoginContent() {
                 disabled={loading}
                 className="w-full py-3 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-semibold transition disabled:opacity-50"
               >
-                {loading ? '...' : t('login')}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    {t('login')}
+                  </span>
+                ) : (
+                  t('login')
+                )}
               </button>
             </form>
           )}
@@ -187,7 +194,14 @@ function LoginContent() {
                 disabled={loading}
                 className="w-full py-3 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-semibold transition disabled:opacity-50"
               >
-                {loading ? '...' : t('sendOTP')}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    {t('sendOTP')}
+                  </span>
+                ) : (
+                  t('sendOTP')
+                )}
               </button>
               <button
                 type="button"
@@ -247,7 +261,14 @@ function LoginContent() {
                 disabled={loading}
                 className="w-full py-3 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-semibold transition disabled:opacity-50"
               >
-                {loading ? '...' : t('resetPassword')}
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    {t('resetPassword')}
+                  </span>
+                ) : (
+                  t('resetPassword')
+                )}
               </button>
               <button
                 type="button"

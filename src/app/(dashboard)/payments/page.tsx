@@ -5,6 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
+import { PageLoader, Skeleton } from '@/components/Skeleton';
 
 interface Employee {
   _id: string;
@@ -295,8 +296,11 @@ export default function PaymentsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      <div>
+        <PageHeader title={t('payments')}>
+          <Skeleton className="h-10 w-24" variant="rect" />
+        </PageHeader>
+        <PageLoader mode="table" />
       </div>
     );
   }

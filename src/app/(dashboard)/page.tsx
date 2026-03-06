@@ -12,6 +12,7 @@ import {
   PaymentModeChart,
   EmployeeTypeChart,
 } from '@/components/dashboard/DashboardCharts';
+import { Skeleton, DashboardSkeleton } from '@/components/Skeleton';
 
 const DASHBOARD_CONFIG_KEY = 'uff-dashboard-widgets';
 
@@ -111,8 +112,11 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-uff-accent border-t-transparent" />
+      <div className="space-y-8">
+        <PageHeader title={t('dashboard')}>
+          <Skeleton className="h-10 w-32" variant="rect" />
+        </PageHeader>
+        <DashboardSkeleton />
       </div>
     );
   }

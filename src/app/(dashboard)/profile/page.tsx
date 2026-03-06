@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
+import { ProfileSkeleton } from '@/components/Skeleton';
 
 interface WorkRecord {
   _id: string;
@@ -69,6 +71,8 @@ export default function ProfilePage() {
   const [data, setData] = useState<ProfileData | null>(null);
   const [workRecords, setWorkRecords] = useState<WorkRecord[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
+  const [workRecordsLoading, setWorkRecordsLoading] = useState(false);
+  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
   const [workFilterStart, setWorkFilterStart] = useState('');
   const [workFilterEnd, setWorkFilterEnd] = useState('');
   const [loading, setLoading] = useState(true);
@@ -110,22 +114,26 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (data?.employee?.employeeType === 'contractor' && user?.employeeId) {
+      setWorkRecordsLoading(true);
       let url = `/api/work-records?employeeId=${user.employeeId}`;
       if (workFilterStart) url += `&periodStart=${workFilterStart}`;
       if (workFilterEnd) url += `&periodEnd=${workFilterEnd}`;
       fetch(url)
         .then((r) => r.json())
-        .then(setWorkRecords)
-        .catch(() => {});
+        .then((d) => setWorkRecords(Array.isArray(d) ? d : []))
+        .catch(() => setWorkRecords([]))
+        .finally(() => setWorkRecordsLoading(false));
     }
   }, [data?.employee?.employeeType, user?.employeeId, workFilterStart, workFilterEnd]);
 
   useEffect(() => {
     if (user?.employeeId) {
+      setPaymentHistoryLoading(true);
       fetch(`/api/payments?employeeId=${user.employeeId}`)
         .then((r) => r.json())
-        .then(setPaymentHistory)
-        .catch(() => {});
+        .then((d) => setPaymentHistory(Array.isArray(d) ? d : []))
+        .catch(() => setPaymentHistory([]))
+        .finally(() => setPaymentHistoryLoading(false));
     }
   }, [user?.employeeId]);
 
@@ -182,8 +190,9 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      <div>
+        <PageHeader title={t('profile')} />
+        <ProfileSkeleton />
       </div>
     );
   }
@@ -434,6 +443,19 @@ export default function ProfilePage() {
                     <p className="mt-1 text-slate-800">{(emp.branches || []).map((b: { name: string }) => b.name).join(', ') || '—'}</p>
                   </div>
                 )}
+                {user?.employeeId && (
+                  <div className="sm:col-span-2">
+                    <Link
+                      href={`/employees/${user.employeeId}/passbook`}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium text-sm"
+                    >
+                      {t('viewPassbook')}
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {emp.employeeType === 'contractor' && (
@@ -456,7 +478,17 @@ export default function ProfilePage() {
                     />
                   </div>
                   <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {workRecords.length === 0 ? (
+                    {workRecordsLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="p-4 rounded-lg bg-slate-100 animate-pulse border border-slate-200">
+                            <div className="h-4 w-1/2 bg-slate-200 rounded mb-2" />
+                            <div className="h-3 w-full bg-slate-200 rounded mb-1" />
+                            <div className="h-3 w-2/3 bg-slate-200 rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : workRecords.length === 0 ? (
                       <p className="text-slate-600 text-sm">{t('noData')}</p>
                     ) : (
                       (workRecords || []).map((rec) => (
@@ -507,7 +539,17 @@ export default function ProfilePage() {
                   <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('paymentHistory')}</h3>
                   <p className="text-xs text-slate-600 mb-2">{t('paymentHistoryHint')}</p>
                   <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {paymentHistory.length === 0 ? (
+                    {paymentHistoryLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="p-4 rounded-lg bg-slate-100 animate-pulse border border-slate-200">
+                            <div className="h-4 w-1/2 bg-slate-200 rounded mb-2" />
+                            <div className="h-3 w-full bg-slate-200 rounded mb-1" />
+                            <div className="h-3 w-2/3 bg-slate-200 rounded" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : paymentHistory.length === 0 ? (
                       <p className="text-slate-600 text-sm">{t('noData')}</p>
                     ) : (
                       (paymentHistory || []).map((p) => (

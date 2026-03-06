@@ -8,6 +8,7 @@ import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { PageLoader, Skeleton } from '@/components/Skeleton';
 
 interface Branch {
   _id: string;
@@ -312,8 +313,11 @@ export default function EmployeesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      <div>
+        <PageHeader title={t('employees')}>
+          <Skeleton className="h-10 w-28" variant="rect" />
+        </PageHeader>
+        <PageLoader mode="table" />
       </div>
     );
   }
@@ -761,10 +765,12 @@ export default function EmployeesPage() {
                           onView={() => openView(e)}
                           onEdit={() => openEdit(e)}
                           onToggleActive={() => handleToggleActive(e)}
+                          passbookHref={`/employees/${e._id}/passbook`}
                           isActive={e.isActive}
                           viewLabel={t('view')}
                           editLabel={t('edit')}
                           toggleLabel={e.isActive ? t('makeInactive') : t('makeActive')}
+                          passbookLabel={t('viewPassbook')}
                         />
                       </td>
                     </tr>
@@ -807,10 +813,12 @@ export default function EmployeesPage() {
                     onView={() => openView(e)}
                     onEdit={() => openEdit(e)}
                     onToggleActive={() => handleToggleActive(e)}
+                    passbookHref={`/employees/${e._id}/passbook`}
                     isActive={e.isActive}
                     viewLabel={t('view')}
                     editLabel={t('edit')}
                     toggleLabel={e.isActive ? t('makeInactive') : t('makeActive')}
+                    passbookLabel={t('viewPassbook')}
                   />
                 </div>
               </div>

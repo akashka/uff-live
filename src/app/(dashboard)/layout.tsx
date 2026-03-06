@@ -18,8 +18,9 @@ function DashboardGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="animate-spin w-12 h-12 border-4 border-uff-accent border-t-transparent rounded-full" />
+        <p className="mt-4 text-sm text-slate-500 animate-pulse">Loading...</p>
       </div>
     );
   }

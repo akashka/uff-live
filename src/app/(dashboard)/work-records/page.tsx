@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { PageLoader, Skeleton } from '@/components/Skeleton';
 
 interface Branch {
   _id: string;
@@ -314,8 +315,11 @@ export default function WorkRecordsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      <div>
+        <PageHeader title={t('workRecords')}>
+          <Skeleton className="h-10 w-32" variant="rect" />
+        </PageHeader>
+        <PageLoader mode="table" />
       </div>
     );
   }

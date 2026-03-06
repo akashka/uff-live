@@ -12,15 +12,9 @@ export async function GET(req: NextRequest) {
     if (!hasRole(authUser, ['admin'])) return NextResponse.json({ error: 'Forbidden. Admin only.' }, { status: 403 });
 
     await connectDB();
-    const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type'); // 'admin' | 'all'
 
-    let filter: Record<string, unknown> = {};
-    if (type === 'admin') {
-      filter = { role: 'admin', employeeId: null };
-    }
-
-    const users = await User.find(filter)
+    // Always return ALL users (admin + employee-linked); client handles filtering
+    const users = await User.find({})
       .select('email role isActive employeeId createdAt')
       .populate('employeeId', 'name email employeeType')
       .sort({ createdAt: -1 })

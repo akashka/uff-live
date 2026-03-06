@@ -5,6 +5,8 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
+import ActionButtons from '@/components/ActionButtons';
+import { PageLoader, Skeleton } from '@/components/Skeleton';
 
 interface UserRecord {
   _id: string;
@@ -32,7 +34,7 @@ export default function UsersPage() {
   const [filterByRole, setFilterByRole] = useState<string>('all');
 
   const [adminForm, setAdminForm] = useState({ email: '', password: '' });
-  const [editAdminForm, setEditAdminForm] = useState({ email: '', password: '', isActive: true });
+  const [editAdminForm, setEditAdminForm] = useState({ email: '', password: '', isActive: true, role: 'employee' as string });
 
   const canAccess = user?.role === 'admin';
 
@@ -50,8 +52,11 @@ export default function UsersPage() {
     if (filterByEmployeeType !== 'all') {
       if (filterByEmployeeType === 'admin') {
         if (u.employeeId) return false;
-      } else if (!u.employeeId || u.employeeId.employeeType !== filterByEmployeeType) {
-        return false;
+      } else {
+        const empType = u.employeeId && typeof u.employeeId === 'object' && 'employeeType' in u.employeeId
+          ? (u.employeeId as { employeeType: string }).employeeType
+          : null;
+        if (!empType || empType !== filterByEmployeeType) return false;
       }
     }
     return true;
@@ -74,17 +79,17 @@ export default function UsersPage() {
   ];
 
   const fetchUsers = () => {
+    setLoading(true);
     fetch('/api/users')
       .then((r) => r.json())
       .then((data) => setUsers(Array.isArray(data) ? data : []))
-      .catch(() => setMessage({ type: 'error', text: t('error') }));
+      .catch(() => setMessage({ type: 'error', text: t('error') }))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     if (!canAccess) return;
-    setLoading(true);
     fetchUsers();
-    setLoading(false);
   }, [canAccess]);
 
   const handleCreateAdmin = async () => {
@@ -111,26 +116,26 @@ export default function UsersPage() {
   };
 
   const openViewUser = (u: UserRecord) => {
-    setEditAdminForm({ email: u.employeeId?.email ?? u.email, password: '', isActive: u.isActive });
+    setEditAdminForm({ email: u.employeeId?.email ?? u.email, password: '', isActive: u.isActive, role: u.role });
     setEditingUserId(u._id);
     setModal('view');
   };
 
-  const openEditAdmin = (u: UserRecord) => {
-    if (!isAdminUser(u)) return;
-    setEditAdminForm({ email: u.email, password: '', isActive: u.isActive });
+  const openEditUser = (u: UserRecord) => {
+    setEditAdminForm({ email: u.employeeId?.email ?? u.email, password: '', isActive: u.isActive, role: u.role });
     setEditingUserId(u._id);
     setModal('edit');
   };
 
-  const handleUpdateAdmin = async () => {
+  const handleUpdateUser = async () => {
     if (!editingUserId) return;
     setSaving(true);
     setMessage(null);
     try {
-      const body: { email?: string; password?: string; isActive?: boolean } = {
+      const body: { email?: string; password?: string; isActive?: boolean; role?: string } = {
         email: editAdminForm.email,
         isActive: editAdminForm.isActive,
+        role: editAdminForm.role,
       };
       if (editAdminForm.password.trim()) body.password = editAdminForm.password;
       const res = await fetch(`/api/users/${editingUserId}`, {
@@ -151,8 +156,7 @@ export default function UsersPage() {
     }
   };
 
-  const handleToggleAdminActive = async (u: UserRecord) => {
-    if (!isAdminUser(u)) return;
+  const handleToggleUserActive = async (u: UserRecord) => {
     try {
       await fetch(`/api/users/${u._id}`, {
         method: 'PATCH',
@@ -179,8 +183,11 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      <div>
+        <PageHeader title={t('users')}>
+          <Skeleton className="h-10 w-20" variant="rect" />
+        </PageHeader>
+        <PageLoader mode="table" />
       </div>
     );
   }
@@ -289,29 +296,16 @@ export default function UsersPage() {
                           {u.isActive ? t('active') : t('inactive')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => openViewUser(u)}
-                          className="text-slate-600 hover:text-slate-800 font-medium mr-2"
-                        >
-                          {t('view')}
-                        </button>
-                        {isAdminUser(u) ? (
-                          <>
-                            <button
-                              onClick={() => openEditAdmin(u)}
-                              className="text-uff-accent hover:text-uff-accent-hover font-medium mr-2"
-                            >
-                              {t('edit')}
-                            </button>
-                            <button
-                              onClick={() => handleToggleAdminActive(u)}
-                              className={`font-medium ${u.isActive ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
-                            >
-                              {u.isActive ? t('makeInactive') : t('makeActive')}
-                            </button>
-                          </>
-                        ) : null}
+                      <td className="px-4 py-3">
+                        <ActionButtons
+                          onView={() => openViewUser(u)}
+                          onEdit={() => openEditUser(u)}
+                          onToggleActive={() => handleToggleUserActive(u)}
+                          isActive={u.isActive}
+                          viewLabel={t('view')}
+                          editLabel={t('edit')}
+                          toggleLabel={u.isActive ? t('makeInactive') : t('makeActive')}
+                        />
                       </td>
                     </tr>
                   ))
@@ -347,29 +341,16 @@ export default function UsersPage() {
                 >
                   {u.isActive ? t('active') : t('inactive')}
                 </span>
-                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end gap-2">
-                  <button
-                    onClick={() => openViewUser(u)}
-                    className="px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100"
-                  >
-                    {t('view')}
-                  </button>
-                  {isAdminUser(u) && (
-                    <>
-                      <button
-                        onClick={() => openEditAdmin(u)}
-                        className="px-3 py-1.5 rounded-lg border border-amber-500/60 bg-amber-50 text-amber-800 font-medium text-sm hover:bg-amber-100"
-                      >
-                        {t('edit')}
-                      </button>
-                      <button
-                        onClick={() => handleToggleAdminActive(u)}
-                        className={`px-3 py-1.5 rounded-lg border font-medium text-sm ${u.isActive ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'}`}
-                      >
-                        {u.isActive ? t('makeInactive') : t('makeActive')}
-                      </button>
-                    </>
-                  )}
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <ActionButtons
+                    onView={() => openViewUser(u)}
+                    onEdit={() => openEditUser(u)}
+                    onToggleActive={() => handleToggleUserActive(u)}
+                    isActive={u.isActive}
+                    viewLabel={t('view')}
+                    editLabel={t('edit')}
+                    toggleLabel={u.isActive ? t('makeInactive') : t('makeActive')}
+                  />
                 </div>
               </div>
             ))
@@ -472,17 +453,15 @@ export default function UsersPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-6">
-              {isAdminUser(users.find((x) => x._id === editingUserId) ?? { _id: '', email: '', role: '', employeeId: null, isActive: true, createdAt: '' }) && (
-                <button
-                  onClick={() => {
-                    const u = users.find((x) => x._id === editingUserId);
-                    if (u) openEditAdmin(u);
-                  }}
-                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
-                >
-                  {t('edit')}
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  const u = users.find((x) => x._id === editingUserId);
+                  if (u) openEditUser(u);
+                }}
+                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+              >
+                {t('edit')}
+              </button>
               <button
                 onClick={() => {
                   setModal(null);
@@ -501,7 +480,7 @@ export default function UsersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h2 className="text-lg font-semibold mb-4">
-              {t('edit')} {t('admin')}
+              {t('edit')} {t('users')}
             </h2>
             <div className="space-y-4">
               <div>
@@ -512,6 +491,19 @@ export default function UsersPage() {
                   onChange={(e) => setEditAdminForm((f) => ({ ...f, email: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('role')}</label>
+                <select
+                  value={editAdminForm.role}
+                  onChange={(e) => setEditAdminForm((f) => ({ ...f, role: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                >
+                  <option value="admin">{t('admin')}</option>
+                  <option value="finance">{t('finance')}</option>
+                  <option value="hr">{t('hr')}</option>
+                  <option value="employee">{t('employee')}</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">
@@ -537,7 +529,7 @@ export default function UsersPage() {
             </div>
             <div className="flex gap-2 mt-6">
               <button
-                onClick={handleUpdateAdmin}
+                onClick={handleUpdateUser}
                 disabled={saving || !editAdminForm.email}
                 className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
               >

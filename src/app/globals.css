@@ -35,3 +35,16 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/*
+ * Prevent mobile input focus loss: iOS Safari zooms when inputs are < 16px,
+ * which can cause focus to be lost after each keystroke. Ensure form elements
+ * never go below 16px on touch devices while still respecting larger font preferences.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
