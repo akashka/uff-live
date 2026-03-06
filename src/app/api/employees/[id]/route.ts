@@ -9,9 +9,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
     const { id } = await params;
+    const canAccessAny = hasRole(user, ['admin', 'finance', 'hr']);
+    const isOwnProfile = user.employeeId && String(user.employeeId) === String(id);
+    if (!canAccessAny && !isOwnProfile) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     await connectDB();
     const employee = await Employee.findById(id).populate('branches', 'name').lean();
     if (!employee) return NextResponse.json({ error: 'Not found' }, { status: 404 });

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     if (employeeId) {
       if (hasRole(user, ['admin', 'finance', 'hr'])) {
         filter = { employee: employeeId };
-      } else if (user.employeeId === employeeId) {
+      } else if (user.employeeId && String(user.employeeId) === String(employeeId)) {
         filter = { employee: employeeId };
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

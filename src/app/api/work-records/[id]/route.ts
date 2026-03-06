@@ -20,7 +20,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const emp = record.employee as { _id?: unknown } | undefined;
     const empId = emp && typeof emp === 'object' && '_id' in emp ? String(emp._id) : String(record.employee);
-    if (!hasRole(user, ['admin', 'finance', 'hr']) && user.employeeId !== empId) {
+    const canAccess = hasRole(user, ['admin', 'finance', 'hr']) || (user.employeeId && String(user.employeeId) === empId);
+    if (!canAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     return NextResponse.json(record);

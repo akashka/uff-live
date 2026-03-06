@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+// Ensure Branch is registered before models that ref it (Employee, WorkRecord, RateMaster)
+import '@/lib/models/Branch';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/factory-management';
 

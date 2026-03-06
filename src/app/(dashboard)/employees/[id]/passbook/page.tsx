@@ -127,13 +127,15 @@ export default function EmployeePassbookPage() {
   }
 
   if (error || !employee) {
+    const backHref = isOwnProfile ? '/profile' : '/employees';
+    const backLabel = isOwnProfile ? t('profile') : t('backToEmployees');
     return (
       <div>
         <PageHeader title={t('passbook')} />
         <div className="rounded-xl bg-white border border-slate-200 p-8 text-center">
           <p className="text-slate-600">{error || t('noData')}</p>
-          <Link href="/employees" className="mt-4 inline-block text-uff-accent hover:underline">
-            {t('backToEmployees')}
+          <Link href={backHref} className="mt-4 inline-block text-uff-accent hover:underline">
+            {backLabel}
           </Link>
         </div>
       </div>
@@ -151,14 +153,14 @@ export default function EmployeePassbookPage() {
       <div className="flex items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            href="/employees"
+            href={isOwnProfile ? '/profile' : '/employees'}
             className="shrink-0 p-2 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center gap-2"
-            aria-label={t('backToEmployees')}
+            aria-label={isOwnProfile ? t('profile') : t('backToEmployees')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span className="hidden sm:inline text-slate-700">{t('backToEmployees')}</span>
+            <span className="hidden sm:inline text-slate-700">{isOwnProfile ? t('profile') : t('backToEmployees')}</span>
           </Link>
           <PageHeader title={t('passbook')} />
         </div>

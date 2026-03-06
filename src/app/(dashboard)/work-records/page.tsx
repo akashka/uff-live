@@ -75,7 +75,9 @@ export default function WorkRecordsPage() {
   }, [isEmployee, user?.employeeId]);
   const [form, setForm] = useState({
     employeeId: '',
+    employeeName: '',
     branchId: '',
+    branchName: '',
     periodStart: '',
     periodEnd: '',
     workItems: [] as { rateMasterId: string; rateName: string; unit: string; quantity: number; multiplier?: number; ratePerUnit: number }[],
@@ -99,7 +101,9 @@ export default function WorkRecordsPage() {
     }
     setForm({
       employeeId: '',
+      employeeName: '',
       branchId: '',
+      branchName: '',
       periodStart: '',
       periodEnd: '',
       workItems: [],
@@ -112,11 +116,15 @@ export default function WorkRecordsPage() {
   };
 
   const openEdit = (r: WorkRecord) => {
-    const emp = r.employee as { _id?: string };
-    const br = r.branch as { _id?: string };
+    const emp = r.employee as { _id?: string; name?: string };
+    const br = r.branch as { _id?: string; name?: string };
+    const empName = typeof emp === 'object' && emp?.name ? emp.name : '';
+    const brName = typeof br === 'object' && br?.name ? br.name : '';
     setForm({
       employeeId: emp?._id || String(r.employee) || '',
+      employeeName: empName,
       branchId: br?._id || String(r.branch) || '',
+      branchName: brName,
       periodStart: r.periodStart?.slice(0, 10) || '',
       periodEnd: r.periodEnd?.slice(0, 10) || '',
       workItems: (r.workItems || []).map((wi) => ({
@@ -424,33 +432,39 @@ export default function WorkRecordsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                  <select
-                    value={form.employeeId}
-                    onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value, branchId: '' }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
-                    required
-                  >
-                    <option value="">{!Array.isArray(employees) || employees.length === 0 ? t('noContractors') : 'Select...'}</option>
-                    {(Array.isArray(employees) ? employees : []).map((e) => (
-                      <option key={e._id} value={e._id}>{e.name}</option>
-                    ))}
-                  </select>
+                  {modal === 'view' ? (
+                    <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.employeeName || '–'}</p>
+                  ) : (
+                    <select
+                      value={form.employeeId}
+                      onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value, branchId: '' }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                      required
+                    >
+                      <option value="">{!Array.isArray(employees) || employees.length === 0 ? t('noContractors') : 'Select...'}</option>
+                      {(Array.isArray(employees) ? employees : []).map((e) => (
+                        <option key={e._id} value={e._id}>{e.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                  <select
-                    value={form.branchId}
-                    onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
-                    required
-                  >
-                    <option value="">{employeeBranches.length === 0 && form.employeeId ? t('noBranches') : 'Select...'}</option>
-                    {(employeeBranches || []).map((b: Branch) => (
-                      <option key={b._id} value={b._id}>{b.name}</option>
-                    ))}
-                  </select>
+                  {modal === 'view' ? (
+                    <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.branchName || '–'}</p>
+                  ) : (
+                    <select
+                      value={form.branchId}
+                      onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                      required
+                    >
+                      <option value="">{employeeBranches.length === 0 && form.employeeId ? t('noBranches') : 'Select...'}</option>
+                      {(employeeBranches || []).map((b: Branch) => (
+                        <option key={b._id} value={b._id}>{b.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -497,11 +511,15 @@ export default function WorkRecordsPage() {
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {form.workItems.map((wi, idx) => (
                     <div key={idx} className="flex gap-2 items-center p-2 bg-uff-surface rounded-lg">
+                      {modal === 'view' ? (
+                        <span className="flex-1 px-2 py-1 text-sm text-slate-800">
+                          {wi.rateName || '–'} (₹{wi.ratePerUnit ?? 0}/{wi.unit || ''})
+                        </span>
+                      ) : (
                       <select
                         value={wi.rateMasterId}
                         onChange={(e) => updateWorkItem(idx, 'rateMasterId', e.target.value)}
-                        disabled={modal === 'view'}
-                        className={`flex-1 px-2 py-1 border rounded text-sm ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                        className="flex-1 px-2 py-1 border rounded text-sm"
                       >
                         {(Array.isArray(rates) ? rates : []).map((r) => (
                           <option key={r._id} value={r._id}>
@@ -509,6 +527,7 @@ export default function WorkRecordsPage() {
                           </option>
                         ))}
                       </select>
+                      )}
                       <input
                         type="number"
                         min={0}
@@ -593,7 +612,7 @@ export default function WorkRecordsPage() {
                   {saving ? '...' : t('save')}
                 </button>
               )}
-              {modal === 'view' && editingId && (
+              {modal === 'view' && editingId && canAdd && (
                 <button
                   onClick={() => setModal('edit')}
                   className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
