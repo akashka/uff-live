@@ -1,0 +1,73 @@
+import mongoose, { Schema, Document, Model } from 'mongoose';
+
+export type EmployeeType = 'full_time' | 'contractor';
+
+export interface IEmployee extends Document {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  contactNumber: string;
+  email: string;
+  emergencyNumber: string;
+  dateOfBirth: Date;
+  gender: 'male' | 'female' | 'other';
+  aadhaarNumber?: string;
+  pfNumber?: string;
+  panNumber?: string;
+  bankName?: string;
+  bankBranch?: string;
+  ifscCode?: string;
+  accountNumber?: string;
+  upiId?: string;
+  photo?: string;
+  employeeType: EmployeeType;
+  branches: mongoose.Types.ObjectId[];
+  pfOpted?: boolean;
+  monthlyPfAmount?: number;
+  esiOpted?: boolean;
+  monthlyEsiAmount?: number;
+  monthlySalary?: number;
+  salaryBreakup?: {
+    pf?: number;
+    esi?: number;
+    other?: number;
+  };
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const EmployeeSchema = new Schema<IEmployee>(
+  {
+    name: { type: String, required: true },
+    contactNumber: { type: String, required: true },
+    email: { type: String, required: true },
+    emergencyNumber: { type: String, required: true },
+    dateOfBirth: { type: Date, required: true },
+    gender: { type: String, enum: ['male', 'female', 'other'], required: true },
+    aadhaarNumber: { type: String, default: '' },
+    pfNumber: { type: String, default: '' },
+    panNumber: { type: String, default: '' },
+    bankName: { type: String, default: '' },
+    bankBranch: { type: String, default: '' },
+    ifscCode: { type: String, default: '' },
+    accountNumber: { type: String, default: '' },
+    upiId: { type: String, default: '' },
+    photo: { type: String, default: '' },
+    employeeType: { type: String, enum: ['full_time', 'contractor'], default: 'full_time' },
+    branches: [{ type: Schema.Types.ObjectId, ref: 'Branch' }],
+    pfOpted: { type: Boolean, default: false },
+    monthlyPfAmount: { type: Number, default: 0 },
+    esiOpted: { type: Boolean, default: false },
+    monthlyEsiAmount: { type: Number, default: 0 },
+    monthlySalary: { type: Number, default: 0 },
+    salaryBreakup: {
+      pf: { type: Number, default: 0 },
+      esi: { type: Number, default: 0 },
+      other: { type: Number, default: 0 },
+    },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default (mongoose.models.Employee as Model<IEmployee>) || mongoose.model<IEmployee>('Employee', EmployeeSchema);

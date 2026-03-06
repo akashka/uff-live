@@ -1,0 +1,612 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import PageHeader from '@/components/PageHeader';
+import ListToolbar from '@/components/ListToolbar';
+import ActionButtons from '@/components/ActionButtons';
+
+interface Branch {
+  _id: string;
+  name: string;
+}
+
+interface Employee {
+  _id: string;
+  name: string;
+  employeeType: string;
+  branches: Branch[];
+}
+
+interface RateMaster {
+  _id: string;
+  name: string;
+  unit: string;
+  amountForBranch?: number;
+}
+
+interface WorkItem {
+  rateMaster?: unknown;
+  rateMasterId?: string;
+  rateName: string;
+  unit: string;
+  quantity: number;
+  ratePerUnit: number;
+  amount: number;
+}
+
+interface WorkRecord {
+  _id: string;
+  employee: { name: string };
+  branch: { name: string };
+  periodStart: string;
+  periodEnd: string;
+  workItems: WorkItem[];
+  otHours?: number;
+  otAmount?: number;
+  totalAmount: number;
+}
+
+export default function WorkRecordsPage() {
+  const { t } = useApp();
+  const { user } = useAuth();
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [rates, setRates] = useState<RateMaster[]>([]);
+  const [records, setRecords] = useState<WorkRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [filterEmployee, setFilterEmployee] = useState('');
+  const [filterStart, setFilterStart] = useState('');
+  const [filterEnd, setFilterEnd] = useState('');
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('period-desc');
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+
+  const [form, setForm] = useState({
+    employeeId: '',
+    branchId: '',
+    periodStart: '',
+    periodEnd: '',
+    workItems: [] as { rateMasterId: string; rateName: string; unit: string; quantity: number; multiplier?: number; ratePerUnit: number }[],
+    otHours: 0,
+    otAmount: 0,
+    notes: '',
+  });
+
+  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '');
+
+  const fetchRecords = () => {
+    let url = '/api/work-records?';
+    if (filterEmployee) url += `employeeId=${filterEmployee}&`;
+    if (filterStart) url += `periodStart=${filterStart}&`;
+    if (filterEnd) url += `periodEnd=${filterEnd}&`;
+    fetch(url)
+      .then((r) => r.json())
+      .then(setRecords)
+      .catch(() => setMessage({ type: 'error', text: t('error') }));
+  };
+
+  useEffect(() => {
+    if (!canAccess) return;
+    setLoading(true);
+    fetch('/api/employees?includeInactive=false')
+      .then((r) => r.json())
+      .then((e: Employee[]) => setEmployees(e.filter((emp) => emp.employeeType === 'contractor')))
+      .catch(() => {});
+    fetch('/api/branches?includeInactive=false')
+      .then((r) => r.json())
+      .then(setBranches)
+      .catch(() => {});
+    fetchRecords();
+    setLoading(false);
+  }, [canAccess, filterEmployee, filterStart, filterEnd]);
+
+  useEffect(() => {
+    if (form.branchId) {
+      fetch(`/api/rates?includeInactive=true&branch=${form.branchId}`)
+        .then((r) => r.json())
+        .then(setRates)
+        .catch(() => {});
+    } else {
+      setRates([]);
+    }
+  }, [form.branchId]);
+
+  const openCreate = () => {
+    setForm({
+      employeeId: '',
+      branchId: '',
+      periodStart: '',
+      periodEnd: '',
+      workItems: [],
+      otHours: 0,
+      otAmount: 0,
+      notes: '',
+    });
+    setModal('create');
+    setEditingId(null);
+  };
+
+  const openEdit = (r: WorkRecord) => {
+    const emp = r.employee as { _id?: string };
+    const br = r.branch as { _id?: string };
+    setForm({
+      employeeId: emp?._id || String(r.employee) || '',
+      branchId: br?._id || String(r.branch) || '',
+      periodStart: r.periodStart?.slice(0, 10) || '',
+      periodEnd: r.periodEnd?.slice(0, 10) || '',
+      workItems: (r.workItems || []).map((wi) => ({
+        rateMasterId: String(wi.rateMaster ?? wi.rateMasterId ?? ''),
+        rateName: wi.rateName,
+        unit: wi.unit,
+        quantity: wi.quantity,
+        multiplier: (wi as { multiplier?: number }).multiplier ?? 1,
+        ratePerUnit: wi.ratePerUnit,
+      })),
+      otHours: (r as { otHours?: number }).otHours ?? 0,
+      otAmount: (r as { otAmount?: number }).otAmount ?? 0,
+      notes: '',
+    });
+    setModal('edit');
+    setEditingId(r._id);
+  };
+
+  const openView = (r: WorkRecord) => {
+    openEdit(r);
+    setModal('view');
+  };
+
+  const addWorkItem = () => {
+    if (!form.branchId || rates.length === 0) return;
+    const rate = rates[0];
+    setForm((f) => ({
+      ...f,
+      workItems: [
+        ...f.workItems,
+        {
+          rateMasterId: rate._id,
+          rateName: rate.name,
+          unit: rate.unit,
+          quantity: 0,
+          multiplier: 1,
+          ratePerUnit: rate.amountForBranch ?? 0,
+        },
+      ],
+    }));
+  };
+
+  const updateWorkItem = (idx: number, field: string, value: number | string) => {
+    setForm((f) => {
+      const items = [...f.workItems];
+      (items[idx] as Record<string, unknown>)[field] = value;
+      if (field === 'rateMasterId') {
+        const rate = rates.find((r) => r._id === value);
+        if (rate) {
+          items[idx].rateName = rate.name;
+          items[idx].unit = rate.unit;
+          items[idx].ratePerUnit = rate.amountForBranch ?? 0;
+        }
+      }
+      return { ...f, workItems: items };
+    });
+  };
+
+  const removeWorkItem = (idx: number) => {
+    setForm((f) => ({ ...f, workItems: f.workItems.filter((_, i) => i !== idx) }));
+  };
+
+  const workTotal = form.workItems.reduce(
+    (sum, wi) => sum + (wi.quantity || 0) * (wi.multiplier ?? 1) * (wi.ratePerUnit || 0),
+    0
+  );
+  const totalAmount = workTotal + (form.otAmount ?? 0);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const workItems = form.workItems
+        .filter((wi) => wi.quantity > 0)
+        .map((wi) => ({
+          rateMasterId: wi.rateMasterId,
+          quantity: wi.quantity,
+          multiplier: wi.multiplier ?? 1,
+        }));
+
+      if (modal === 'create') {
+        const res = await fetch('/api/work-records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId: form.employeeId,
+            branchId: form.branchId,
+            periodStart: form.periodStart,
+            periodEnd: form.periodEnd,
+            workItems,
+            otHours: form.otHours ?? 0,
+            otAmount: form.otAmount ?? 0,
+            notes: form.notes,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || t('error'));
+        setMessage({ type: 'success', text: t('saveSuccess') });
+        setModal(null);
+        fetchRecords();
+      } else if (editingId) {
+        const res = await fetch(`/api/work-records/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId: form.employeeId,
+            branchId: form.branchId,
+            periodStart: form.periodStart,
+            periodEnd: form.periodEnd,
+            workItems,
+            otHours: form.otHours ?? 0,
+            otAmount: form.otAmount ?? 0,
+            notes: form.notes,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        setMessage({ type: 'success', text: t('saveSuccess') });
+        setModal(null);
+        fetchRecords();
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(t('confirmDelete'))) return;
+    try {
+      const res = await fetch(`/api/work-records/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      fetchRecords();
+    } catch {
+      setMessage({ type: 'error', text: t('error') });
+    }
+  };
+
+  const employeeBranches = form.employeeId
+    ? employees.find((e) => e._id === form.employeeId)?.branches || []
+    : [];
+
+  const filtered = records.filter((r) => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    const empName = (r.employee as { name?: string })?.name || '';
+    const branchName = (r.branch as { name?: string })?.name || '';
+    return empName.toLowerCase().includes(q) || branchName.toLowerCase().includes(q);
+  });
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'amount-asc') return (a.totalAmount || 0) - (b.totalAmount || 0);
+    if (sortBy === 'amount-desc') return (b.totalAmount || 0) - (a.totalAmount || 0);
+    if (sortBy === 'period-asc') return (a.periodStart || '').localeCompare(b.periodStart || '');
+    return (b.periodStart || '').localeCompare(a.periodStart || '');
+  });
+  const SORT_OPTIONS = [
+    { value: 'period-desc', label: `${t('period')} (newest)` },
+    { value: 'period-asc', label: `${t('period')} (oldest)` },
+    { value: 'amount-desc', label: `${t('totalAmount')} (high–low)` },
+    { value: 'amount-asc', label: `${t('totalAmount')} (low–high)` },
+  ];
+
+  if (!canAccess) {
+    return (
+      <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
+        <p className="text-slate-700">{t('accessDenied')}</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin w-10 h-10 border-4 border-uff-accent border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader title={t('workRecords')}>
+        <button
+          onClick={openCreate}
+          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+        >
+          {t('add')} {t('workRecord')}
+        </button>
+      </PageHeader>
+
+      {message && (
+        <div
+          className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
+            <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+              <option value="">{t('all')}</option>
+              {employees.map((e) => (
+                <option key={e._id} value={e._id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">{t('periodStart')}</label>
+            <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">{t('periodEnd')}</label>
+            <input type="date" value={filterEnd} onChange={(e) => setFilterEnd(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white" />
+          </div>
+        </div>
+      </ListToolbar>
+
+      {viewMode === 'table' ? (
+      <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-uff-surface">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('period')}</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                </tr>
+              ) : (
+                sorted.map((r) => (
+                  <tr key={r._id} className="hover:bg-uff-surface">
+                    <td className="px-4 py-3 text-slate-800">{(r.employee as { name?: string })?.name}</td>
+                    <td className="px-4 py-3 text-slate-700">{(r.branch as { name?: string })?.name}</td>
+                    <td className="px-4 py-3 text-slate-700 text-sm">{r.periodStart?.slice(0, 10)} – {r.periodEnd?.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-right font-medium">₹{r.totalAmount?.toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onDelete={() => handleDelete(r._id)} viewLabel={t('view')} editLabel={t('edit')} deleteLabel={t('delete')} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {sorted.length === 0 ? (
+            <div className="col-span-full rounded-xl bg-white p-12 text-center text-slate-600 border border-slate-200">{t('noData')}</div>
+          ) : (
+            sorted.map((r) => (
+              <div key={r._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
+                <h3 className="font-semibold text-slate-900">{(r.employee as { name?: string })?.name}</h3>
+                <p className="text-sm text-slate-600">{(r.branch as { name?: string })?.name}</p>
+                <p className="text-sm text-slate-600">{r.periodStart?.slice(0, 10)} – {r.periodEnd?.slice(0, 10)}</p>
+                <p className="mt-2 font-semibold text-slate-900">₹{r.totalAmount?.toLocaleString()}</p>
+                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+                  <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onDelete={() => handleDelete(r._id)} viewLabel={t('view')} editLabel={t('edit')} deleteLabel={t('delete')} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {modal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 my-8 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">
+              {modal === 'view' ? t('view') : modal === 'create' ? t('add') : t('edit')} {t('workRecord')}
+            </h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')}</label>
+                  <select
+                    value={form.employeeId}
+                    onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value, branchId: '' }))}
+                    disabled={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    required
+                  >
+                    <option value="">Select...</option>
+                    {employees.map((e) => (
+                      <option key={e._id} value={e._id}>{e.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')}</label>
+                  <select
+                    value={form.branchId}
+                    onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
+                    disabled={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    required
+                  >
+                    <option value="">Select...</option>
+                    {employeeBranches.map((b) => (
+                      <option key={b._id} value={b._id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')}</label>
+                  <input
+                    type="date"
+                    value={form.periodStart}
+                    onChange={(e) => setForm((f) => ({ ...f, periodStart: e.target.value }))}
+                    readOnly={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')}</label>
+                  <input
+                    type="date"
+                    value={form.periodEnd}
+                    onChange={(e) => setForm((f) => ({ ...f, periodEnd: e.target.value }))}
+                    readOnly={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-slate-800">{t('workItems')}</label>
+                  {modal !== 'view' && (
+                    <button
+                      type="button"
+                      onClick={addWorkItem}
+                      disabled={!form.branchId || rates.length === 0}
+                      className="text-sm text-uff-accent hover:text-uff-accent-hover font-medium disabled:opacity-50"
+                    >
+                      + {t('add')}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {form.workItems.map((wi, idx) => (
+                    <div key={idx} className="flex gap-2 items-center p-2 bg-uff-surface rounded-lg">
+                      <select
+                        value={wi.rateMasterId}
+                        onChange={(e) => updateWorkItem(idx, 'rateMasterId', e.target.value)}
+                        disabled={modal === 'view'}
+                        className={`flex-1 px-2 py-1 border rounded text-sm ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                      >
+                        {rates.map((r) => (
+                          <option key={r._id} value={r._id}>
+                            {r.name} (₹{r.amountForBranch ?? 0}/{r.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={0}
+                        value={wi.quantity || ''}
+                        onChange={(e) => updateWorkItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                        readOnly={modal === 'view'}
+                        className={`w-20 px-2 py-1 border rounded text-sm ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                        placeholder="Qty"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={wi.multiplier ?? 1}
+                        onChange={(e) => updateWorkItem(idx, 'multiplier', parseFloat(e.target.value) || 1)}
+                        readOnly={modal === 'view'}
+                        className={`w-14 px-2 py-1 border rounded text-sm ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                        title={t('multiplier')}
+                      />
+                      <span className="text-sm text-slate-700 w-16">
+                        ₹{((wi.quantity || 0) * (wi.multiplier ?? 1) * (wi.ratePerUnit || 0)).toLocaleString()}
+                      </span>
+                      {modal !== 'view' && (
+                        <button
+                          type="button"
+                          onClick={() => removeWorkItem(idx)}
+                          className="text-red-600 hover:text-red-700 text-sm"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('otHours')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={form.otHours ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, otHours: parseFloat(e.target.value) || 0 }))}
+                    readOnly={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('otAmount')} (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.otAmount ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, otAmount: parseFloat(e.target.value) || 0 }))}
+                    readOnly={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end font-semibold text-lg">
+                {t('totalAmount')}: ₹{totalAmount.toLocaleString()}
+                {(form.otAmount ?? 0) > 0 && (
+                  <span className="ml-2 text-sm font-normal text-slate-600">
+                    (work: ₹{workTotal.toLocaleString()} + OT: ₹{(form.otAmount ?? 0).toLocaleString()})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              {modal !== 'view' && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !form.employeeId || !form.branchId || !form.periodStart || !form.periodEnd || form.workItems.filter((wi) => wi.quantity > 0).length === 0}
+                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
+                >
+                  {saving ? '...' : t('save')}
+                </button>
+              )}
+              {modal === 'view' && editingId && (
+                <button
+                  onClick={() => setModal('edit')}
+                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+                >
+                  {t('edit')}
+                </button>
+              )}
+              <button
+                onClick={() => setModal(null)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface"
+              >
+                {modal === 'view' ? t('close') : t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

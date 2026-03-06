@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* UFF brand theme - from logo colours */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --uff-primary: #0f172a;
+  --uff-primary-light: #1e293b;
+  --uff-primary-muted: #334155;
+  --uff-accent: #d4af37;
+  --uff-accent-hover: #c9a227;
+  --uff-accent-muted: #fef3c7;
+  --uff-surface: #f8fafc;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-uff-primary: var(--uff-primary);
+  --color-uff-primary-light: var(--uff-primary-light);
+  --color-uff-primary-muted: var(--uff-primary-muted);
+  --color-uff-accent: var(--uff-accent);
+  --color-uff-accent-hover: var(--uff-accent-hover);
+  --color-uff-accent-muted: var(--uff-accent-muted);
+  --color-uff-surface: var(--uff-surface);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Use light theme for consistent contrast - dashboard has white modals/cards */
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
