@@ -257,10 +257,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Content area: sidebar + main */}
+      {/* Content area: fixed sidebar + main */}
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar - desktop, below white header, no logo/name */}
-        <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-uff-primary text-white border-r border-white/10">
+        {/* Sidebar - desktop, fixed below header, does not scroll */}
+        <aside className="hidden lg:flex flex-col fixed left-0 top-14 bottom-0 w-60 bg-uff-primary text-white border-r border-white/10 z-20">
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             {navContent}
           </nav>
@@ -269,8 +269,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Main content - offset by sidebar width */}
+        <div className="flex-1 flex flex-col min-w-0 lg:pl-60">
           <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             {children}
           </main>

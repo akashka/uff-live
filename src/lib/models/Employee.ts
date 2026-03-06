@@ -70,4 +70,10 @@ const EmployeeSchema = new Schema<IEmployee>(
   { timestamps: true }
 );
 
+// Indexes for list queries and lookups at scale (100s of employees)
+EmployeeSchema.index({ isActive: 1, createdAt: -1 });
+EmployeeSchema.index({ email: 1 });
+EmployeeSchema.index({ name: 1 });
+EmployeeSchema.index({ employeeType: 1, isActive: 1 });
+
 export default (mongoose.models.Employee as Model<IEmployee>) || mongoose.model<IEmployee>('Employee', EmployeeSchema);

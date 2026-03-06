@@ -13,14 +13,29 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    // Always return ALL users (admin + employee-linked); client handles filtering
-    const users = await User.find({})
-      .select('email role isActive employeeId createdAt')
-      .populate('employeeId', 'name email employeeType')
-      .sort({ createdAt: -1 })
-      .lean();
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
+    const skip = (page - 1) * limit;
 
-    return NextResponse.json(users);
+    const [users, total] = await Promise.all([
+      User.find({})
+        .select('email role isActive employeeId createdAt')
+        .populate('employeeId', 'name email employeeType')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments({}),
+    ]);
+
+    return NextResponse.json({
+      data: users,
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total,
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

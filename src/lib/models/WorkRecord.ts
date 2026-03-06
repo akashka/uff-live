@@ -53,5 +53,11 @@ const WorkRecordSchema = new Schema<IWorkRecord>(
   { timestamps: true }
 );
 
+// Indexes for list queries at scale (lakhs of work records)
+WorkRecordSchema.index({ employee: 1, periodEnd: -1 });
+WorkRecordSchema.index({ employee: 1, periodStart: 1, periodEnd: 1 });
+WorkRecordSchema.index({ createdAt: -1 });
+WorkRecordSchema.index({ branch: 1, periodEnd: -1 });
+
 export default (mongoose.models.WorkRecord as Model<IWorkRecord>) ||
   mongoose.model<IWorkRecord>('WorkRecord', WorkRecordSchema);

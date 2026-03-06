@@ -7,17 +7,36 @@ import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
 
-async function fetchEmployees(includeInactive: boolean) {
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string) {
   await connectDB();
   const filter = includeInactive ? {} : { isActive: true };
-  return Employee.find(filter).populate('branches', 'name').sort({ createdAt: -1 }).lean();
+  if (search && search.trim()) {
+    const q = search.trim().toLowerCase();
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    (filter as Record<string, unknown>).$or = [
+      { name: regex },
+      { email: regex },
+      { contactNumber: { $regex: q } },
+    ];
+  }
+  const skip = (page - 1) * limit;
+  const [employees, total] = await Promise.all([
+    Employee.find(filter).populate('branches', 'name').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Employee.countDocuments(filter),
+  ]);
+  return { employees, total, page, limit };
 }
 
-const getCachedEmployees = unstable_cache(
-  fetchEmployees,
-  ['employees'],
-  { revalidate: 60, tags: ['employees'] }
-);
+function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string) {
+  return unstable_cache(
+    () => fetchEmployees(includeInactive, page, limit, search),
+    ['employees', String(includeInactive), String(page), String(limit), search ?? ''],
+    { revalidate: 60, tags: ['employees'] }
+  )();
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,8 +46,21 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
-    const employees = await getCachedEmployees(includeInactive);
-    return NextResponse.json(employees);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam === '0' || limitParam === 'all' ? 10000 : Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(limitParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE));
+    const search = searchParams.get('search') || undefined;
+
+    const result = await getCachedEmployees(includeInactive, page, limit, search);
+    const { employees, total, page: p, limit: l } = result;
+    const hasMore = limit < 10000 && p * l < total;
+    return NextResponse.json({
+      data: employees,
+      total,
+      page: p,
+      limit: l,
+      hasMore,
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

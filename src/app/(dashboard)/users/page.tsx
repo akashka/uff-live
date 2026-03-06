@@ -100,11 +100,9 @@ export default function UsersPage() {
         return r.json();
       })
       .then((data) => {
-        const list = Array.isArray(data)
-          ? data
-          : (data && typeof data === 'object' && Array.isArray(data.users)
-            ? data.users
-            : []);
+        const list = Array.isArray(data?.data)
+          ? data.data
+          : (Array.isArray(data) ? data : []);
         setUsers(list);
       })
       .catch(() => setMessage({ type: 'error', text: t('error') }))

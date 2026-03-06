@@ -37,12 +37,28 @@ export async function GET(req: NextRequest) {
     if (periodStart) filter = { ...filter, periodEnd: { $gte: new Date(periodStart) } };
     if (periodEnd) filter = { ...filter, periodStart: { $lte: new Date(periodEnd) } };
 
-    const records = await WorkRecord.find(filter)
-      .populate('employee', 'name _id')
-      .populate('branch', 'name _id')
-      .sort({ periodEnd: -1 })
-      .lean();
-    return NextResponse.json(records);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
+    const skip = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      WorkRecord.find(filter)
+        .populate('employee', 'name _id')
+        .populate('branch', 'name _id')
+        .sort({ periodEnd: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      WorkRecord.countDocuments(filter),
+    ]);
+
+    return NextResponse.json({
+      data: records,
+      total,
+      page,
+      limit,
+      hasMore: page * limit < total,
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

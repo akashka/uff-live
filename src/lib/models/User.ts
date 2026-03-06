@@ -35,4 +35,8 @@ UserSchema.methods.comparePassword = async function (candidatePassword: string):
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Index for user–employee joins
+UserSchema.index({ employeeId: 1 });
+UserSchema.index({ isActive: 1, createdAt: -1 });
+
 export default (mongoose.models.User as Model<IUser>) || mongoose.model<IUser>('User', UserSchema);

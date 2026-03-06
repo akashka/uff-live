@@ -71,5 +71,11 @@ const PaymentSchema = new Schema<IPayment>(
   { timestamps: true }
 );
 
+// Indexes for list queries at scale (lakhs of payments)
+PaymentSchema.index({ employee: 1, paidAt: -1 });
+PaymentSchema.index({ paidAt: -1 });
+PaymentSchema.index({ paymentRun: 1 });
+PaymentSchema.index({ employee: 1, periodStart: 1, periodEnd: 1 });
+
 export default (mongoose.models.Payment as Model<IPayment>) ||
   mongoose.model<IPayment>('Payment', PaymentSchema);

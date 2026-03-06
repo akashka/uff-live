@@ -30,9 +30,11 @@ export async function GET(req: NextRequest) {
     }
     if (!includeZero) filter.paymentAmount = { $gt: 0 };
 
+    const limit = Math.min(50000, Math.max(1, parseInt(searchParams.get('limit') || '50000', 10) || 50000));
     const payments = await Payment.find(filter)
       .populate('employee', 'name ifscCode accountNumber bankBranch')
       .sort({ paidAt: -1 })
+      .limit(limit)
       .lean();
 
     const rows: { Amount: number; Beneficiary_Name: string; 'Beneficiary_Branch / IFSC Code': string; Beneficiary_Acc_No: string }[] = (payments || []).map((p) => {

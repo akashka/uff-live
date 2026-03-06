@@ -59,12 +59,14 @@ export default function EmployeesPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [includeInactive, setIncludeInactive] = useState(false);
-  const { employees, loading, mutate: mutateEmployees } = useEmployees(includeInactive);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const { employees, total, limit, hasMore, loading, mutate: mutateEmployees } = useEmployees(includeInactive, { page, limit: PAGE_SIZE, search: search.trim() || undefined });
   const { branches } = useBranches(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [passwordModal, setPasswordModal] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
@@ -100,9 +102,13 @@ export default function EmployeesPage() {
 
 
   useEffect(() => {
+    setPage(1);
+  }, [search, includeInactive]);
+
+  useEffect(() => {
     const editId = searchParams.get('edit');
     if (!editId || editingId === editId) return;
-    const e = employees.find((emp) => emp._id === editId);
+    const e = employees.find((emp: Employee) => emp._id === editId);
     if (e) {
       openEdit(e);
     } else if (employees.length > 0) {
@@ -273,16 +279,7 @@ export default function EmployeesPage() {
     navigator.clipboard.writeText(pwd);
   };
 
-  const filteredEmployees = (Array.isArray(employees) ? employees : []).filter((e) => {
-    const q = search.toLowerCase();
-    if (!q) return true;
-    return (
-      e.name.toLowerCase().includes(q) ||
-      e.email.toLowerCase().includes(q) ||
-      e.contactNumber.includes(q)
-    );
-  });
-
+  const filteredEmployees = Array.isArray(employees) ? employees : [];
   const sortedEmployees = [...filteredEmployees].sort((a, b) => {
     switch (sortBy) {
       case 'name-desc':
@@ -864,6 +861,22 @@ export default function EmployeesPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {sortedEmployees.length > 0 && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <span>
+            {t('showing') || 'Showing'} {(page - 1) * limit + 1}–{Math.min(page * limit, total)} {t('of') || 'of'} {total}
+          </span>
+          {hasMore && (
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
+            >
+              {t('loadMore') || 'Load more'}
+            </button>
           )}
         </div>
       )}

@@ -9,16 +9,26 @@ export function revalidate(key: string) {
   return globalMutate(key);
 }
 
-/** Employees list - cached 60s, deduped */
-export function useEmployees(includeInactive = false) {
-  const key = `/api/employees?includeInactive=${includeInactive}`;
+/** Employees list - cached 60s, deduped. Use limit=0 for all (e.g. dropdowns). */
+export function useEmployees(includeInactive = false, options?: { page?: number; limit?: number; search?: string }) {
+  const params = new URLSearchParams();
+  params.set('includeInactive', String(includeInactive));
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit !== undefined) params.set('limit', String(options.limit));
+  if (options?.search) params.set('search', options.search);
+  const key = `/api/employees?${params.toString()}`;
   const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
     revalidateIfStale: true,
   });
+  const employees = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
   return {
-    employees: Array.isArray(data) ? data : [],
+    employees,
+    total: data?.total ?? employees.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
     error,
     loading: isLoading,
     mutate,
@@ -85,51 +95,74 @@ export function useProfile() {
   };
 }
 
-/** Payments list */
-export function usePayments(employeeId?: string, paymentRun?: string, enabled = true) {
+/** Payments list - paginated */
+export function usePayments(employeeId?: string, paymentRun?: string, enabled = true, options?: { page?: number; limit?: number }) {
   const params = new URLSearchParams();
   if (employeeId) params.set('employeeId', employeeId);
   if (paymentRun) params.set('paymentRun', paymentRun);
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit) params.set('limit', String(options.limit));
   const key = `/api/payments${params.toString() ? `?${params}` : ''}`;
   const { data, error, isLoading, mutate } = useSWR(enabled ? key : null, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,
   });
+  const payments = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
   return {
-    payments: Array.isArray(data) ? data : [],
+    payments,
+    total: data?.total ?? payments.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
     error,
     loading: isLoading,
     mutate,
   };
 }
 
-/** Work records */
-export function useWorkRecords(params?: { employeeId?: string; periodStart?: string; periodEnd?: string }, enabled = true) {
+/** Work records - paginated */
+export function useWorkRecords(params?: { employeeId?: string; periodStart?: string; periodEnd?: string; page?: number; limit?: number }, enabled = true) {
   const search = new URLSearchParams();
   if (params?.employeeId) search.set('employeeId', params.employeeId);
   if (params?.periodStart) search.set('periodStart', params.periodStart);
   if (params?.periodEnd) search.set('periodEnd', params.periodEnd);
+  if (params?.page) search.set('page', String(params.page));
+  if (params?.limit) search.set('limit', String(params.limit));
   const key = `/api/work-records?${search.toString() || 'all'}`;
   const { data, error, isLoading, mutate } = useSWR(enabled ? key : null, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,
   });
+  const records = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
   return {
-    records: Array.isArray(data) ? data : [],
+    records,
+    total: data?.total ?? records.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
     error,
     loading: isLoading,
     mutate,
   };
 }
 
-/** Users list */
-export function useUsers() {
-  const { data, error, isLoading, mutate } = useSWR('/api/users', fetcher, {
+/** Users list - paginated */
+export function useUsers(options?: { page?: number; limit?: number }) {
+  const params = new URLSearchParams();
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit) params.set('limit', String(options.limit));
+  const key = `/api/users${params.toString() ? `?${params}` : ''}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
   });
+  const users = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
   return {
-    users: Array.isArray(data) ? data : [],
+    users,
+    total: data?.total ?? users.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
     error,
     loading: isLoading,
     mutate,

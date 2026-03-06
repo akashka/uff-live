@@ -60,11 +60,12 @@ export default function WorkRecordsPage() {
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterStart, setFilterStart] = useState('');
   const [filterEnd, setFilterEnd] = useState('');
-  const { employees: empList } = useEmployees(false);
+  const [page, setPage] = useState(1);
+  const { employees: empList } = useEmployees(false, { limit: 0 });
   const employees = (Array.isArray(empList) ? empList : []).filter((e: Employee) => e.employeeType === 'contractor');
   const { branches } = useBranches(false);
-  const { records, loading, mutate: mutateRecords } = useWorkRecords(
-    { employeeId: filterEmployee || undefined, periodStart: filterStart || undefined, periodEnd: filterEnd || undefined },
+  const { records, total, limit, hasMore, loading, mutate: mutateRecords } = useWorkRecords(
+    { employeeId: filterEmployee || undefined, periodStart: filterStart || undefined, periodEnd: filterEnd || undefined, page, limit: 50 },
     canAccess
   );
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
@@ -73,6 +74,10 @@ export default function WorkRecordsPage() {
       setFilterEmployee(user.employeeId);
     }
   }, [isEmployee, user?.employeeId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterEmployee, filterStart, filterEnd]);
   const [form, setForm] = useState({
     employeeId: '',
     employeeName: '',
@@ -354,6 +359,7 @@ export default function WorkRecordsPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
+      <>
       <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200">
@@ -395,6 +401,17 @@ export default function WorkRecordsPage() {
           </table>
         </div>
       </div>
+      {sorted.length > 0 && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <span>Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          {hasMore && (
+            <button onClick={() => setPage((p) => p + 1)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium">
+              Load more
+            </button>
+          )}
+        </div>
+      )}
+      </>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.length === 0 ? (
@@ -418,6 +435,17 @@ export default function WorkRecordsPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {sorted.length > 0 && viewMode !== 'table' && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <span>Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          {hasMore && (
+            <button onClick={() => setPage((p) => p + 1)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium">
+              Load more
+            </button>
           )}
         </div>
       )}

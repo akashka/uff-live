@@ -68,8 +68,9 @@ export default function PaymentsPage() {
   const canView = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterRun, setFilterRun] = useState('');
-  const { payments, loading, mutate: mutatePayments } = usePayments(filterEmployee || undefined, filterRun || undefined, canView);
-  const { employees } = useEmployees(false);
+  const [page, setPage] = useState(1);
+  const { payments, total, limit, hasMore, loading, mutate: mutatePayments } = usePayments(filterEmployee || undefined, filterRun || undefined, canView, { page, limit: 50 });
+  const { employees } = useEmployees(false, { limit: 0 });
   const [modal, setModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
   const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
@@ -91,6 +92,10 @@ export default function PaymentsPage() {
       setFilterEmployee(user.employeeId);
     }
   }, [isEmployee, user?.employeeId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterEmployee, filterRun]);
 
   const [form, setForm] = useState({
     employeeId: '',
@@ -189,7 +194,7 @@ export default function PaymentsPage() {
   };
 
   const onEmployeeChange = (empId: string) => {
-    const emp = employees.find((e) => e._id === empId);
+    const emp = employees.find((e: Employee) => e._id === empId);
     setForm((f) => ({
       ...f,
       employeeId: empId,
@@ -335,6 +340,7 @@ export default function PaymentsPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
+      <>
       <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200">
@@ -388,6 +394,17 @@ export default function PaymentsPage() {
           </table>
         </div>
       </div>
+      {sorted.length > 0 && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <span>Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          {hasMore && (
+            <button onClick={() => setPage((p) => p + 1)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium">
+              Load more
+            </button>
+          )}
+        </div>
+      )}
+      </>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.length === 0 ? (
@@ -416,6 +433,17 @@ export default function PaymentsPage() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {sorted.length > 0 && viewMode !== 'table' && (
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <span>Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          {hasMore && (
+            <button onClick={() => setPage((p) => p + 1)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium">
+              Load more
+            </button>
           )}
         </div>
       )}

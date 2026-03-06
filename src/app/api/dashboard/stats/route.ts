@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import { formatDate } from '@/lib/utils';
+
+function getISOWeek(d: Date): { year: number; week: number } {
+  const t = new Date(d);
+  const day = (t.getDay() + 6) % 7;
+  t.setDate(t.getDate() - day + 3);
+  const firstThu = new Date(t.getFullYear(), 0, 4);
+  const week = 1 + Math.round(((t.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getDay() + 6) % 7)) / 7);
+  return { year: t.getFullYear(), week };
+}
 import Employee from '@/lib/models/Employee';
 import Branch from '@/lib/models/Branch';
 import Payment from '@/lib/models/Payment';
@@ -41,33 +50,64 @@ export async function GET(req: NextRequest) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      const payments = await Payment.find({ paidAt: { $gte: startDate } }).lean();
-      const totalPaid = payments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
-      const totalPayable = payments.reduce((s, p) => s + (p.totalPayable || 0), 0);
-      const totalRemaining = payments.reduce((s, p) => s + (p.remainingAmount || 0), 0);
+      const [totals, byModeArr, weeklyTrend] = await Promise.all([
+        Payment.aggregate([
+          { $match: { paidAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: null,
+              totalPaid: { $sum: '$paymentAmount' },
+              totalPayable: { $sum: '$totalPayable' },
+              totalRemaining: { $sum: '$remainingAmount' },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        Payment.aggregate([
+          { $match: { paidAt: { $gte: startDate } } },
+          { $group: { _id: { $ifNull: ['$paymentMode', 'other'] }, paid: { $sum: '$paymentAmount' } } },
+        ]),
+        Payment.aggregate([
+          { $match: { paidAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: { year: { $isoWeekYear: '$paidAt' }, week: { $isoWeek: '$paidAt' } },
+              paid: { $sum: '$paymentAmount' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.year': 1, '_id.week': 1 } },
+        ]),
+      ]);
 
-      const byMode = payments.reduce((acc, p) => {
-        const m = p.paymentMode || 'other';
-        acc[m] = (acc[m] || 0) + (p.paymentAmount || 0);
+      const t = totals[0];
+      const totalPaid = t?.totalPaid ?? 0;
+      const totalPayable = t?.totalPayable ?? 0;
+      const totalRemaining = t?.totalRemaining ?? 0;
+      const count = t?.count ?? 0;
+      const byMode = (byModeArr || []).reduce((acc, x) => {
+        acc[x._id] = x.paid;
         return acc;
       }, {} as Record<string, number>);
 
+      const weeklyMap = new Map(
+        (weeklyTrend || []).map((w: { _id: { year: number; week: number }; paid: number; count: number }) => [
+          `${w._id?.year}-${w._id?.week}`,
+          { paid: w.paid, count: w.count },
+        ])
+      );
       const monthlyData: { month: string; paid: number; count: number }[] = [];
       for (let i = days - 1; i >= 0; i -= 7) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const weekStart = new Date(d);
         weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 7);
-        const weekPayments = payments.filter(
-          (p) => new Date(p.paidAt) >= weekStart && new Date(p.paidAt) < weekEnd
-        );
-        const weekPaid = weekPayments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
+        const { year: y, week: w } = getISOWeek(weekStart);
+        const bucket = weeklyMap.get(`${y}-${w}`);
         monthlyData.push({
           month: formatDate(weekStart),
-          paid: weekPaid,
-          count: weekPayments.length,
+          paid: bucket?.paid ?? 0,
+          count: bucket?.count ?? 0,
         });
       }
 
@@ -75,7 +115,7 @@ export async function GET(req: NextRequest) {
         totalPaid,
         totalPayable,
         totalRemaining,
-        count: payments.length,
+        count,
         byMode,
         trend: monthlyData,
       };
@@ -84,34 +124,56 @@ export async function GET(req: NextRequest) {
     if (isHR || isAdmin) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
-      const workRecords = await WorkRecord.find({ createdAt: { $gte: startDate } }).lean();
-      const workTotal = workRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
-      const workByType = workRecords.reduce((acc, r) => {
-        const empId = String(r.employee);
-        acc[empId] = (acc[empId] || 0) + (r.totalAmount || 0);
-        return acc;
-      }, {} as Record<string, number>);
 
+      const [workTotals, workWeeklyTrend] = await Promise.all([
+        WorkRecord.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$totalAmount' },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        WorkRecord.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          {
+            $group: {
+              _id: { year: { $isoWeekYear: '$createdAt' }, week: { $isoWeek: '$createdAt' } },
+              amount: { $sum: '$totalAmount' },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.year': 1, '_id.week': 1 } },
+        ]),
+      ]);
+
+      const wt = workTotals[0];
+      const workTotal = wt?.total ?? 0;
+      const workCount = wt?.count ?? 0;
+      const workWeeklyMap = new Map(
+        (workWeeklyTrend || []).map((w: { _id: { year: number; week: number }; amount: number; count: number }) => [
+          `${w._id?.year}-${w._id?.week}`,
+          { amount: w.amount, count: w.count },
+        ])
+      );
       const workTrend: { month: string; amount: number; count: number }[] = [];
       for (let i = days - 1; i >= 0; i -= 7) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const weekStart = new Date(d);
         weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 7);
-        const weekRecords = workRecords.filter(
-          (r) => new Date(r.createdAt) >= weekStart && new Date(r.createdAt) < weekEnd
-        );
-        const weekAmount = weekRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
+        const { year: y, week: w } = getISOWeek(weekStart);
+        const bucket = workWeeklyMap.get(`${y}-${w}`);
         workTrend.push({
           month: formatDate(weekStart),
-          amount: weekAmount,
-          count: weekRecords.length,
+          amount: bucket?.amount ?? 0,
+          count: bucket?.count ?? 0,
         });
       }
 
-      stats.workRecords = { total: workTotal, count: workRecords.length, trend: workTrend };
+      stats.workRecords = { total: workTotal, count: workCount, trend: workTrend };
     }
 
     if (isEmployee && user.employeeId) {
@@ -119,58 +181,103 @@ export async function GET(req: NextRequest) {
       if (employee) {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
-        const [myWorkRecords, myPayments] = await Promise.all([
-          WorkRecord.find({ employee: user.employeeId, createdAt: { $gte: startDate } }).lean(),
-          Payment.find({ employee: user.employeeId, paidAt: { $gte: startDate } }).lean(),
+        const empFilter = { employee: user.employeeId };
+
+        const [
+          myWorkTotals,
+          myPaymentTotals,
+          myWorkWeekly,
+          myPaymentWeekly,
+        ] = await Promise.all([
+          WorkRecord.aggregate([
+            { $match: { ...empFilter, createdAt: { $gte: startDate } } },
+            { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+          ]),
+          Payment.aggregate([
+            { $match: { ...empFilter, paidAt: { $gte: startDate } } },
+            {
+              $group: {
+                _id: null,
+                paidTotal: { $sum: '$paymentAmount' },
+                paidTotalPayable: { $sum: '$totalPayable' },
+                dueTotal: { $sum: '$remainingAmount' },
+                count: { $sum: 1 },
+              },
+            },
+          ]),
+          WorkRecord.aggregate([
+            { $match: { ...empFilter, createdAt: { $gte: startDate } } },
+            {
+              $group: {
+                _id: { year: { $isoWeekYear: '$createdAt' }, week: { $isoWeek: '$createdAt' } },
+                amount: { $sum: '$totalAmount' },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { '_id.year': 1, '_id.week': 1 } },
+          ]),
+          Payment.aggregate([
+            { $match: { ...empFilter, paidAt: { $gte: startDate } } },
+            {
+              $group: {
+                _id: { year: { $isoWeekYear: '$paidAt' }, week: { $isoWeek: '$paidAt' } },
+                paid: { $sum: '$paymentAmount' },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { '_id.year': 1, '_id.week': 1 } },
+          ]),
         ]);
-        const workTotal = myWorkRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
-        const paidTotal = myPayments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
-        const paidTotalPayable = myPayments.reduce((s, p) => s + (p.totalPayable || 0), 0);
-        const dueTotal = myPayments.reduce((s, p) => s + (p.remainingAmount || 0), 0);
+
+        const mwt = myWorkTotals[0];
+        const mpt = myPaymentTotals[0];
+        const workTotal = mwt?.total ?? 0;
+        const workRecordsCount = mwt?.count ?? 0;
+        const paidTotal = mpt?.paidTotal ?? 0;
+        const paidTotalPayable = mpt?.paidTotalPayable ?? 0;
+        const dueTotal = mpt?.dueTotal ?? 0;
+        const paymentsCount = mpt?.count ?? 0;
+
+        const workWeeklyMap = new Map(
+          (myWorkWeekly || []).map((w: { _id: { year: number; week: number }; amount: number; count: number }) => [
+            `${w._id?.year}-${w._id?.week}`,
+            { amount: w.amount, count: w.count },
+          ])
+        );
+        const paymentWeeklyMap = new Map(
+          (myPaymentWeekly || []).map((p: { _id: { year: number; week: number }; paid: number; count: number }) => [
+            `${p._id?.year}-${p._id?.week}`,
+            { paid: p.paid, count: p.count },
+          ])
+        );
 
         const myWorkTrend: { month: string; amount: number; count: number }[] = [];
-        for (let i = days - 1; i >= 0; i -= 7) {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          const weekStart = new Date(d);
-          weekStart.setHours(0, 0, 0, 0);
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekEnd.getDate() + 7);
-          const weekRecords = myWorkRecords.filter(
-            (r) => new Date(r.createdAt) >= weekStart && new Date(r.createdAt) < weekEnd
-          );
-          const weekAmount = weekRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
-          myWorkTrend.push({
-            month: formatDate(weekStart),
-            amount: weekAmount,
-            count: weekRecords.length,
-          });
-        }
-
         const myPaymentTrend: { month: string; paid: number; count: number }[] = [];
         for (let i = days - 1; i >= 0; i -= 7) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const weekStart = new Date(d);
           weekStart.setHours(0, 0, 0, 0);
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekEnd.getDate() + 7);
-          const weekPayments = myPayments.filter(
-            (p) => new Date(p.paidAt) >= weekStart && new Date(p.paidAt) < weekEnd
-          );
-          const weekPaid = weekPayments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
+          const { year: y, week: w } = getISOWeek(weekStart);
+          const wBucket = workWeeklyMap.get(`${y}-${w}`);
+          const pBucket = paymentWeeklyMap.get(`${y}-${w}`);
+          myWorkTrend.push({
+            month: formatDate(weekStart),
+            amount: wBucket?.amount ?? 0,
+            count: wBucket?.count ?? 0,
+          });
           myPaymentTrend.push({
             month: formatDate(weekStart),
-            paid: weekPaid,
-            count: weekPayments.length,
+            paid: pBucket?.paid ?? 0,
+            count: pBucket?.count ?? 0,
           });
         }
 
         stats.myStats = {
           employeeType: employee.employeeType,
-          workRecords: myWorkRecords.length,
+          workRecords: workRecordsCount,
           workTotal,
-          payments: myPayments.length,
+          payments: paymentsCount,
           paidTotal,
           paidTotalPayable,
           dueTotal,

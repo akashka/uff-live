@@ -8,34 +8,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
-import { formatDate, formatDateRange } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 
-interface WorkRecord {
-  _id: string;
-  branch: { name: string } | string;
-  periodStart: string;
-  periodEnd: string;
-  workItems: { rateName: string; quantity: number; amount: number }[];
-  otAmount?: number;
-  totalAmount: number;
-}
-
-interface PaymentRecord {
-  _id: string;
-  paymentType: string;
-  periodStart: string;
-  periodEnd: string;
-  totalPayable: number;
-  paymentAmount: number;
-  paymentMode: string;
-  transactionRef: string;
-  isAdvance: boolean;
-  paidAt: string;
-}
-
-type PassbookEntry =
-  | { type: 'work'; id: string; date: string; particulars: string; credit: number; debit: 0 }
-  | { type: 'payment'; id: string; date: string; particulars: string; credit: 0; debit: number };
+type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number };
 
 export default function EmployeePassbookPage() {
   const { t } = useApp();
@@ -45,12 +20,20 @@ export default function EmployeePassbookPage() {
 
   const [employee, setEmployee] = useState<{ _id: string; name: string; photo?: string; employeeType: string } | null>(null);
   const [entries, setEntries] = useState<PassbookEntry[]>([]);
+  const [outstanding, setOutstanding] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const canAccessAny = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const isOwnProfile = user?.employeeId === employeeId;
   const canView = canAccessAny || isOwnProfile;
+
+  useEffect(() => {
+    setPage(1);
+  }, [employeeId]);
 
   useEffect(() => {
     if (!employeeId || !canView) {
@@ -62,60 +45,22 @@ export default function EmployeePassbookPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([
-      fetch(`/api/employees/${employeeId}`).then((r) => r.json()),
-      fetch(`/api/work-records?employeeId=${employeeId}`).then((r) => r.json()),
-      fetch(`/api/payments?employeeId=${employeeId}`).then((r) => r.json()),
-    ])
-      .then(([empData, workData, payData]) => {
-        if (empData.error || !empData._id) {
-          setError(empData.error || t('noData'));
+    fetch(`/api/employees/${employeeId}/passbook?page=${page}&limit=50`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
           return;
         }
-        setEmployee(empData);
-
-        const workRecords: WorkRecord[] = Array.isArray(workData) ? workData : [];
-        const payments: PaymentRecord[] = Array.isArray(payData) ? payData : [];
-
-        const workEntries: PassbookEntry[] = workRecords.map((r) => {
-          const branchName = typeof r.branch === 'object' && r.branch?.name ? r.branch.name : String(r.branch || '');
-          const period = formatDateRange(r.periodStart, r.periodEnd);
-          return {
-            type: 'work',
-            id: `w-${r._id}`,
-            date: r.periodEnd || r.periodStart || '',
-            particulars: `${t('workRecord')} – ${branchName} (${period})`,
-            credit: r.totalAmount ?? 0,
-            debit: 0,
-          };
-        });
-
-        const paymentEntries: PassbookEntry[] = payments.map((p) => {
-          const mode = p.paymentMode || '';
-          const ref = p.transactionRef ? ` – ${p.transactionRef}` : '';
-          const advanceLabel = p.isAdvance ? ` (${t('advance')})` : '';
-          const period = `${p.periodStart?.slice(0, 10) || ''} – ${p.periodEnd?.slice(0, 10) || ''}`;
-          return {
-            type: 'payment',
-            id: `p-${p._id}`,
-            date: p.paidAt || '',
-            particulars: `${t('payment')} – ${mode}${ref}${advanceLabel} (${period})`,
-            credit: 0,
-            debit: p.paymentAmount ?? 0,
-          };
-        });
-
-        const merged: PassbookEntry[] = [...workEntries, ...paymentEntries].sort((a, b) => {
-          const da = new Date(a.date).getTime();
-          const db = new Date(b.date).getTime();
-          return da - db; // oldest first (passbook style)
-        });
-
-        setEntries(merged);
+        setEmployee(data.employee);
+        setEntries((prev) => (page === 1 ? data.data : [...prev, ...data.data]));
+        setTotal(data.total ?? 0);
+        setHasMore(data.hasMore ?? false);
+        setOutstanding(data.outstanding ?? 0);
       })
       .catch(() => setError(t('error')))
       .finally(() => setLoading(false));
-  }, [employeeId, canView, t]);
+  }, [employeeId, canView, page, t]);
 
   if (loading) {
     return (
@@ -142,11 +87,7 @@ export default function EmployeePassbookPage() {
     );
   }
 
-  let runningBalance = 0;
-  const rowsWithBalance = entries.map((e) => {
-    runningBalance += e.credit - e.debit;
-    return { ...e, balance: runningBalance };
-  });
+  const rowsWithBalance = entries;
 
   return (
     <div>
@@ -221,7 +162,7 @@ export default function EmployeePassbookPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-right font-medium text-slate-800">
-                      ₹{row.balance.toLocaleString()}
+                      ₹{(row.balance ?? 0).toLocaleString()}
                     </td>
                   </tr>
                 ))
@@ -231,10 +172,18 @@ export default function EmployeePassbookPage() {
         </div>
 
         {rowsWithBalance.length > 0 && (
-          <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-end">
+          <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
             <span className="text-sm font-semibold text-slate-800">
-              {t('outstanding')}: ₹{rowsWithBalance[rowsWithBalance.length - 1]?.balance.toLocaleString() ?? 0}
+              {t('outstanding')}: ₹{outstanding.toLocaleString()}
             </span>
+            {hasMore && (
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-sm"
+              >
+                Load more
+              </button>
+            )}
           </div>
         )}
       </div>
