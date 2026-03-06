@@ -106,4 +106,10 @@ src/
 Email	admin@uff.com
 Password	Admin@123
 
-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
+ghp_
+awaL6jM
+4COBpQKm
+AnUFbzg
+YfIekO
+Gb4HE
+zXo
