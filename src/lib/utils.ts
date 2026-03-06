@@ -1,3 +1,21 @@
+/** Format date as dd MMM yyyy (e.g. 15 Mar 2025) */
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Format date range as dd MMM yyyy – dd MMM yyyy */
+export function formatDateRange(start: string | null | undefined, end: string | null | undefined): string {
+  const s = formatDate(start);
+  const e = formatDate(end);
+  if (!s && !e) return '';
+  if (!s) return e;
+  if (!e) return s;
+  return `${s} – ${e}`;
+}
+
 export function generatePassword(length = 12): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
   let password = '';

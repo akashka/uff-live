@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
@@ -41,6 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (isActive !== undefined) branch.isActive = isActive;
 
     await branch.save();
+    revalidateTag('branches', 'default');
     return NextResponse.json(branch);
   } catch (e) {
     console.error(e);

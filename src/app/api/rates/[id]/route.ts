@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import RateMaster from '@/lib/models/RateMaster';
 import { getAuthUser, hasRole } from '@/lib/auth';
@@ -50,6 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     await rate.save();
+    revalidateTag('rates', 'default');
     const updated = await RateMaster.findById(id)
       .populate('branchRates.branch', 'name')
       .lean();

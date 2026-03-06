@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
@@ -6,17 +7,27 @@ import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
 
+async function fetchEmployees(includeInactive: boolean) {
+  await connectDB();
+  const filter = includeInactive ? {} : { isActive: true };
+  return Employee.find(filter).populate('branches', 'name').sort({ createdAt: -1 }).lean();
+}
+
+const getCachedEmployees = unstable_cache(
+  fetchEmployees,
+  ['employees'],
+  { revalidate: 60, tags: ['employees'] }
+);
+
 export async function GET(req: NextRequest) {
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    await connectDB();
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
-    const filter = includeInactive ? {} : { isActive: true };
-    const employees = await Employee.find(filter).populate('branches', 'name').sort({ createdAt: -1 }).lean();
+    const employees = await getCachedEmployees(includeInactive);
     return NextResponse.json(employees);
   } catch (e) {
     console.error(e);
@@ -112,6 +123,7 @@ export async function POST(req: NextRequest) {
     });
 
     const emp = await Employee.findById(employee._id).populate('branches', 'name').lean();
+    revalidateTag('employees', 'default');
     return NextResponse.json({ employee: emp, generatedPassword: password });
   } catch (e) {
     console.error(e);

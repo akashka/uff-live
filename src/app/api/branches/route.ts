@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
+
+async function fetchBranches(includeInactive: boolean) {
+  await connectDB();
+  const filter = includeInactive ? {} : { isActive: true };
+  return Branch.find(filter).sort({ createdAt: -1 }).lean();
+}
+
+const getCachedBranches = unstable_cache(
+  fetchBranches,
+  ['branches'],
+  { revalidate: 60, tags: ['branches'] }
+);
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,11 +22,9 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    await connectDB();
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
-    const filter = includeInactive ? {} : { isActive: true };
-    const branches = await Branch.find(filter).sort({ createdAt: -1 }).lean();
+    const branches = await getCachedBranches(includeInactive);
     return NextResponse.json(branches);
   } catch (e) {
     console.error(e);
@@ -35,6 +46,7 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
     const branch = await Branch.create({ name, address, phoneNumber, email: email || '' });
+    revalidateTag('branches', 'default');
     return NextResponse.json(branch);
   } catch (e) {
     console.error(e);

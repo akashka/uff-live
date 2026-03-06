@@ -7,6 +7,9 @@ import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import { useEmployees, useBranches, useRates, useWorkRecords } from '@/lib/hooks/useApi';
+import ValidatedInput from '@/components/ValidatedInput';
+import { formatDateRange } from '@/lib/utils';
 
 interface Branch {
   _id: string;
@@ -52,22 +55,24 @@ interface WorkRecord {
 export default function WorkRecordsPage() {
   const { t } = useApp();
   const { user } = useAuth();
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [rates, setRates] = useState<RateMaster[]>([]);
-  const [records, setRecords] = useState<WorkRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [filterEmployee, setFilterEmployee] = useState('');
+  const isEmployee = !!user?.employeeId;
+  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
+  const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterStart, setFilterStart] = useState('');
   const [filterEnd, setFilterEnd] = useState('');
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('period-desc');
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
-
+  const { employees: empList } = useEmployees(false);
+  const employees = (Array.isArray(empList) ? empList : []).filter((e: Employee) => e.employeeType === 'contractor');
+  const { branches } = useBranches(false);
+  const { records, loading, mutate: mutateRecords } = useWorkRecords(
+    { employeeId: filterEmployee || undefined, periodStart: filterStart || undefined, periodEnd: filterEnd || undefined },
+    canAccess
+  );
+  const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  useEffect(() => {
+    if (isEmployee && user?.employeeId) {
+      setFilterEmployee(user.employeeId);
+    }
+  }, [isEmployee, user?.employeeId]);
   const [form, setForm] = useState({
     employeeId: '',
     branchId: '',
@@ -78,45 +83,14 @@ export default function WorkRecordsPage() {
     otAmount: 0,
     notes: '',
   });
-
-  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '');
-
-  const fetchRecords = () => {
-    let url = '/api/work-records?';
-    if (filterEmployee) url += `employeeId=${filterEmployee}&`;
-    if (filterStart) url += `periodStart=${filterStart}&`;
-    if (filterEnd) url += `periodEnd=${filterEnd}&`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => setRecords(Array.isArray(data) ? data : []))
-      .catch(() => setMessage({ type: 'error', text: t('error') }));
-  };
-
-  useEffect(() => {
-    if (!canAccess) return;
-    setLoading(true);
-    fetch('/api/employees?includeInactive=false')
-      .then((r) => r.json())
-      .then((e: Employee[]) => setEmployees(Array.isArray(e) ? e.filter((emp: Employee) => emp.employeeType === 'contractor') : []))
-      .catch(() => {});
-    fetch('/api/branches?includeInactive=false')
-      .then((r) => r.json())
-      .then((data) => setBranches(Array.isArray(data) ? data : []))
-      .catch(() => {});
-    fetchRecords();
-    setLoading(false);
-  }, [canAccess, filterEmployee, filterStart, filterEnd]);
-
-  useEffect(() => {
-    if (form.branchId) {
-      fetch(`/api/rates?includeInactive=true&branch=${form.branchId}`)
-        .then((r) => r.json())
-        .then((data) => setRates(Array.isArray(data) ? data : []))
-        .catch(() => {});
-    } else {
-      setRates([]);
-    }
-  }, [form.branchId]);
+  const { rates } = useRates(true, form.branchId || undefined);
+  const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('period-desc');
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   const openCreate = () => {
     if (!Array.isArray(employees) || employees.length === 0) {
@@ -242,7 +216,7 @@ export default function WorkRecordsPage() {
         if (!res.ok) throw new Error(data.error || t('error'));
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
-        fetchRecords();
+        mutateRecords();
       } else if (editingId) {
         const res = await fetch(`/api/work-records/${editingId}`, {
           method: 'PATCH',
@@ -261,7 +235,7 @@ export default function WorkRecordsPage() {
         if (!res.ok) throw new Error((await res.json()).error);
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
-        fetchRecords();
+        mutateRecords();
       }
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
@@ -275,7 +249,7 @@ export default function WorkRecordsPage() {
     try {
       const res = await fetch(`/api/work-records/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
-      fetchRecords();
+      mutateRecords();
     } catch {
       setMessage({ type: 'error', text: t('error') });
     }
@@ -327,14 +301,16 @@ export default function WorkRecordsPage() {
   return (
     <div>
       <PageHeader title={t('workRecords')}>
-        <button
-          onClick={openCreate}
-          disabled={!Array.isArray(employees) || employees.length === 0}
-          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          title={employees.length === 0 ? t('noContractors') : ''}
-        >
-          {t('add')} {t('workRecord')}
-        </button>
+        {canAdd && (
+          <button
+            onClick={openCreate}
+            disabled={!Array.isArray(employees) || employees.length === 0}
+            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title={employees.length === 0 ? t('noContractors') : ''}
+          >
+            {t('add')} {t('workRecord')}
+          </button>
+        )}
       </PageHeader>
 
       {message && (
@@ -347,15 +323,17 @@ export default function WorkRecordsPage() {
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-            <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-              <option value="">{t('all')}</option>
-              {(Array.isArray(employees) ? employees : []).map((e) => (
-                <option key={e._id} value={e._id}>{e.name}</option>
-              ))}
-            </select>
-          </div>
+          {!isEmployee && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
+              <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                <option value="">{t('all')}</option>
+                {(Array.isArray(employees) ? employees : []).map((e) => (
+                  <option key={e._id} value={e._id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('periodStart')}</label>
             <input type="date" value={filterStart} onChange={(e) => setFilterStart(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white" />
@@ -390,10 +368,17 @@ export default function WorkRecordsPage() {
                   <tr key={r._id} className="hover:bg-uff-surface">
                     <td className="px-4 py-3 text-slate-800">{(r.employee as { name?: string })?.name}</td>
                     <td className="px-4 py-3 text-slate-700">{(r.branch as { name?: string })?.name}</td>
-                    <td className="px-4 py-3 text-slate-700 text-sm">{r.periodStart?.slice(0, 10)} – {r.periodEnd?.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-slate-700 text-sm">{formatDateRange(r.periodStart, r.periodEnd)}</td>
                     <td className="px-4 py-3 text-right font-medium">₹{r.totalAmount?.toLocaleString()}</td>
                     <td className="px-4 py-3">
-                      <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onDelete={() => handleDelete(r._id)} viewLabel={t('view')} editLabel={t('edit')} deleteLabel={t('delete')} />
+                      <ActionButtons
+                        onView={() => openView(r)}
+                        onEdit={canAdd ? () => openEdit(r) : undefined}
+                        onDelete={canAdd ? () => handleDelete(r._id) : undefined}
+                        viewLabel={t('view')}
+                        editLabel={t('edit')}
+                        deleteLabel={t('delete')}
+                      />
                     </td>
                   </tr>
                 ))
@@ -411,10 +396,17 @@ export default function WorkRecordsPage() {
               <div key={r._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(r.employee as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{(r.branch as { name?: string })?.name}</p>
-                <p className="text-sm text-slate-600">{r.periodStart?.slice(0, 10)} – {r.periodEnd?.slice(0, 10)}</p>
+                <p className="text-sm text-slate-600">{formatDateRange(r.periodStart, r.periodEnd)}</p>
                 <p className="mt-2 font-semibold text-slate-900">₹{r.totalAmount?.toLocaleString()}</p>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
-                  <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onDelete={() => handleDelete(r._id)} viewLabel={t('view')} editLabel={t('edit')} deleteLabel={t('delete')} />
+                  <ActionButtons
+                    onView={() => openView(r)}
+                    onEdit={canAdd ? () => openEdit(r) : undefined}
+                    onDelete={canAdd ? () => handleDelete(r._id) : undefined}
+                    viewLabel={t('view')}
+                    editLabel={t('edit')}
+                    deleteLabel={t('delete')}
+                  />
                 </div>
               </div>
             ))
@@ -431,7 +423,7 @@ export default function WorkRecordsPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')}</label>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   <select
                     value={form.employeeId}
                     onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value, branchId: '' }))}
@@ -446,7 +438,7 @@ export default function WorkRecordsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')}</label>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   <select
                     value={form.branchId}
                     onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
@@ -455,7 +447,7 @@ export default function WorkRecordsPage() {
                     required
                   >
                     <option value="">{employeeBranches.length === 0 && form.employeeId ? t('noBranches') : 'Select...'}</option>
-                    {(employeeBranches || []).map((b) => (
+                    {(employeeBranches || []).map((b: Branch) => (
                       <option key={b._id} value={b._id}>{b.name}</option>
                     ))}
                   </select>
@@ -463,24 +455,26 @@ export default function WorkRecordsPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="date"
                     value={form.periodStart}
-                    onChange={(e) => setForm((f) => ({ ...f, periodStart: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, periodStart: v }))}
+                    fieldType="date"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    className="w-full px-3 py-2"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="date"
                     value={form.periodEnd}
-                    onChange={(e) => setForm((f) => ({ ...f, periodEnd: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, periodEnd: v }))}
+                    fieldType="date"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : ''}`}
+                    className="w-full px-3 py-2"
                     required
                   />
                 </div>
@@ -488,7 +482,7 @@ export default function WorkRecordsPage() {
 
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium text-slate-800">{t('workItems')}</label>
+                  <label className="block text-sm font-medium text-slate-800">{t('workItems')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   {modal !== 'view' && (
                     <button
                       type="button"
@@ -554,28 +548,28 @@ export default function WorkRecordsPage() {
               <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('otHours')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={form.otHours ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, otHours: parseFloat(e.target.value) || 0 }))}
+                  <ValidatedInput
+                    type="text"
+                    inputMode="decimal"
+                    value={form.otHours != null && form.otHours !== 0 ? String(form.otHours) : ''}
+                    onChange={(v) => setForm((f) => ({ ...f, otHours: parseFloat(v) || 0 }))}
+                    fieldType="number"
+                    placeholderHint="0"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                    placeholder="0"
+                    className="w-full px-3 py-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('otAmount')} (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={form.otAmount ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, otAmount: parseFloat(e.target.value) || 0 }))}
+                  <ValidatedInput
+                    type="text"
+                    inputMode="decimal"
+                    value={form.otAmount != null && form.otAmount !== 0 ? String(form.otAmount) : ''}
+                    onChange={(v) => setForm((f) => ({ ...f, otAmount: parseFloat(v) || 0 }))}
+                    fieldType="number"
+                    placeholderHint="0"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                    placeholder="0"
+                    className="w-full px-3 py-2"
                   />
                 </div>
               </div>

@@ -1,7 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import RateMaster from '@/lib/models/RateMaster';
 import { getAuthUser, hasRole } from '@/lib/auth';
+
+async function fetchRates(includeInactive: boolean, branchId: string | null) {
+  await connectDB();
+  const filter = includeInactive ? {} : { isActive: true };
+  let rates = await RateMaster.find(filter)
+    .populate('branchRates.branch', 'name')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  if (branchId) {
+    const branchIdStr = String(branchId);
+    return (rates || []).map((r) => {
+      const br = (r.branchRates as { branch: unknown; amount: number }[] | undefined)?.find((b) => {
+        const bid = b.branch && typeof b.branch === 'object' && '_id' in b.branch
+          ? String((b.branch as { _id: unknown })._id)
+          : String(b.branch);
+        return bid === branchIdStr;
+      });
+      return { ...r, amountForBranch: br?.amount ?? 0 };
+    });
+  }
+  return rates;
+}
+
+const getCachedRates = unstable_cache(
+  fetchRates,
+  ['rates'],
+  { revalidate: 60, tags: ['rates'] }
+);
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,29 +39,10 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    await connectDB();
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
     const branchId = searchParams.get('branch');
-    const filter = includeInactive ? {} : { isActive: true };
-    let rates = await RateMaster.find(filter)
-      .populate('branchRates.branch', 'name')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    if (branchId) {
-      const branchIdStr = String(branchId);
-      const withAmount = (rates || []).map((r) => {
-        const br = (r.branchRates as { branch: unknown; amount: number }[] | undefined)?.find((b) => {
-          const bid = b.branch && typeof b.branch === 'object' && '_id' in b.branch
-            ? String((b.branch as { _id: unknown })._id)
-            : String(b.branch);
-          return bid === branchIdStr;
-        });
-        return { ...r, amountForBranch: br?.amount ?? 0 };
-      });
-      return NextResponse.json(withAmount);
-    }
+    const rates = await getCachedRates(includeInactive, branchId);
     return NextResponse.json(rates);
   } catch (e) {
     console.error(e);
@@ -65,6 +76,7 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
     const rate = await RateMaster.create({ name, description: description || '', unit, branchRates: validRates });
+    revalidateTag('rates', 'default');
     const populated = await RateMaster.findById(rate._id)
       .populate('branchRates.branch', 'name')
       .lean();

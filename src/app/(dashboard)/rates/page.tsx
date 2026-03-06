@@ -7,6 +7,8 @@ import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import { useRates, useBranches } from '@/lib/hooks/useApi';
+import ValidatedInput from '@/components/ValidatedInput';
 
 interface Branch {
   _id: string;
@@ -30,12 +32,11 @@ interface RateMaster {
 export default function RatesPage() {
   const { t } = useApp();
   const { user } = useAuth();
-  const [rates, setRates] = useState<RateMaster[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const { rates, loading, mutate: mutateRates } = useRates(includeInactive);
+  const { branches } = useBranches(false);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [includeInactive, setIncludeInactive] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -55,22 +56,6 @@ export default function RatesPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<'add' | 'replace'>('add');
 
-  const fetchRates = () => {
-    fetch(`/api/rates?includeInactive=${includeInactive}`)
-      .then((r) => r.json())
-      .then((data) => setRates(Array.isArray(data) ? data : []))
-      .catch(() => setMessage({ type: 'error', text: t('error') }));
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetchRates();
-    fetch('/api/branches?includeInactive=false')
-      .then((r) => r.json())
-      .then((data) => setBranches(Array.isArray(data) ? data : []))
-      .catch(() => {});
-    setLoading(false);
-  }, [includeInactive]);
 
   const openCreate = () => {
     if (!Array.isArray(branches) || branches.length === 0) {
@@ -185,7 +170,7 @@ export default function RatesPage() {
         if (!res.ok) throw new Error(data.error || t('error'));
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
-        fetchRates();
+        mutateRates();
       } else if (editingId) {
         const res = await fetch(`/api/rates/${editingId}`, {
           method: 'PATCH',
@@ -195,7 +180,7 @@ export default function RatesPage() {
         if (!res.ok) throw new Error((await res.json()).error);
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
-        fetchRates();
+        mutateRates();
       }
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
@@ -221,7 +206,7 @@ export default function RatesPage() {
       });
       setImportModal(false);
       setImportFile(null);
-      fetchRates();
+      mutateRates();
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
     } finally {
@@ -236,7 +221,7 @@ export default function RatesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !r.isActive }),
       });
-      fetchRates();
+      mutateRates();
     } catch {
       setMessage({ type: 'error', text: t('error') });
     }
@@ -383,14 +368,15 @@ export default function RatesPage() {
             </h2>
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('rateName')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('rateName')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+                  fieldType="name"
+                  placeholderHint="e.g. Stitching jeans"
                   readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  placeholder="e.g. Stitching jeans"
+                  className="w-full px-3 py-2"
                 />
               </div>
               <div>
@@ -405,7 +391,7 @@ export default function RatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('unit')}</label>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('unit')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <select
                   value={form.unit}
                   onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
@@ -439,16 +425,16 @@ export default function RatesPage() {
                 {form.sameForAll ? (
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{t('amount')} (₹)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={form.amountForAll || ''}
-                        onChange={(e) => setForm((f) => ({ ...f, amountForAll: parseFloat(e.target.value) || 0 }))}
+                      <label className="block text-sm font-medium text-slate-700 mb-1">{t('amount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
+                      <ValidatedInput
+                        type="text"
+                        inputMode="decimal"
+                        value={form.amountForAll ? String(form.amountForAll) : ''}
+                        onChange={(v) => setForm((f) => ({ ...f, amountForAll: parseFloat(v) || 0 }))}
+                        fieldType="number"
+                        placeholderHint="e.g. 10"
                         readOnly={modal === 'view'}
-                        className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                        placeholder="10"
+                        className="w-full px-3 py-2"
                       />
                     </div>
                   </div>

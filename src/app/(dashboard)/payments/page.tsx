@@ -6,6 +6,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import { useEmployees, usePayments } from '@/lib/hooks/useApi';
+import ValidatedInput from '@/components/ValidatedInput';
+import { formatDateRange } from '@/lib/utils';
 
 interface Employee {
   _id: string;
@@ -61,14 +64,15 @@ const PAYMENT_MODES = [
 export default function PaymentsPage() {
   const { t } = useApp();
   const { user } = useAuth();
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isEmployee = !!user?.employeeId;
+  const canView = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
+  const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
+  const [filterRun, setFilterRun] = useState('');
+  const { payments, loading, mutate: mutatePayments } = usePayments(filterEmployee || undefined, filterRun || undefined, canView);
+  const { employees } = useEmployees(false);
   const [modal, setModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
   const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
-  const [filterEmployee, setFilterEmployee] = useState('');
-  const [filterRun, setFilterRun] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -82,7 +86,11 @@ export default function PaymentsPage() {
   const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('excel');
 
   const canAdd = ['admin', 'finance'].includes(user?.role || '');
-  const canView = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  useEffect(() => {
+    if (isEmployee && user?.employeeId) {
+      setFilterEmployee(user.employeeId);
+    }
+  }, [isEmployee, user?.employeeId]);
 
   const [form, setForm] = useState({
     employeeId: '',
@@ -107,28 +115,6 @@ export default function PaymentsPage() {
     paymentRun: '',
   });
 
-  const fetchPayments = () => {
-    let url = '/api/payments';
-    const params = new URLSearchParams();
-    if (filterEmployee) params.set('employeeId', filterEmployee);
-    if (filterRun) params.set('paymentRun', filterRun);
-    if (params.toString()) url += '?' + params.toString();
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => setPayments(Array.isArray(data) ? data : []))
-      .catch(() => setMessage({ type: 'error', text: t('error') }));
-  };
-
-  useEffect(() => {
-    if (!canView) return;
-    setLoading(true);
-    fetchPayments();
-    fetch('/api/employees?includeInactive=false')
-      .then((r) => r.json())
-      .then((data) => setEmployees(Array.isArray(data) ? data : []))
-      .catch(() => {});
-    setLoading(false);
-  }, [canView, filterEmployee, filterRun]);
 
   const openAdd = (emp?: Employee) => {
     if (employees.length === 0 && !emp?._id) {
@@ -257,7 +243,7 @@ export default function PaymentsPage() {
       if (!res.ok) throw new Error(data.error || t('error'));
       setMessage({ type: 'success', text: t('saveSuccess') });
       setModal(false);
-      fetchPayments();
+      mutatePayments();
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
     } finally {
@@ -330,18 +316,20 @@ export default function PaymentsPage() {
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-            <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-              <option value="">{t('all')}</option>
-              {(Array.isArray(employees) ? employees : []).map((e) => (
-                <option key={e._id} value={e._id}>{e.name}</option>
-              ))}
-            </select>
-          </div>
+          {!isEmployee && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
+              <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                <option value="">{t('all')}</option>
+                {(Array.isArray(employees) ? employees : []).map((e) => (
+                  <option key={e._id} value={e._id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('paymentRun')}</label>
-            <input type="text" value={filterRun} onChange={(e) => setFilterRun(e.target.value)} placeholder="e.g. March 2025" className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white w-40" />
+            <ValidatedInput type="text" value={filterRun} onChange={setFilterRun} fieldType="text" placeholderHint="e.g. March 2025" className="px-3 py-2 text-sm text-slate-900 bg-white w-40" />
           </div>
         </div>
       </ListToolbar>
@@ -371,7 +359,7 @@ export default function PaymentsPage() {
                   <tr key={p._id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-slate-800">{(p.employee as { name?: string })?.name}</td>
                     <td className="px-4 py-3 text-slate-600 text-sm">
-                      {p.periodStart?.slice(0, 10)} – {p.periodEnd?.slice(0, 10)}
+                      {formatDateRange(p.periodStart, p.periodEnd)}
                     </td>
                     <td className="px-4 py-3 text-right">₹{p.totalPayable?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-medium">₹{p.paymentAmount?.toLocaleString()}</td>
@@ -408,7 +396,7 @@ export default function PaymentsPage() {
             sorted.map((p) => (
               <div key={p._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(p.employee as { name?: string })?.name}</h3>
-                <p className="text-sm text-slate-600">{p.periodStart?.slice(0, 10)} – {p.periodEnd?.slice(0, 10)}</p>
+                <p className="text-sm text-slate-600">{formatDateRange(p.periodStart, p.periodEnd)}</p>
                 <p className="mt-2 font-semibold text-slate-900">₹{p.paymentAmount?.toLocaleString()}</p>
                 <p className="text-sm text-slate-600">{formatMode(p.paymentMode)}</p>
                 {p.remainingAmount > 0 ? (
@@ -438,7 +426,7 @@ export default function PaymentsPage() {
             <h2 className="text-lg font-semibold mb-4">{t('add')} {t('payment')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')}</label>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <select
                   value={form.employeeId}
                   onChange={(e) => onEmployeeChange(e.target.value)}
@@ -452,24 +440,26 @@ export default function PaymentsPage() {
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
+                  type="date"
+                  value={form.periodStart}
+                  onChange={(v) => setForm((f) => ({ ...f, periodStart: v }))}
+                  onBlur={onPeriodChange}
+                  fieldType="date"
+                  className="w-full px-3 py-2"
+                />
+              </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')}</label>
-                  <input
-                    type="date"
-                    value={form.periodStart}
-                    onChange={(e) => setForm((f) => ({ ...f, periodStart: e.target.value }))}
-                    onBlur={onPeriodChange}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="date"
                     value={form.periodEnd}
-                    onChange={(e) => setForm((f) => ({ ...f, periodEnd: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, periodEnd: v }))}
                     onBlur={onPeriodChange}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    fieldType="date"
+                    className="w-full px-3 py-2"
                   />
                 </div>
               </div>
@@ -493,33 +483,37 @@ export default function PaymentsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('addDeduct')} (₹)</label>
-                  <input
-                    type="number"
-                    value={form.addDeductAmount || ''}
-                    onChange={(e) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="+/- amount"
+                  <ValidatedInput
+                    type="text"
+                    inputMode="decimal"
+                    value={form.addDeductAmount ? String(form.addDeductAmount) : ''}
+                    onChange={(v) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))}
+                    placeholderHint="+/- amount"
+                    validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))}
+                    className="w-full px-3 py-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('remarks')}</label>
-                  <input
+                  <ValidatedInput
                     type="text"
                     value={form.addDeductRemarks}
-                    onChange={(e) => setForm((f) => ({ ...f, addDeductRemarks: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="Remarks"
+                    onChange={(v) => setForm((f) => ({ ...f, addDeductRemarks: v }))}
+                    fieldType="text"
+                    placeholderHint="Optional remarks"
+                    className="w-full px-3 py-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('advanceDeducted')} (₹)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.advanceDeducted ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, advanceDeducted: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="0"
+                  <ValidatedInput
+                    type="text"
+                    inputMode="decimal"
+                    value={form.advanceDeducted != null && form.advanceDeducted !== 0 ? String(form.advanceDeducted) : ''}
+                    onChange={(v) => setForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))}
+                    fieldType="number"
+                    placeholderHint="0"
+                    className="w-full px-3 py-2"
                   />
                 </div>
               </div>
@@ -530,18 +524,21 @@ export default function PaymentsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentAmount')} (₹)</label>
-                <input
-                  type="number"
-                  value={form.paymentAmount || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, paymentAmount: parseFloat(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentAmount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
+                  type="text"
+                  inputMode="decimal"
+                  value={form.paymentAmount ? String(form.paymentAmount) : ''}
+                  onChange={(v) => setForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))}
+                  fieldType="number"
+                  placeholderHint="e.g. 5000"
+                  className="w-full px-3 py-2"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentMode')}</label>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentMode')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <select
                   value={form.paymentMode}
                   onChange={(e) => setForm((f) => ({ ...f, paymentMode: e.target.value }))}
@@ -555,23 +552,25 @@ export default function PaymentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('transactionRef')}</label>
-                <input
+                <ValidatedInput
                   type="text"
                   value={form.transactionRef}
-                  onChange={(e) => setForm((f) => ({ ...f, transactionRef: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="Transaction ref, cheque no..."
+                  onChange={(v) => setForm((f) => ({ ...f, transactionRef: v }))}
+                  fieldType="text"
+                  placeholderHint="Transaction ref, cheque no..."
+                  className="w-full px-3 py-2"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentRun')}</label>
-                <input
+                <ValidatedInput
                   type="text"
                   value={form.paymentRun}
-                  onChange={(e) => setForm((f) => ({ ...f, paymentRun: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. March 2025"
+                  onChange={(v) => setForm((f) => ({ ...f, paymentRun: v }))}
+                  fieldType="text"
+                  placeholderHint="e.g. March 2025"
+                  className="w-full px-3 py-2"
                 />
               </div>
 
@@ -606,7 +605,7 @@ export default function PaymentsPage() {
             <h2 className="text-lg font-semibold mb-4">{t('paymentDetails')}</h2>
             <div className="space-y-2 text-sm">
               <p><span className="font-medium text-slate-700">{t('employeeName')}:</span> {(detailPayment.employee as { name?: string })?.name}</p>
-              <p><span className="font-medium text-slate-700">{t('period')}:</span> {detailPayment.periodStart?.slice(0, 10)} – {detailPayment.periodEnd?.slice(0, 10)}</p>
+              <p><span className="font-medium text-slate-700">{t('period')}:</span> {formatDateRange(detailPayment.periodStart, detailPayment.periodEnd)}</p>
               <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{detailPayment.baseAmount?.toLocaleString()}</p>
               {detailPayment.addDeductAmount !== 0 && (
                 <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{detailPayment.addDeductAmount?.toLocaleString()} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>
@@ -649,12 +648,12 @@ export default function PaymentsPage() {
                   type="number"
                   id="carry-amount"
                   defaultValue={carryModal.remaining}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('remarks')}</label>
-                <input type="text" id="carry-remarks" className="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="Remarks" />
+                <input type="text" id="carry-remarks" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent" placeholder="Optional remarks" />
               </div>
             </div>
             <div className="flex gap-2 mt-4">
@@ -691,32 +690,23 @@ export default function PaymentsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('paymentRun')}</label>
-                <input
+                <ValidatedInput
                   type="text"
                   value={exportRun}
-                  onChange={(e) => setExportRun(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  placeholder="e.g. March 2025 (leave empty for all)"
+                  onChange={setExportRun}
+                  fieldType="text"
+                  placeholderHint="e.g. March 2025 (leave empty for all)"
+                  className="w-full px-3 py-2"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodStart')}</label>
-                  <input
-                    type="date"
-                    value={exportStart}
-                    onChange={(e) => setExportStart(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
+                  <ValidatedInput type="date" value={exportStart} onChange={setExportStart} fieldType="date" className="w-full px-3 py-2" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('periodEnd')}</label>
-                  <input
-                    type="date"
-                    value={exportEnd}
-                    onChange={(e) => setExportEnd(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
+                  <ValidatedInput type="date" value={exportEnd} onChange={setExportEnd} fieldType="date" className="w-full px-3 py-2" />
                 </div>
               </div>
               <div>

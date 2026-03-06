@@ -66,6 +66,14 @@ function PaymentsIcon() {
   );
 }
 
+function PassbookIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  );
+}
+
 function RatesIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,6 +102,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessRates = user?.role === 'admin';
   const canAccessWorkRecords = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessPayments = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const isEmployee = !!user?.employeeId;
 
   const navItems = [
     { href: '/', label: t('home'), icon: <HomeIcon /> },
@@ -103,26 +112,33 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
     ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
     ...(canAccessPayments ? [{ href: '/payments', label: t('payments'), icon: <PaymentsIcon /> }] : []),
+    ...(isEmployee && !canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(isEmployee && !canAccessPayments ? [{ href: '/payments', label: t('payments'), icon: <PaymentsIcon /> }] : []),
+    ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
     ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster'), icon: <RatesIcon /> }] : []),
   ];
 
   const navContent = (
     <>
-      {navItems.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={() => setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
-            pathname === item.href
-              ? 'bg-uff-accent text-uff-primary font-medium'
-              : 'text-slate-200 hover:bg-white/10 hover:text-white'
-          }`}
-        >
-          {item.icon}
-          <span>{item.label}</span>
-        </Link>
-      ))}
+      {navItems.map((item) => {
+        const isPassbook = item.href.includes('/passbook');
+        const isActive = isPassbook ? pathname.includes('/passbook') && pathname.startsWith('/employees/') : pathname === item.href;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={() => setSidebarOpen(false)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+              isActive
+                ? 'bg-uff-accent text-uff-primary font-medium'
+                : 'text-slate-200 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
     </>
   );
 

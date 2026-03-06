@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
@@ -32,17 +30,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const employee = await Employee.findById(id);
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
-    const ext = file.name.split('.').pop() || 'jpg';
-    const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext.toLowerCase()) ? ext.toLowerCase() : 'jpg';
-    const filename = `${id}.${safeExt}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'employees');
-    const filepath = path.join(uploadDir, filename);
-
-    await mkdir(uploadDir, { recursive: true });
     const bytes = await file.arrayBuffer();
-    await writeFile(filepath, Buffer.from(bytes));
-
-    const photoUrl = `/uploads/employees/${filename}`;
+    const base64 = Buffer.from(bytes).toString('base64');
+    const photoUrl = `data:${file.type};base64,${base64}`;
     employee.photo = photoUrl;
     await employee.save();
 

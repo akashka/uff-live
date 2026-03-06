@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import UFFLogo from '@/components/UFFLogo';
+import ValidatedInput from '@/components/ValidatedInput';
 
 function LoginContent() {
   const { t } = useApp();
@@ -112,24 +113,27 @@ function LoginContent() {
           {mode === 'password' && (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
-                  placeholder="you@example.com"
+                  onChange={setEmail}
+                  fieldType="email"
+                  variant="dark"
+                  className="px-4 py-3"
                   required
                 />
               </div>
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('password')}</label>
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('password')} <span className="text-red-400" aria-hidden="true">*</span></label>
                 <div className="relative">
-                  <input
+                  <ValidatedInput
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
+                    onChange={setPassword}
+                    fieldType="password"
+                    variant="dark"
+                    className="px-4 py-3 pr-12"
                     required
                   />
                   <button
@@ -179,13 +183,14 @@ function LoginContent() {
           {mode === 'forgot' && !otpSent && (
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
-                  placeholder="you@example.com"
+                  onChange={setEmail}
+                  fieldType="email"
+                  variant="dark"
+                  className="px-4 py-3"
                   required
                 />
               </div>
@@ -216,43 +221,52 @@ function LoginContent() {
           {mode === 'reset' && otpSent && (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('email')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="email"
                   value={email}
+                  onChange={() => {}}
+                  fieldType="email"
+                  variant="dark"
                   readOnly
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-slate-200"
+                  className="px-4 py-3"
                 />
               </div>
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('enterOTP')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('enterOTP')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="text"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
-                  placeholder="123456"
+                  onChange={(v) => setOtp(v.replace(/\D/g, '').slice(0, 6))}
+                  fieldType="otp"
+                  variant="dark"
+                  className="px-4 py-3"
                   maxLength={6}
                   required
                 />
               </div>
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('newPassword')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('newPassword')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
+                  onChange={setNewPassword}
+                  fieldType="password"
+                  variant="dark"
+                  className="px-4 py-3"
                   required
                 />
               </div>
               <div>
-                <label className="block text-slate-200 text-sm font-medium mb-1">{t('confirmPassword')}</label>
-                <input
+                <label className="block text-slate-200 text-sm font-medium mb-1">{t('confirmPassword')} <span className="text-red-400" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
+                  onChange={setConfirmPassword}
+                  variant="dark"
+                  placeholderHint="Must match new password"
+                  validate={(v) => v === '' || (v.length >= 6 && v === newPassword)}
+                  className="px-4 py-3"
                   required
                 />
               </div>

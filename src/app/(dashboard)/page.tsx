@@ -13,6 +13,7 @@ import {
   EmployeeTypeChart,
 } from '@/components/dashboard/DashboardCharts';
 import { Skeleton, DashboardSkeleton } from '@/components/Skeleton';
+import { useDashboardStats } from '@/lib/hooks/useApi';
 
 const DASHBOARD_CONFIG_KEY = 'uff-dashboard-widgets';
 
@@ -40,6 +41,8 @@ interface DashboardStats {
     paidTotal: number;
     paidTotalPayable: number;
     dueTotal: number;
+    workTrend?: { month: string; amount: number; count: number }[];
+    paymentTrend?: { month: string; paid: number; count: number }[];
   };
 }
 
@@ -54,9 +57,8 @@ const PAYMENT_MODE_LABELS: Record<string, string> = {
 export default function HomePage() {
   const { t } = useApp();
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('30');
+  const { stats, loading } = useDashboardStats(range);
   const [config, setConfig] = useState<Record<string, boolean>>({});
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -85,17 +87,12 @@ export default function HomePage() {
         paymentMode: true,
         employeeType: true,
         myStats: true,
+        myWorkTrend: true,
+        myPaymentTrend: true,
       });
     }
   }, []);
 
-  useEffect(() => {
-    fetch(`/api/dashboard/stats?range=${range}`)
-      .then((r) => r.json())
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
-  }, [range]);
 
   const toggleWidget = (key: string) => {
     const next = { ...config, [key]: !config[key] };
@@ -106,7 +103,7 @@ export default function HomePage() {
   const paymentModeData = stats?.payments?.byMode
     ? Object.entries(stats.payments.byMode).map(([name, value]) => ({
         name: PAYMENT_MODE_LABELS[name] || name,
-        value,
+        value: Number(value),
       }))
     : [];
 
@@ -142,7 +139,7 @@ export default function HomePage() {
             <option value="30">Last 30 days</option>
             <option value="90">Last 90 days</option>
           </select>
-          {(isAdmin || isFinance || isHR) && (
+          {(isAdmin || isFinance || isHR || isEmployee) && (
             <button
               onClick={() => setConfigOpen(!configOpen)}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-sm hover:bg-uff-surface"
@@ -245,28 +242,49 @@ export default function HomePage() {
               </>
             )}
             {isEmployee && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.myStats ?? true}
-                  onChange={() => toggleWidget('myStats')}
-                  className="rounded border-slate-400"
-                />
-                <span className="text-sm text-slate-800">{t('mySummary')}</span>
-              </label>
+              <>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.myStats ?? true}
+                    onChange={() => toggleWidget('myStats')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('mySummary')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.myWorkTrend ?? true}
+                    onChange={() => toggleWidget('myWorkTrend')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('myWorkTrend')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.myPaymentTrend ?? true}
+                    onChange={() => toggleWidget('myPaymentTrend')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('myPaymentTrend')}</span>
+                </label>
+              </>
             )}
           </div>
         </div>
       )}
 
       {isEmployee && (config.myStats ?? true) && stats?.myStats && (
+        <>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title={stats.myStats.employeeType === 'contractor' ? t('workRecords') : t('monthlySalary')}
             value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
             subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : 'Fixed monthly'}
             icon={<UsersIcon />}
-            href="/profile"
+            href="/work-records"
             gradient="from-violet-500 to-purple-600"
           />
           <StatCard
@@ -274,7 +292,7 @@ export default function HomePage() {
             value={stats.myStats.payments}
             subtitle={`₹${stats.myStats.paidTotal?.toLocaleString()} received`}
             icon={<PaymentIcon />}
-            href="/profile"
+            href="/payments"
             gradient="from-emerald-500 to-teal-600"
           />
           <StatCard
@@ -292,6 +310,24 @@ export default function HomePage() {
             gradient={stats.myStats.dueTotal > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-600'}
           />
         </div>
+        {stats.myStats.employeeType === 'contractor' && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="font-semibold text-slate-800 mb-1">{t('estimatedNextPayment')}</h3>
+            <p className="text-slate-600 text-sm">
+              {stats.myStats.workRecords > 0
+                ? t('estimatedNextPaymentHint')
+                : t('estimatedNextPaymentNoData')}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-uff-accent">
+              {stats.myStats.workRecords > 0 && stats.myStats.payments > 0
+                ? `~₹${Math.round((stats.myStats.workTotal || 0) / Math.max(1, stats.myStats.workRecords || 1) * 2).toLocaleString()} ${t('perMonth')}`
+                : stats.myStats.workRecords > 0
+                  ? t('pendingWorkRecords')
+                  : t('noData')}
+            </p>
+          </div>
+        )}
+        </>
       )}
 
       {(isHR || isAdmin) && (config.employees ?? true) && stats?.employees && (
@@ -439,6 +475,30 @@ export default function HomePage() {
                 contractors={stats.employees.contractors}
                 fullTime={stats.employees.fullTime}
               />
+            </div>
+          </div>
+        )}
+
+        {isEmployee && (config.myStats ?? true) && stats?.myStats?.workTrend && stats.myStats.workTrend.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-uff-surface to-white px-6 py-4">
+              <h3 className="font-semibold text-slate-800">{t('myWorkTrend')}</h3>
+              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+            </div>
+            <div className="p-6">
+              <WorkTrendChart data={stats.myStats.workTrend} />
+            </div>
+          </div>
+        )}
+
+        {isEmployee && (config.myStats ?? true) && stats?.myStats?.paymentTrend && stats.myStats.paymentTrend.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-uff-surface to-white px-6 py-4">
+              <h3 className="font-semibold text-slate-800">{t('myPaymentTrend')}</h3>
+              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+            </div>
+            <div className="p-6">
+              <PaymentsTrendChart data={stats.myStats.paymentTrend} />
             </div>
           </div>
         )}

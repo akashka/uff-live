@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
@@ -78,6 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     await employee.save();
+    revalidateTag('employees', 'default');
     const updated = await Employee.findById(id).populate('branches', 'name').lean();
     return NextResponse.json(updated);
   } catch (e) {

@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
+import { formatDate, formatDateRange } from '@/lib/utils';
 
 interface WorkRecord {
   _id: string;
@@ -78,7 +79,7 @@ export default function EmployeePassbookPage() {
 
         const workEntries: PassbookEntry[] = workRecords.map((r) => {
           const branchName = typeof r.branch === 'object' && r.branch?.name ? r.branch.name : String(r.branch || '');
-          const period = `${r.periodStart?.slice(0, 10) || ''} – ${r.periodEnd?.slice(0, 10) || ''}`;
+          const period = formatDateRange(r.periodStart, r.periodEnd);
           return {
             type: 'work',
             id: `w-${r._id}`,
@@ -198,7 +199,7 @@ export default function EmployeePassbookPage() {
                 rowsWithBalance.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
-                      {row.date ? new Date(row.date).toLocaleDateString() : '–'}
+                      {row.date ? formatDate(row.date) : '–'}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-800 max-w-xs truncate" title={row.particulars}>
                       {row.particulars}

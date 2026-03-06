@@ -17,7 +17,9 @@ import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import ValidatedInput from '@/components/ValidatedInput';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import { useEmployees, useBranches } from '@/lib/hooks/useApi';
 
 interface Branch {
   _id: string;
@@ -56,13 +58,12 @@ export default function EmployeesPage() {
   const { t } = useApp();
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const { employees, loading, mutate: mutateEmployees } = useEmployees(includeInactive);
+  const { branches } = useBranches(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [passwordModal, setPasswordModal] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [includeInactive, setIncludeInactive] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -97,22 +98,6 @@ export default function EmployeesPage() {
     role: 'employee' as string,
   });
 
-  const fetchEmployees = () => {
-    fetch(`/api/employees?includeInactive=${includeInactive}`)
-      .then((r) => r.json())
-      .then((data) => setEmployees(Array.isArray(data) ? data : []))
-      .catch(() => setMessage({ type: 'error', text: t('error') }));
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetchEmployees();
-    fetch('/api/branches?includeInactive=true')
-      .then((r) => r.json())
-      .then((data) => setBranches(Array.isArray(data) ? data : []))
-      .catch(() => {});
-    setLoading(false);
-  }, [includeInactive]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -236,7 +221,7 @@ export default function EmployeesPage() {
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
         if (data.generatedPassword) setPasswordModal(data.generatedPassword);
-        fetchEmployees();
+        mutateEmployees();
       } else if (editingId) {
         if (photoFile) {
           await uploadPhoto(editingId, photoFile);
@@ -255,7 +240,7 @@ export default function EmployeesPage() {
         if (!res.ok) throw new Error((await res.json()).error);
         setMessage({ type: 'success', text: t('saveSuccess') });
         setModal(null);
-        fetchEmployees();
+        mutateEmployees();
       }
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
@@ -271,7 +256,7 @@ export default function EmployeesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !e.isActive }),
       });
-      fetchEmployees();
+      mutateEmployees();
     } catch {
       setMessage({ type: 'error', text: t('error') });
     }
@@ -409,57 +394,57 @@ export default function EmployeesPage() {
             <FormSection title={t('employeeName') + ' & ' + t('contactNumber')}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="text"
                     value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+                    fieldType="name"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('contactNumber')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('contactNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="tel"
                     value={form.contactNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, contactNumber: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
+                    fieldType="phone"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="email"
                     value={form.email}
-                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                    fieldType="email"
                     readOnly={modal === 'edit' || modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'edit' || modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('emergencyNumber')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('emergencyNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="tel"
                     value={form.emergencyNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, emergencyNumber: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, emergencyNumber: v }))}
+                    fieldType="phone"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('dateOfBirth')}</label>
-                  <input
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('dateOfBirth')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                  <ValidatedInput
                     type="date"
                     value={form.dateOfBirth}
-                    onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))}
+                    fieldType="date"
                     readOnly={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('gender')}</label>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('gender')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   <select
                     value={form.gender}
                     onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value as 'male' | 'female' | 'other' }))}
@@ -472,7 +457,7 @@ export default function EmployeesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeType')}</label>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeType')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   <select
                     value={form.employeeType}
                     onChange={(e) => setForm((f) => ({ ...f, employeeType: e.target.value as 'full_time' | 'contractor' }))}
@@ -510,16 +495,16 @@ export default function EmployeesPage() {
                   </label>
                   {form.pfOpted && (
                     <div className="max-w-xs">
-                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyPfAmount')} (₹)</label>
-                      <input
+                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyPfAmount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
+                      <ValidatedInput
                         type="number"
                         min={0}
                         step={0.01}
-                        value={form.monthlyPfAmount ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, monthlyPfAmount: parseFloat(e.target.value) || 0 }))}
+                        value={String(form.monthlyPfAmount ?? '')}
+                        onChange={(v) => setForm((f) => ({ ...f, monthlyPfAmount: parseFloat(v) || 0 }))}
+                        fieldType="number"
+                        placeholderHint="e.g. 500"
                         readOnly={modal === 'view'}
-                        className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                        required={form.pfOpted}
                       />
                     </div>
                   )}
@@ -529,16 +514,16 @@ export default function EmployeesPage() {
                   </label>
                   {form.esiOpted && (
                     <div className="max-w-xs mt-2">
-                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyEsiAmount')} (₹)</label>
-                      <input
+                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyEsiAmount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
+                      <ValidatedInput
                         type="number"
                         min={0}
                         step={0.01}
-                        value={form.monthlyEsiAmount ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, monthlyEsiAmount: parseFloat(e.target.value) || 0 }))}
+                        value={String(form.monthlyEsiAmount ?? '')}
+                        onChange={(v) => setForm((f) => ({ ...f, monthlyEsiAmount: parseFloat(v) || 0 }))}
+                        fieldType="number"
+                        placeholderHint="e.g. 200"
                         readOnly={modal === 'view'}
-                        className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                        required={form.esiOpted}
                       />
                     </div>
                   )}
@@ -551,51 +536,54 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlySalary')} (₹)</label>
-                    <input
+                    <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={form.monthlySalary || ''}
-                      onChange={(e) => setForm((f) => ({ ...f, monthlySalary: parseFloat(e.target.value) || 0 }))}
+                      value={String(form.monthlySalary ?? '')}
+                      onChange={(v) => setForm((f) => ({ ...f, monthlySalary: parseFloat(v) || 0 }))}
+                      fieldType="number"
+                      placeholderHint="e.g. 35000"
                       readOnly={modal === 'view'}
-                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                      placeholder="Gross salary"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">{t('pf')} (₹)</label>
-                    <input
+                    <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={form.salaryBreakup?.pf ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(e.target.value) || 0 } }))}
+                      value={String(form.salaryBreakup?.pf ?? '')}
+                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }))}
+                      fieldType="number"
+                      placeholderHint="e.g. 2100"
                       readOnly={modal === 'view'}
-                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">{t('esi')} (₹)</label>
-                    <input
+                    <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={form.salaryBreakup?.esi ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(e.target.value) || 0 } }))}
+                      value={String(form.salaryBreakup?.esi ?? '')}
+                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }))}
+                      fieldType="number"
+                      placeholderHint="e.g. 525"
                       readOnly={modal === 'view'}
-                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">{t('otherDeductions')} (₹)</label>
-                    <input
+                    <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={form.salaryBreakup?.other ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, other: parseFloat(e.target.value) || 0 } }))}
+                      value={String(form.salaryBreakup?.other ?? '')}
+                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, other: parseFloat(v) || 0 } }))}
+                      fieldType="number"
+                      placeholderHint="e.g. 0"
                       readOnly={modal === 'view'}
-                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                     />
                   </div>
                 </div>
@@ -611,15 +599,33 @@ export default function EmployeesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('aadhaarNumber')}</label>
-                  <input type="text" value={form.aadhaarNumber} onChange={(e) => setForm((f) => ({ ...f, aadhaarNumber: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} />
+                  <ValidatedInput
+                    type="text"
+                    value={form.aadhaarNumber || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, aadhaarNumber: v }))}
+                    fieldType="aadhaar"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('pfNumber')}</label>
-                  <input type="text" value={form.pfNumber} onChange={(e) => setForm((f) => ({ ...f, pfNumber: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} />
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('pfNumber')}{form.pfOpted && <span className="text-red-500" aria-hidden="true"> *</span>}</label>
+                  <ValidatedInput
+                    type="text"
+                    value={form.pfNumber || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))}
+                    fieldType="pfNumber"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('panNumber')}</label>
-                  <input type="text" value={form.panNumber} onChange={(e) => setForm((f) => ({ ...f, panNumber: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} />
+                  <ValidatedInput
+                    type="text"
+                    value={form.panNumber || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, panNumber: v.toUpperCase() }))}
+                    fieldType="pan"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
               </div>
             </FormSection>
@@ -628,23 +634,56 @@ export default function EmployeesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('bankName')}</label>
-                  <input type="text" value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} placeholder="e.g. State Bank of India" />
+                  <ValidatedInput
+                    type="text"
+                    value={form.bankName || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
+                    fieldType="bankName"
+                    placeholderHint="e.g. State Bank of India"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('bankBranch')}</label>
-                  <input type="text" value={form.bankBranch} onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} placeholder="Branch name" />
+                  <ValidatedInput
+                    type="text"
+                    value={form.bankBranch || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, bankBranch: v }))}
+                    fieldType="text"
+                    placeholderHint="e.g. Main Branch, Bangalore"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('ifscCode')}</label>
-                  <input type="text" value={form.ifscCode} onChange={(e) => setForm((f) => ({ ...f, ifscCode: e.target.value.toUpperCase() }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} placeholder="e.g. SBIN0001234" maxLength={11} />
+                  <ValidatedInput
+                    type="text"
+                    value={form.ifscCode || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, ifscCode: v.toUpperCase() }))}
+                    fieldType="ifsc"
+                    maxLength={11}
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('accountNumber')}</label>
-                  <input type="text" value={form.accountNumber} onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value.replace(/\D/g, '') }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} placeholder="Account number" />
+                  <ValidatedInput
+                    type="text"
+                    value={form.accountNumber || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, accountNumber: v.replace(/\D/g, '') }))}
+                    fieldType="accountNumber"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('upiId')}</label>
-                  <input type="text" value={form.upiId} onChange={(e) => setForm((f) => ({ ...f, upiId: e.target.value }))} readOnly={modal === 'view'} className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`} placeholder="e.g. name@bank" />
+                  <ValidatedInput
+                    type="text"
+                    value={form.upiId || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, upiId: v }))}
+                    fieldType="upi"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
               </div>
             </FormSection>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
+import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
@@ -389,13 +390,13 @@ export default function UsersPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="email"
                   value={adminForm.email}
-                  onChange={(e) => setAdminForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
-                  placeholder="admin@example.com"
+                  onChange={(v) => setAdminForm((f) => ({ ...f, email: v }))}
+                  fieldType="email"
+                  placeholderHint="admin@example.com"
                 />
               </div>
               <div>
@@ -508,16 +509,16 @@ export default function UsersPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="email"
                   value={editAdminForm.email}
-                  onChange={(e) => setEditAdminForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                  onChange={(v) => setEditAdminForm((f) => ({ ...f, email: v }))}
+                  fieldType="email"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('role')}</label>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('role')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <select
                   value={editAdminForm.role}
                   onChange={(e) => setEditAdminForm((f) => ({ ...f, role: e.target.value }))}

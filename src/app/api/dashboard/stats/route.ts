@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
+import { formatDate } from '@/lib/utils';
 import Employee from '@/lib/models/Employee';
 import Branch from '@/lib/models/Branch';
 import Payment from '@/lib/models/Payment';
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
         );
         const weekPaid = weekPayments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
         monthlyData.push({
-          month: weekStart.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+          month: formatDate(weekStart),
           paid: weekPaid,
           count: weekPayments.length,
         });
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
         );
         const weekAmount = weekRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
         workTrend.push({
-          month: weekStart.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+          month: formatDate(weekStart),
           amount: weekAmount,
           count: weekRecords.length,
         });
@@ -127,6 +128,44 @@ export async function GET(req: NextRequest) {
         const paidTotalPayable = myPayments.reduce((s, p) => s + (p.totalPayable || 0), 0);
         const dueTotal = myPayments.reduce((s, p) => s + (p.remainingAmount || 0), 0);
 
+        const myWorkTrend: { month: string; amount: number; count: number }[] = [];
+        for (let i = days - 1; i >= 0; i -= 7) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const weekStart = new Date(d);
+          weekStart.setHours(0, 0, 0, 0);
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 7);
+          const weekRecords = myWorkRecords.filter(
+            (r) => new Date(r.createdAt) >= weekStart && new Date(r.createdAt) < weekEnd
+          );
+          const weekAmount = weekRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
+          myWorkTrend.push({
+            month: formatDate(weekStart),
+            amount: weekAmount,
+            count: weekRecords.length,
+          });
+        }
+
+        const myPaymentTrend: { month: string; paid: number; count: number }[] = [];
+        for (let i = days - 1; i >= 0; i -= 7) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const weekStart = new Date(d);
+          weekStart.setHours(0, 0, 0, 0);
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 7);
+          const weekPayments = myPayments.filter(
+            (p) => new Date(p.paidAt) >= weekStart && new Date(p.paidAt) < weekEnd
+          );
+          const weekPaid = weekPayments.reduce((s, p) => s + (p.paymentAmount || 0), 0);
+          myPaymentTrend.push({
+            month: formatDate(weekStart),
+            paid: weekPaid,
+            count: weekPayments.length,
+          });
+        }
+
         stats.myStats = {
           employeeType: employee.employeeType,
           workRecords: myWorkRecords.length,
@@ -135,6 +174,8 @@ export async function GET(req: NextRequest) {
           paidTotal,
           paidTotalPayable,
           dueTotal,
+          workTrend: myWorkTrend,
+          paymentTrend: myPaymentTrend,
         };
       }
     }

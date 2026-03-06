@@ -3,42 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/contexts/AppContext';
+import ValidatedInput from '@/components/ValidatedInput';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { ProfileSkeleton } from '@/components/Skeleton';
-
-interface WorkRecord {
-  _id: string;
-  branch: { name: string };
-  periodStart: string;
-  periodEnd: string;
-  workItems: { rateName: string; unit: string; quantity: number; ratePerUnit: number; amount: number }[];
-  otHours?: number;
-  otAmount?: number;
-  totalAmount: number;
-}
-
-interface PaymentRecord {
-  _id: string;
-  paymentType: string;
-  periodStart: string;
-  periodEnd: string;
-  baseAmount: number;
-  addDeductAmount: number;
-  addDeductRemarks: string;
-  pfDeducted: number;
-  esiDeducted?: number;
-  advanceDeducted?: number;
-  totalPayable: number;
-  paymentAmount: number;
-  paymentMode: string;
-  transactionRef: string;
-  remainingAmount: number;
-  carriedForward: number;
-  isAdvance: boolean;
-  paidAt: string;
-}
+import { formatDate } from '@/lib/utils';
 
 interface ProfileData {
   user: { email: string; role: string };
@@ -69,12 +39,6 @@ export default function ProfilePage() {
   const { t } = useApp();
   const { user, refetchUser } = useAuth();
   const [data, setData] = useState<ProfileData | null>(null);
-  const [workRecords, setWorkRecords] = useState<WorkRecord[]>([]);
-  const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
-  const [workRecordsLoading, setWorkRecordsLoading] = useState(false);
-  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
-  const [workFilterStart, setWorkFilterStart] = useState('');
-  const [workFilterEnd, setWorkFilterEnd] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -111,31 +75,6 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (data?.employee?.employeeType === 'contractor' && user?.employeeId) {
-      setWorkRecordsLoading(true);
-      let url = `/api/work-records?employeeId=${user.employeeId}`;
-      if (workFilterStart) url += `&periodStart=${workFilterStart}`;
-      if (workFilterEnd) url += `&periodEnd=${workFilterEnd}`;
-      fetch(url)
-        .then((r) => r.json())
-        .then((d) => setWorkRecords(Array.isArray(d) ? d : []))
-        .catch(() => setWorkRecords([]))
-        .finally(() => setWorkRecordsLoading(false));
-    }
-  }, [data?.employee?.employeeType, user?.employeeId, workFilterStart, workFilterEnd]);
-
-  useEffect(() => {
-    if (user?.employeeId) {
-      setPaymentHistoryLoading(true);
-      fetch(`/api/payments?employeeId=${user.employeeId}`)
-        .then((r) => r.json())
-        .then((d) => setPaymentHistory(Array.isArray(d) ? d : []))
-        .catch(() => setPaymentHistory([]))
-        .finally(() => setPaymentHistoryLoading(false));
-    }
-  }, [user?.employeeId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -265,39 +204,42 @@ export default function ProfilePage() {
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('employeeName')}</label>
+                  <label className="block text-sm font-medium text-slate-700">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   {editing ? (
-                    <input
+                    <ValidatedInput
                       type="text"
                       value={editForm.name}
-                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                      onChange={(v) => setEditForm((f) => ({ ...f, name: v }))}
+                      fieldType="name"
+                      className="mt-1"
                     />
                   ) : (
                     <p className="mt-1 text-slate-800">{emp.name}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('contactNumber')}</label>
+                  <label className="block text-sm font-medium text-slate-700">{t('contactNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   {editing ? (
-                    <input
+                    <ValidatedInput
                       type="tel"
                       value={editForm.contactNumber}
-                      onChange={(e) => setEditForm((f) => ({ ...f, contactNumber: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                      onChange={(v) => setEditForm((f) => ({ ...f, contactNumber: v }))}
+                      fieldType="phone"
+                      className="mt-1"
                     />
                   ) : (
                     <p className="mt-1 text-slate-800">{emp.contactNumber}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('emergencyNumber')}</label>
+                  <label className="block text-sm font-medium text-slate-700">{t('emergencyNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
                   {editing ? (
-                    <input
+                    <ValidatedInput
                       type="tel"
                       value={editForm.emergencyNumber}
-                      onChange={(e) => setEditForm((f) => ({ ...f, emergencyNumber: e.target.value }))}
-                      className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                      onChange={(v) => setEditForm((f) => ({ ...f, emergencyNumber: v }))}
+                      fieldType="phone"
+                      className="mt-1"
                     />
                   ) : (
                     <p className="mt-1 text-slate-800">{emp.emergencyNumber}</p>
@@ -305,7 +247,7 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('dateOfBirth')}</label>
-                  <p className="mt-1 text-slate-800">{emp.dateOfBirth ? new Date(emp.dateOfBirth).toLocaleDateString() : '-'}</p>
+                  <p className="mt-1 text-slate-800">{emp.dateOfBirth ? formatDate(emp.dateOfBirth) : '-'}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('gender')}</label>
@@ -372,11 +314,12 @@ export default function ProfilePage() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700">{t('bankName')}</label>
                       {editing ? (
-                        <input
+                        <ValidatedInput
                           type="text"
                           value={editForm.bankName}
-                          onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))}
-                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                          onChange={(v) => setEditForm((f) => ({ ...f, bankName: v }))}
+                          fieldType="bankName"
+                          className="mt-1"
                         />
                       ) : (
                         <p className="mt-1 text-slate-800">{emp.bankName || '-'}</p>
@@ -385,11 +328,13 @@ export default function ProfilePage() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700">{t('bankBranch')}</label>
                       {editing ? (
-                        <input
+                        <ValidatedInput
                           type="text"
                           value={editForm.bankBranch}
-                          onChange={(e) => setEditForm((f) => ({ ...f, bankBranch: e.target.value }))}
-                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                          onChange={(v) => setEditForm((f) => ({ ...f, bankBranch: v }))}
+                          fieldType="text"
+                          placeholderHint="e.g. Main Branch"
+                          className="mt-1"
                         />
                       ) : (
                         <p className="mt-1 text-slate-800">{emp.bankBranch || '-'}</p>
@@ -398,12 +343,13 @@ export default function ProfilePage() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700">{t('ifscCode')}</label>
                       {editing ? (
-                        <input
+                        <ValidatedInput
                           type="text"
                           value={editForm.ifscCode}
-                          onChange={(e) => setEditForm((f) => ({ ...f, ifscCode: e.target.value.toUpperCase() }))}
-                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                          onChange={(v) => setEditForm((f) => ({ ...f, ifscCode: v.toUpperCase() }))}
+                          fieldType="ifsc"
                           maxLength={11}
+                          className="mt-1"
                         />
                       ) : (
                         <p className="mt-1 text-slate-800">{emp.ifscCode || '-'}</p>
@@ -412,11 +358,12 @@ export default function ProfilePage() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700">{t('accountNumber')}</label>
                       {editing ? (
-                        <input
+                        <ValidatedInput
                           type="text"
                           value={editForm.accountNumber}
-                          onChange={(e) => setEditForm((f) => ({ ...f, accountNumber: e.target.value.replace(/\D/g, '') }))}
-                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                          onChange={(v) => setEditForm((f) => ({ ...f, accountNumber: v.replace(/\D/g, '') }))}
+                          fieldType="accountNumber"
+                          className="mt-1"
                         />
                       ) : (
                         <p className="mt-1 text-slate-800">{emp.accountNumber ? `••••${emp.accountNumber.slice(-4)}` : '-'}</p>
@@ -425,11 +372,12 @@ export default function ProfilePage() {
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-slate-700">{t('upiId')}</label>
                       {editing ? (
-                        <input
+                        <ValidatedInput
                           type="text"
                           value={editForm.upiId}
-                          onChange={(e) => setEditForm((f) => ({ ...f, upiId: e.target.value }))}
-                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                          onChange={(v) => setEditForm((f) => ({ ...f, upiId: v }))}
+                          fieldType="upi"
+                          className="mt-1"
                         />
                       ) : (
                         <p className="mt-1 text-slate-800">{emp.upiId || '-'}</p>
@@ -444,140 +392,40 @@ export default function ProfilePage() {
                   </div>
                 )}
                 {user?.employeeId && (
-                  <div className="sm:col-span-2">
-                    <Link
-                      href={`/employees/${user.employeeId}/passbook`}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium text-sm"
-                    >
-                      {t('viewPassbook')}
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                      </svg>
-                    </Link>
+                  <div className="sm:col-span-2 border-t border-slate-200 pt-4 mt-2">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('quickLinks')}</h3>
+                    <div className="flex flex-wrap gap-3">
+                      <Link
+                        href="/work-records"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-uff-surface font-medium text-sm text-slate-800"
+                      >
+                        {t('workRecords')}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                      </Link>
+                      <Link
+                        href="/payments"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-uff-surface font-medium text-sm text-slate-800"
+                      >
+                        {t('payments')}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </Link>
+                      <Link
+                        href={`/employees/${user.employeeId}/passbook`}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium text-sm"
+                      >
+                        {t('passbook')}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {emp.employeeType === 'contractor' && (
-                <div className="border-t border-slate-200 pt-4 mt-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('workRecords')}</h3>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    <input
-                      type="date"
-                      value={workFilterStart}
-                      onChange={(e) => setWorkFilterStart(e.target.value)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                      placeholder={t('periodStart')}
-                    />
-                    <input
-                      type="date"
-                      value={workFilterEnd}
-                      onChange={(e) => setWorkFilterEnd(e.target.value)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                      placeholder={t('periodEnd')}
-                    />
-                  </div>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {workRecordsLoading ? (
-                      <div className="space-y-2">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="p-4 rounded-lg bg-slate-100 animate-pulse border border-slate-200">
-                            <div className="h-4 w-1/2 bg-slate-200 rounded mb-2" />
-                            <div className="h-3 w-full bg-slate-200 rounded mb-1" />
-                            <div className="h-3 w-2/3 bg-slate-200 rounded" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : workRecords.length === 0 ? (
-                      <p className="text-slate-600 text-sm">{t('noData')}</p>
-                    ) : (
-                      (workRecords || []).map((rec) => (
-                        <div key={rec._id} className="p-4 rounded-lg bg-uff-surface border border-slate-200">
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="font-medium">{(rec.branch as { name?: string })?.name}</span>
-                            <span className="text-slate-800">
-                              {rec.periodStart?.slice(0, 10)} – {rec.periodEnd?.slice(0, 10)}
-                            </span>
-                          </div>
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="text-slate-600">
-                                <th className="text-left py-1">{t('rateName')}</th>
-                                <th className="text-right py-1">Qty</th>
-                                <th className="text-right py-1">Rate</th>
-                                <th className="text-right py-1">{t('amount')}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(rec.workItems || []).map((wi: { rateName?: string; quantity?: number; amount?: number; ratePerUnit?: number }, i: number) => (
-                                <tr key={i} className="border-t border-slate-200">
-                                  <td className="py-1">{wi.rateName}</td>
-                                  <td className="text-right">{wi.quantity}</td>
-                                  <td className="text-right">₹{wi.ratePerUnit}</td>
-                                  <td className="text-right font-medium">₹{wi.amount?.toLocaleString()}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {((rec.otHours ?? 0) > 0 || (rec.otAmount ?? 0) > 0) && (
-                            <p className="text-right text-sm text-slate-800 mt-1">
-                              {t('otHours')}: {(rec.otHours ?? 0)} hrs | {t('otAmount')}: ₹{(rec.otAmount ?? 0).toLocaleString()}
-                            </p>
-                          )}
-                          <p className="text-right font-semibold mt-2 pt-2 border-t border-slate-200">
-                            {t('totalAmount')}: ₹{rec.totalAmount?.toLocaleString()}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {emp && (
-                <div className="border-t border-slate-200 pt-4 mt-4">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('paymentHistory')}</h3>
-                  <p className="text-xs text-slate-600 mb-2">{t('paymentHistoryHint')}</p>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {paymentHistoryLoading ? (
-                      <div className="space-y-2">
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="p-4 rounded-lg bg-slate-100 animate-pulse border border-slate-200">
-                            <div className="h-4 w-1/2 bg-slate-200 rounded mb-2" />
-                            <div className="h-3 w-full bg-slate-200 rounded mb-1" />
-                            <div className="h-3 w-2/3 bg-slate-200 rounded" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : paymentHistory.length === 0 ? (
-                      <p className="text-slate-600 text-sm">{t('noData')}</p>
-                    ) : (
-                      (paymentHistory || []).map((p) => (
-                        <div key={p._id} className="p-4 rounded-lg bg-uff-surface border border-slate-200">
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="font-medium">{p.periodStart?.slice(0, 10)} – {p.periodEnd?.slice(0, 10)}</span>
-                            <span className={p.remainingAmount > 0 ? 'text-uff-accent' : 'text-green-600'}>
-                              ₹{p.paymentAmount?.toLocaleString()} {p.remainingAmount > 0 ? `(${t('due')}: ₹${p.remainingAmount?.toLocaleString()})` : ''}
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-800 space-y-1">
-                            <p>{t('baseAmount')}: ₹{p.baseAmount?.toLocaleString()}
-                              {p.addDeductAmount !== 0 && ` | ${t('addDeduct')}: ${p.addDeductAmount > 0 ? '+' : ''}₹${p.addDeductAmount?.toLocaleString()}`}
-                              {p.pfDeducted > 0 && ` | ${t('pf')}: -₹${p.pfDeducted?.toLocaleString()}`}
-                              {(p.esiDeducted ?? 0) > 0 && ` | ${t('esi')}: -₹${(p.esiDeducted ?? 0).toLocaleString()}`}
-                              {((p.advanceDeducted ?? 0) > 0 && ` | ${t('advance')}: -₹${(p.advanceDeducted ?? 0).toLocaleString()}`)}
-                            </p>
-                            <p>{t('totalPayable')}: ₹{p.totalPayable?.toLocaleString()} | {t('paymentMode')}: {p.paymentMode}
-                              {p.transactionRef && ` | Ref: ${p.transactionRef}`}
-                            </p>
-                            {p.addDeductRemarks && <p>{t('remarks')}: {p.addDeductRemarks}</p>}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
 
               {editing ? (
                 <div className="flex gap-2 mt-4">

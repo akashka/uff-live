@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import PageHeader from '@/components/PageHeader';
+import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import { useBranches } from '@/lib/hooks/useApi';
 
 interface Branch {
   _id: string;
@@ -18,28 +20,16 @@ interface Branch {
 
 export default function BranchesPage() {
   const { t } = useApp();
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [includeInactive, setIncludeInactive] = useState(false);
+  const { branches, loading, mutate: mutateBranches } = useBranches(includeInactive);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', address: '', phoneNumber: '', email: '' });
-  const [includeInactive, setIncludeInactive] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const fetchBranches = () => {
-    fetch(`/api/branches?includeInactive=${includeInactive}`)
-      .then((r) => r.json())
-      .then((data) => setBranches(Array.isArray(data) ? data : []))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchBranches();
-  }, [includeInactive]);
 
   const openCreate = () => {
     setForm({ name: '', address: '', phoneNumber: '', email: '' });
@@ -90,7 +80,7 @@ export default function BranchesPage() {
       }
       setMessage({ type: 'success', text: t('saveSuccess') });
       setModal(null);
-      fetchBranches();
+      mutateBranches();
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
     } finally {
@@ -105,7 +95,7 @@ export default function BranchesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !b.isActive }),
       });
-      fetchBranches();
+      mutateBranches();
     } catch {
       setMessage({ type: 'error', text: t('error') });
     }
@@ -230,43 +220,44 @@ export default function BranchesPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('branchName')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('branchName')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+                  fieldType="name"
+                  placeholderHint="e.g. UFF Main Factory"
                   readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('address')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('address')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="text"
                   value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, address: v }))}
+                  fieldType="address"
                   readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('phoneNumber')}</label>
-                <input
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('phoneNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <ValidatedInput
                   type="tel"
                   value={form.phoneNumber}
-                  onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, phoneNumber: v }))}
+                  fieldType="phone"
                   readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')}</label>
-                <input
+                <ValidatedInput
                   type="email"
                   value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                  fieldType="email"
                   readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
                 />
               </div>
             </div>
