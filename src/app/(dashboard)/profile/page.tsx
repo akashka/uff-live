@@ -8,6 +8,8 @@ import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { formatDate } from '@/lib/utils';
+import { toast } from '@/lib/toast';
+import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 
 interface ProfileData {
   user: { email: string; role: string };
@@ -19,6 +21,8 @@ interface ProfileData {
     emergencyNumber: string;
     dateOfBirth: string;
     gender: string;
+    maritalStatus?: string;
+    anniversaryDate?: string;
     aadhaarNumber?: string;
     pfNumber?: string;
     panNumber?: string;
@@ -31,6 +35,7 @@ interface ProfileData {
     branches: { name: string }[];
     monthlySalary?: number;
     salaryBreakup?: { pf?: number; esi?: number; other?: number };
+    documents?: { type: string; name?: string; fileUrl: string; uploadedAt: string }[];
   } | null;
 }
 
@@ -45,6 +50,8 @@ export default function ProfilePage() {
     contactNumber: '',
     dateOfBirth: '',
     gender: '',
+    maritalStatus: '',
+    anniversaryDate: '',
     bankName: '',
     bankBranch: '',
     ifscCode: '',
@@ -52,7 +59,6 @@ export default function ProfilePage() {
     upiId: '',
   });
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -67,6 +73,8 @@ export default function ProfilePage() {
             contactNumber: d.employee.contactNumber,
             dateOfBirth: d.employee.dateOfBirth ? String(d.employee.dateOfBirth).slice(0, 10) : '',
             gender: d.employee.gender || '',
+            maritalStatus: d.employee.maritalStatus || '',
+            anniversaryDate: d.employee.anniversaryDate ? String(d.employee.anniversaryDate).slice(0, 10) : '',
             bankName: d.employee.bankName || '',
             bankBranch: d.employee.bankBranch || '',
             ifscCode: d.employee.ifscCode || '',
@@ -80,7 +88,6 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       if (photoFile && user?.employeeId) {
         const fd = new FormData();
@@ -119,6 +126,8 @@ export default function ProfilePage() {
         contactNumber: d.employee.contactNumber,
         dateOfBirth: d.employee.dateOfBirth ? String(d.employee.dateOfBirth).slice(0, 10) : '',
         gender: d.employee.gender || '',
+        maritalStatus: d.employee.maritalStatus || '',
+        anniversaryDate: d.employee.anniversaryDate ? String(d.employee.anniversaryDate).slice(0, 10) : '',
         bankName: d.employee.bankName || '',
         bankBranch: d.employee.bankBranch || '',
         ifscCode: d.employee.ifscCode || '',
@@ -126,9 +135,9 @@ export default function ProfilePage() {
         upiId: d.employee.upiId || '',
       });
       setEditing(false);
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
     } catch (e) {
-      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('error') });
+      toast.error(e instanceof Error ? e.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -152,14 +161,6 @@ export default function ProfilePage() {
     <div>
       <PageHeader title={t('profile')} />
       <div className="space-y-4">
-          {message && (
-            <div
-              className={`p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-            >
-              {message.text}
-            </div>
-          )}
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700">{t('email')}</label>
@@ -410,6 +411,23 @@ export default function ProfilePage() {
                     <p className="mt-1 text-slate-800">{(emp.branches || []).map((b: { name: string }) => b.name).join(', ') || '—'}</p>
                   </div>
                 )}
+                <div className="sm:col-span-2 border-t border-slate-200 pt-4 mt-2">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('documents')}</h3>
+                  <EmployeeDocuments
+                    documents={(emp.documents ?? []).map((d) => ({
+                      ...d,
+                      uploadedAt: typeof d.uploadedAt === 'string' ? d.uploadedAt : (d.uploadedAt as Date)?.toISOString?.() ?? '',
+                    }))}
+                    employeeId={user?.employeeId ?? null}
+                    canUpload={true}
+                    onUploadSuccess={async () => {
+                      const r = await fetch('/api/profile');
+                      const d = await r.json();
+                      if (d?.employee) setData((prev) => (prev ? { ...prev, employee: d.employee } : prev));
+                    }}
+                    uploadEndpoint="/api/profile/documents"
+                  />
+                </div>
               </div>
 
               {editing ? (
@@ -429,6 +447,8 @@ export default function ProfilePage() {
                         contactNumber: emp.contactNumber,
                         dateOfBirth: emp.dateOfBirth ? String(emp.dateOfBirth).slice(0, 10) : '',
                         gender: emp.gender || '',
+                        maritalStatus: emp.maritalStatus || '',
+                        anniversaryDate: emp.anniversaryDate ? String(emp.anniversaryDate).slice(0, 10) : '',
                         bankName: emp.bankName || '',
                         bankBranch: emp.bankBranch || '',
                         ifscCode: emp.ifscCode || '',

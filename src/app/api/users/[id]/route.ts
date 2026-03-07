@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
+import { logAudit } from '@/lib/audit';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,6 +33,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await user.save();
     const updated = await User.findById(id).select('email role isActive employeeId createdAt').lean();
+
+    logAudit({
+      user: authUser,
+      action: 'user_update',
+      entityType: 'user',
+      entityId: id,
+      summary: `User "${user.email}" updated`,
+      metadata: { email: user.email },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);

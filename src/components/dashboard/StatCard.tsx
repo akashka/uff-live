@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 
 interface StatCardProps {
   title: string;
@@ -15,7 +16,11 @@ interface StatCardProps {
 
 export default function StatCard({ title, value, subtitle, icon, trend, href, gradient = 'from-uff-accent to-uff-accent-hover' }: StatCardProps) {
   const content = (
-    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} p-6 text-white shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02]`}>
+    <motion.div
+      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} p-6 text-white shadow-xl transition-shadow duration-300 hover:shadow-2xl`}
+      whileHover={{ scale: 1.02, y: -2 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    >
       <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
       <div className="absolute -bottom-2 -right-2 h-16 w-16 rounded-full bg-white/5" />
       <div className="relative">
@@ -31,7 +36,7 @@ export default function StatCard({ title, value, subtitle, icon, trend, href, gr
           </p>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 
   if (href) {

@@ -12,6 +12,7 @@ import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
+import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -129,14 +130,13 @@ export default function WorkRecordsPage() {
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('month-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   const openCreate = () => {
     if (!Array.isArray(employees) || employees.length === 0) {
-      setMessage({ type: 'error', text: t('noContractors') });
+      toast.error(t('noContractors'));
       return;
     }
     setForm({
@@ -228,7 +228,7 @@ export default function WorkRecordsPage() {
 
   const addWorkItem = () => {
     if (!form.branchId || !form.styleOrderId || !selectedStyle?.monthData?.entries?.length) {
-      setMessage({ type: 'error', text: 'Select branch, month and style/order first' });
+      toast.error('Select branch, month and style/order first');
       return;
     }
     const existingIds = new Set(form.workItems.map((wi) => wi.rateMasterId));
@@ -298,7 +298,6 @@ export default function WorkRecordsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       const workItems = form.workItems
         .filter((wi) => wi.quantity > 0)
@@ -328,7 +327,7 @@ export default function WorkRecordsPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         mutateRecords();
       } else if (editingId) {
@@ -339,12 +338,12 @@ export default function WorkRecordsPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         mutateRecords();
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -358,6 +357,7 @@ export default function WorkRecordsPage() {
       onConfirm: async () => {
         const res = await fetch(`/api/work-records/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error();
+        toast.success(t('saveSuccess'));
         mutateRecords();
       },
     });
@@ -417,12 +417,6 @@ export default function WorkRecordsPage() {
           </button>
         )}
       </PageHeader>
-
-      {message && (
-        <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-end">
@@ -792,7 +786,7 @@ export default function WorkRecordsPage() {
             try {
               await confirmModal.onConfirm();
             } catch (err) {
-              setMessage({ type: 'error', text: t('error') });
+              toast.error(t('error'));
               throw err;
             }
           }}

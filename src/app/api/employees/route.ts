@@ -7,6 +7,7 @@ import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -82,6 +83,8 @@ export async function POST(req: NextRequest) {
       emergencyNumber,
       dateOfBirth,
       gender,
+      maritalStatus,
+      anniversaryDate,
       aadhaarNumber,
       pfNumber,
       panNumber,
@@ -127,6 +130,8 @@ export async function POST(req: NextRequest) {
       emergencyNumber,
       dateOfBirth,
       gender,
+      maritalStatus: maritalStatus || undefined,
+      anniversaryDate: anniversaryDate ? new Date(anniversaryDate) : undefined,
       aadhaarNumber: aadhaarNumber || '',
       pfNumber: pfNumber || '',
       panNumber: panNumber || '',
@@ -164,6 +169,16 @@ export async function POST(req: NextRequest) {
       message: `${user.role} created employee "${name}".`,
       link: '/employees',
       metadata: { entityId: String(employee._id), entityType: 'employee', actorId: user.userId, actorRole: user.role, employeeName: name },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'employee_create',
+      entityType: 'employee',
+      entityId: String(employee._id),
+      summary: `Employee "${name}" created`,
+      metadata: { employeeName: name, employeeType: employeeType || 'full_time' },
+      req,
     }).catch(() => {});
 
     return NextResponse.json({ employee: emp, generatedPassword: password });

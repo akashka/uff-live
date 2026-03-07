@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_SIZE = 2 * 1024 * 1024; // 2MB
@@ -34,6 +35,16 @@ export async function POST(req: NextRequest) {
     const photoUrl = `data:${file.type};base64,${base64}`;
     employee.photo = photoUrl;
     await employee.save();
+
+    logAudit({
+      user,
+      action: 'profile_photo_update',
+      entityType: 'employee',
+      entityId: user.employeeId,
+      summary: `Profile photo updated for ${employee.name}`,
+      metadata: {},
+      req,
+    }).catch(() => {});
 
     return NextResponse.json({ photo: photoUrl });
   } catch (e) {

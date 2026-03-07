@@ -16,12 +16,21 @@ import {
   type StyleWiseItem,
 } from '@/components/dashboard/DashboardCharts';
 import { Skeleton, DashboardSkeleton } from '@/components/Skeleton';
-import { useDashboardStats } from '@/lib/hooks/useApi';
+import { AnimatePresence } from 'framer-motion';
+import { Animated, AnimatedStagger, AnimatedItem } from '@/components/Animated';
+import { useDashboardStats, useReminders } from '@/lib/hooks/useApi';
 
 const DASHBOARD_CONFIG_KEY = 'uff-dashboard-widgets';
 
 interface DashboardStats {
   employees?: { total: number; active: number; contractors: number; fullTime: number };
+  fullTimeDaysWorked?: {
+    currentMonth: string;
+    recorded: number;
+    avgDaysWorked: number | null;
+    fullAttendance: number;
+    totalFullTime: number;
+  };
   branches?: number;
   styleOrders?: {
     count: number;
@@ -77,6 +86,7 @@ export default function HomePage() {
   const { user } = useAuth();
   const [range, setRange] = useState('1'); // 1=current month, 3=last 3 months, 6=last 6 months
   const { stats, loading } = useDashboardStats(range);
+  const { birthdays, anniversaries } = useReminders();
   const [config, setConfig] = useState<Record<string, boolean>>({});
   const [configOpen, setConfigOpen] = useState(false);
 
@@ -107,6 +117,7 @@ export default function HomePage() {
         workTrend: true,
         paymentMode: true,
         employeeType: true,
+        fullTimeDaysWorked: true,
         myStats: true,
         myWorkTrend: true,
         myPaymentTrend: true,
@@ -140,7 +151,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="relative">
+    <Animated className="relative">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-amber-200/20 blur-3xl" />
         <div className="absolute top-1/2 -left-40 h-72 w-72 rounded-full bg-violet-200/15 blur-3xl" />
@@ -172,30 +183,69 @@ export default function HomePage() {
       </PageHeader>
       <p className="-mt-4 mb-6 text-slate-600">{t('dashboardWelcome')}</p>
 
+      {/* Birthdays & Anniversaries */}
+      {(config.reminders ?? true) && (birthdays.length > 0 || anniversaries.length > 0) && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('todaysCelebrations')}</h2>
+          <AnimatedStagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {birthdays.map((b) => (
+              <AnimatedItem key={`b-${b._id}`}>
+                <Link
+                  href={`/employees/${b._id}`}
+                  className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 transition hover:shadow-md hover:border-rose-300"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-500 text-lg text-white">🎂</span>
+                  <div>
+                    <p className="font-medium text-slate-800">{b.name}</p>
+                    <p className="text-sm text-rose-700">{t('birthday')}</p>
+                  </div>
+                </Link>
+              </AnimatedItem>
+            ))}
+            {anniversaries.map((a) => (
+              <AnimatedItem key={`a-${a._id}`}>
+                <Link
+                  href={`/employees/${a._id}`}
+                  className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 transition hover:shadow-md hover:border-violet-300"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-500 text-lg text-white">💍</span>
+                  <div>
+                    <p className="font-medium text-slate-800">{a.name}</p>
+                    <p className="text-sm text-violet-700">{t('anniversary')}</p>
+                  </div>
+                </Link>
+              </AnimatedItem>
+            ))}
+          </AnimatedStagger>
+        </section>
+      )}
+
       {/* Alerts */}
       {(stats?.alerts?.length ?? 0) > 0 && (
         <section className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('alerts')}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <AnimatedStagger className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {(stats.alerts as { type: string; message: string; priority: string; href?: string }[]).map((a, i) => (
-              <Link
-                key={i}
-                href={a.href || '#'}
-                className={`flex items-start gap-3 rounded-xl border p-4 transition hover:shadow-md ${
-                  a.priority === 'high' ? 'border-rose-200 bg-rose-50' : a.priority === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <span className={`mt-0.5 shrink-0 text-lg ${a.priority === 'high' ? 'text-rose-500' : a.priority === 'medium' ? 'text-amber-500' : 'text-slate-500'}`}>!</span>
-                <span className="text-sm font-medium text-slate-800">{a.message}</span>
-              </Link>
+              <AnimatedItem key={i}>
+                <Link
+                  href={a.href || '#'}
+                  className={`flex items-start gap-3 rounded-xl border p-4 transition hover:shadow-md ${
+                    a.priority === 'high' ? 'border-rose-200 bg-rose-50' : a.priority === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <span className={`mt-0.5 shrink-0 text-lg ${a.priority === 'high' ? 'text-rose-500' : a.priority === 'medium' ? 'text-amber-500' : 'text-slate-500'}`}>!</span>
+                  <span className="text-sm font-medium text-slate-800">{a.message}</span>
+                </Link>
+              </AnimatedItem>
             ))}
-          </div>
+          </AnimatedStagger>
         </section>
       )}
 
-      {configOpen && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-          <h3 className="mb-4 font-semibold text-slate-900">{t('customizeDashboard')}</h3>
+      <AnimatePresence>
+        {configOpen && (
+          <Animated className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+            <h3 className="mb-4 font-semibold text-slate-900">{t('customizeDashboard')}</h3>
           <div className="flex flex-wrap gap-3">
             {isHR && (
               <>
@@ -310,6 +360,15 @@ export default function HomePage() {
                   />
                   <span className="text-sm text-slate-800">{t('workTrend')}</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.fullTimeDaysWorked ?? true}
+                    onChange={() => toggleWidget('fullTimeDaysWorked')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('daysWorked')} ({t('fullTime')})</span>
+                </label>
               </>
             )}
             {isEmployee && (
@@ -343,46 +402,58 @@ export default function HomePage() {
                 </label>
               </>
             )}
+            {(isAdmin || isFinance || isHR || isEmployee) && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.reminders ?? true}
+                  onChange={() => toggleWidget('reminders')}
+                  className="rounded border-slate-400"
+                />
+                <span className="text-sm text-slate-800">{t('birthdaysAnniversaries')}</span>
+              </label>
+            )}
           </div>
-        </div>
-      )}
+          </Animated>
+        )}
+      </AnimatePresence>
 
       {/* Overview - Employee */}
       {isEmployee && (config.myStats ?? true) && stats?.myStats && (
         <section className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title={stats.myStats.employeeType === 'contractor' ? t('workRecords') : t('monthlySalary')}
-            value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
-            subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : t('fixedMonthly')}
-            icon={<UsersIcon />}
-            href="/work-records"
-            gradient="from-violet-500 to-purple-600"
-          />
-          <StatCard
-            title={t('payments')}
-            value={stats.myStats.payments}
-            subtitle={`₹${stats.myStats.paidTotal?.toLocaleString()} received`}
-            icon={<PaymentIcon />}
-            href="/payments"
-            gradient="from-emerald-500 to-teal-600"
-          />
-          <StatCard
-            title={t('totalAmount')}
-            value={`₹${stats.myStats.paidTotalPayable?.toLocaleString()}`}
-            subtitle={t('totalPayable')}
-            icon={<AmountIcon />}
-            gradient="from-amber-500 to-orange-600"
-          />
-          <StatCard
-            title={t('remainingDue')}
-            value={`₹${stats.myStats.dueTotal?.toLocaleString()}`}
-            subtitle={stats.myStats.dueTotal > 0 ? t('due') : t('paid')}
-            icon={<DueIcon />}
-            gradient={stats.myStats.dueTotal > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-600'}
-          />
-          </div>
+          <AnimatedStagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <AnimatedItem><StatCard
+              title={stats.myStats.employeeType === 'contractor' ? t('workRecords') : t('monthlySalary')}
+              value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
+              subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : t('fixedMonthly')}
+              icon={<UsersIcon />}
+              href="/work-records"
+              gradient="from-violet-500 to-purple-600"
+            /></AnimatedItem>
+            <AnimatedItem><StatCard
+              title={t('payments')}
+              value={stats.myStats.payments}
+              subtitle={`₹${stats.myStats.paidTotal?.toLocaleString()} received`}
+              icon={<PaymentIcon />}
+              href="/payments"
+              gradient="from-emerald-500 to-teal-600"
+            /></AnimatedItem>
+            <AnimatedItem><StatCard
+              title={t('totalAmount')}
+              value={`₹${stats.myStats.paidTotalPayable?.toLocaleString()}`}
+              subtitle={t('totalPayable')}
+              icon={<AmountIcon />}
+              gradient="from-amber-500 to-orange-600"
+            /></AnimatedItem>
+            <AnimatedItem><StatCard
+              title={t('remainingDue')}
+              value={`₹${stats.myStats.dueTotal?.toLocaleString()}`}
+              subtitle={stats.myStats.dueTotal > 0 ? t('due') : t('paid')}
+              icon={<DueIcon />}
+              gradient={stats.myStats.dueTotal > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-600'}
+            /></AnimatedItem>
+          </AnimatedStagger>
           {stats.myStats.employeeType === 'contractor' && (
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 p-6 text-white shadow-xl">
             <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
@@ -408,50 +479,85 @@ export default function HomePage() {
       {(isHR || isAdmin) && (config.employees ?? true) && stats?.employees && (
         <section className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
+          <AnimatedStagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <AnimatedItem><StatCard
               title={t('employees')}
               value={stats.employees.active}
               subtitle={`${stats.employees.total} total`}
               icon={<UsersIcon />}
               href="/employees"
               gradient="from-blue-500 to-indigo-600"
-            />
-            <StatCard
+            /></AnimatedItem>
+            <AnimatedItem><StatCard
               title={t('contractor')}
               value={stats.employees.contractors}
               subtitle={t('contractors')}
               icon={<ContractorIcon />}
               href="/employees"
               gradient="from-amber-500 to-orange-600"
-            />
-            <StatCard
+            /></AnimatedItem>
+            <AnimatedItem><StatCard
               title={t('fullTime')}
               value={stats.employees.fullTime}
               subtitle={t('fullTime')}
               icon={<FullTimeIcon />}
               href="/employees"
               gradient="from-emerald-500 to-teal-600"
-            />
+            /></AnimatedItem>
             {isAdmin && (config.branches ?? true) && stats?.branches !== undefined ? (
-              <StatCard
+              <AnimatedItem><StatCard
                 title={t('branches')}
                 value={stats.branches}
                 icon={<BranchIcon />}
                 href="/branches"
                 gradient="from-violet-500 to-purple-600"
-              />
+              /></AnimatedItem>
             ) : (config.workRecords ?? true) && stats?.workRecords ? (
-              <StatCard
+              <AnimatedItem><StatCard
                 title={t('workRecords')}
                 value={stats.workRecords.count}
                 subtitle={`₹${stats.workRecords.total?.toLocaleString()} work`}
                 icon={<WorkIcon />}
                 href="/work-records"
                 gradient="from-teal-500 to-cyan-600"
-              />
+              /></AnimatedItem>
             ) : null}
-          </div>
+          </AnimatedStagger>
+
+          {/* Full-time days worked stats (current month) */}
+          {(config.fullTimeDaysWorked ?? true) && stats?.fullTimeDaysWorked && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Link
+                href="/employees"
+                className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 p-5 text-white shadow-lg transition hover:shadow-xl"
+              >
+                <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-white/10" />
+                <p className="relative text-sm font-medium opacity-90">{t('daysWorked')} — {t('recorded')}</p>
+                <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                  {stats.fullTimeDaysWorked.recorded}
+                </p>
+                <p className="relative mt-1 text-xs opacity-90">
+                  / {stats.fullTimeDaysWorked.totalFullTime} {t('fullTime')}
+                </p>
+              </Link>
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 p-5 text-white shadow-lg">
+                <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-white/10" />
+                <p className="relative text-sm font-medium opacity-90">{t('avgDaysWorked')}</p>
+                <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                  {stats.fullTimeDaysWorked.avgDaysWorked ?? '—'}
+                </p>
+                <p className="relative mt-1 text-xs opacity-90">{t('currentMonth')}</p>
+              </div>
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 p-5 text-white shadow-lg">
+                <div className="absolute -right-4 -top-4 h-20 w-20 rounded-full bg-white/10" />
+                <p className="relative text-sm font-medium opacity-90">{t('fullAttendance')}</p>
+                <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                  {stats.fullTimeDaysWorked.fullAttendance}
+                </p>
+                <p className="relative mt-1 text-xs opacity-90">{t('fullTime')} {t('employees')}</p>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -556,39 +662,39 @@ export default function HomePage() {
       {isFinance && (config.payments ?? true) && stats?.payments && (
         <section className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
+          <AnimatedStagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <AnimatedItem><StatCard
             title={t('totalPaid')}
             value={`₹${stats.payments.totalPaid?.toLocaleString()}`}
             subtitle={`${stats.payments.count} payments`}
             icon={<PaymentIcon />}
             href="/payments"
             gradient="from-emerald-500 to-teal-600"
-          />
-          <StatCard
+          /></AnimatedItem>
+          <AnimatedItem><StatCard
             title={t('totalPayable')}
             value={`₹${stats.payments.totalPayable?.toLocaleString()}`}
             icon={<AmountIcon />}
             href="/payments"
             gradient="from-amber-500 to-orange-600"
-          />
-          <StatCard
+          /></AnimatedItem>
+          <AnimatedItem><StatCard
             title={t('remainingDue')}
             value={`₹${stats.payments.totalRemaining?.toLocaleString()}`}
             subtitle={t('outstanding')}
             icon={<DueIcon />}
             href="/payments"
             gradient="from-rose-500 to-pink-600"
-          />
-          <StatCard
+          /></AnimatedItem>
+          <AnimatedItem><StatCard
             title={t('paymentCount')}
             value={stats.payments.count}
             subtitle={`${t('last')} ${range} ${range === '1' ? t('month') : t('months') || 'months'}`}
             icon={<CountIcon />}
             href="/payments"
             gradient="from-blue-500 to-indigo-600"
-          />
-          </div>
+          /></AnimatedItem>
+          </AnimatedStagger>
         </section>
       )}
 
@@ -701,7 +807,7 @@ export default function HomePage() {
         </div>
       )}
       </div>
-    </div>
+    </Animated>
   );
 }
 

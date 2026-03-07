@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const isEmployee = user.employeeId;
 
     const stats: Record<string, unknown> = {};
+    const now = new Date();
 
     if (isHR || isAdmin) {
       const [totalEmployees, activeEmployees, contractors, fullTime, branches] = await Promise.all([
@@ -46,10 +47,38 @@ export async function GET(req: NextRequest) {
 
       stats.employees = { total: totalEmployees, active: activeEmployees, contractors, fullTime };
       if (isAdmin) stats.branches = branches;
+
+      // Full-time days worked stats for current month
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const daysWorkedPayments = await Payment.find({
+        paymentType: 'full_time',
+        isAdvance: false,
+        month: currentMonth,
+        daysWorked: { $exists: true, $ne: null },
+      })
+        .select('employee daysWorked totalWorkingDays')
+        .lean();
+      const daysWorkedByEmp = new Map<string, { daysWorked: number; totalWorkingDays: number }>();
+      for (const p of daysWorkedPayments) {
+        const empId = String(p.employee);
+        daysWorkedByEmp.set(empId, { daysWorked: p.daysWorked ?? 0, totalWorkingDays: p.totalWorkingDays ?? 0 });
+      }
+      const daysWorkedValues = Array.from(daysWorkedByEmp.values());
+      const fullTimeWithDaysWorked = daysWorkedValues.length;
+      const avgDaysWorked = fullTimeWithDaysWorked > 0
+        ? Math.round((daysWorkedValues.reduce((s, x) => s + x.daysWorked, 0) / fullTimeWithDaysWorked) * 10) / 10
+        : null;
+      const fullAttendanceCount = daysWorkedValues.filter((x) => x.totalWorkingDays > 0 && x.daysWorked >= x.totalWorkingDays).length;
+      stats.fullTimeDaysWorked = {
+        currentMonth,
+        recorded: fullTimeWithDaysWorked,
+        avgDaysWorked: avgDaysWorked,
+        fullAttendance: fullAttendanceCount,
+        totalFullTime: fullTime,
+      };
     }
 
     if (isFinance || isAdmin) {
-      const now = new Date();
       const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
       const [totals, byModeArr, weeklyTrend] = await Promise.all([
@@ -317,7 +346,7 @@ export async function GET(req: NextRequest) {
             type: 'production',
             message: `${styleStats.behindCount} style(s) behind target — review production`,
             priority: 'medium',
-            href: '/style-orders/analytics',
+            href: '/reports',
           });
         }
       }

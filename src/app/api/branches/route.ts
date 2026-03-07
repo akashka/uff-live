@@ -3,6 +3,7 @@ import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 async function fetchBranches(includeInactive: boolean) {
   await connectDB();
@@ -47,6 +48,17 @@ export async function POST(req: NextRequest) {
     await connectDB();
     const branch = await Branch.create({ name, address, phoneNumber, email: email || '' });
     revalidateTag('branches', 'default');
+
+    logAudit({
+      user,
+      action: 'branch_create',
+      entityType: 'branch',
+      entityId: branch._id.toString(),
+      summary: `Branch "${name}" created`,
+      metadata: { name, address },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json(branch);
   } catch (e) {
     console.error(e);

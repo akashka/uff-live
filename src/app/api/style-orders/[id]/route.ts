@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -80,6 +81,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       metadata: { entityId: id, entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode: doc.styleCode },
     }).catch(() => {});
 
+    logAudit({
+      user,
+      action: 'style_order_update',
+      entityType: 'style_order',
+      entityId: id,
+      summary: `Style order "${doc.styleCode}" updated`,
+      metadata: { styleCode: doc.styleCode },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);
@@ -106,6 +117,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       message: `${user.role} deleted style order "${styleCode}".`,
       link: '/style-orders',
       metadata: { entityId: id, entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'style_order_delete',
+      entityType: 'style_order',
+      entityId: id,
+      summary: `Style order "${styleCode}" deleted`,
+      metadata: { styleCode },
+      req,
     }).catch(() => {});
 
     return NextResponse.json({ success: true });

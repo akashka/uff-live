@@ -10,6 +10,7 @@ import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -100,7 +101,6 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [exportModal, setExportModal] = useState(false);
   const [exportMonth, setExportMonth] = useState(getCurrentMonth());
   const [exportIncludeZero, setExportIncludeZero] = useState(true);
@@ -156,7 +156,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const openAdvanceModal = (emp?: Employee) => {
     const noEmployees = paymentType === 'contractor' ? t('noContractors') : t('noEmployees');
     if (employees.length === 0 && !emp?._id) {
-      setMessage({ type: 'error', text: noEmployees });
+      toast.error(noEmployees);
       return;
     }
     setAdvanceForm({
@@ -172,11 +172,10 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
 
   const handleAdvanceSubmit = async () => {
     if (!advanceForm.employeeId || !advanceForm.amount || advanceForm.amount <= 0) {
-      setMessage({ type: 'error', text: t('error') });
+      toast.error(t('error'));
       return;
     }
     setSaving(true);
-    setMessage(null);
     try {
       const payload = {
         employeeId: advanceForm.employeeId,
@@ -205,11 +204,11 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setAdvanceModal(false);
       mutatePayments();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -218,7 +217,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const openAdd = (emp?: Employee) => {
     const noEmployees = paymentType === 'contractor' ? t('noContractors') : t('noEmployees');
     if (employees.length === 0 && !emp?._id) {
-      setMessage({ type: 'error', text: noEmployees });
+      toast.error(noEmployees);
       return;
     }
     const empId = emp?._id || '';
@@ -315,7 +314,6 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
 
   const doSubmit = async (carryAmount?: number, carryRemarks?: string) => {
     setSaving(true);
-    setMessage(null);
     try {
       const cf = carryAmount ?? form.carriedForward;
       const cfRemarks = carryRemarks ?? form.carriedForwardRemarks;
@@ -333,11 +331,11 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setModal(false);
       mutatePayments();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -421,12 +419,6 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           )}
         </div>
       </PageHeader>
-
-      {message && (
-        <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">

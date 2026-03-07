@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 // Employee can edit only: photo, email, contactNumber, gender, dateOfBirth, banking details
 export async function GET() {
@@ -54,6 +55,8 @@ export async function PATCH(req: NextRequest) {
       if (body.contactNumber !== undefined) employee.contactNumber = body.contactNumber;
       if (body.gender !== undefined) employee.gender = body.gender;
       if (body.dateOfBirth !== undefined) employee.dateOfBirth = body.dateOfBirth;
+      if (body.maritalStatus !== undefined) employee.maritalStatus = body.maritalStatus || undefined;
+      if (body.anniversaryDate !== undefined) employee.anniversaryDate = body.anniversaryDate ? new Date(body.anniversaryDate) : undefined;
       if (body.bankName !== undefined) employee.bankName = body.bankName;
       if (body.bankBranch !== undefined) employee.bankBranch = body.bankBranch;
       if (body.ifscCode !== undefined) employee.ifscCode = body.ifscCode;
@@ -62,6 +65,17 @@ export async function PATCH(req: NextRequest) {
 
       await employee.save();
       const updated = await Employee.findById(user.employeeId).populate('branches', 'name').lean();
+
+      logAudit({
+        user,
+        action: 'profile_update',
+        entityType: 'employee',
+        entityId: user.employeeId,
+        summary: `Profile updated for ${employee.name}`,
+        metadata: {},
+        req,
+      }).catch(() => {});
+
       return NextResponse.json({ employee: updated });
     }
 

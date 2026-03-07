@@ -7,6 +7,7 @@ import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 async function getAvailableQuantity(
   styleOrderId: string,
@@ -182,6 +183,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
     }).catch(() => {});
 
+    logAudit({
+      user,
+      action: 'work_record_update',
+      entityType: 'work_record',
+      entityId: id,
+      summary: `Work record updated for ${empName} (${record.month}) - ₹${record.totalAmount.toLocaleString()}`,
+      metadata: { employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);
@@ -217,6 +228,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       message: `${user.role} deleted work record for ${empName} (${record.month}).`,
       link: '/work-records',
       metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'work_record_delete',
+      entityType: 'work_record',
+      entityId: id,
+      summary: `Work record deleted for ${empName} (${record.month})`,
+      metadata: { employeeId: empId, employeeName: empName, month: record.month },
+      req,
     }).catch(() => {});
 
     return NextResponse.json({ success: true });

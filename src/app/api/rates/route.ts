@@ -3,6 +3,7 @@ import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import RateMaster from '@/lib/models/RateMaster';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 async function fetchRates(includeInactive: boolean, branchId: string | null) {
   await connectDB();
@@ -78,6 +79,17 @@ export async function POST(req: NextRequest) {
     await connectDB();
     const rate = await RateMaster.create({ name, description: description || '', unit, branchRates: validRates });
     revalidateTag('rates', 'default');
+
+    logAudit({
+      user,
+      action: 'rate_create',
+      entityType: 'rate',
+      entityId: rate._id.toString(),
+      summary: `Rate "${name}" created`,
+      metadata: { name, unit },
+      req,
+    }).catch(() => {});
+
     const populated = await RateMaster.findById(rate._id)
       .populate('branchRates.branch', 'name')
       .lean();

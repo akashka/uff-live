@@ -23,11 +23,12 @@ This document lists all features, actions, and buttons in the Factory Management
 | Branches | ✓ | — | — | — |
 | Employees | ✓ | ✓ | ✓ | — |
 | Users | ✓ | — | — | — |
+| Audit Log | ✓ | — | — | — |
+| Reports (incl. Style Analytics) | ✓ | ✓ | ✓ | — |
 | Rate Master | ✓ | — | — | — |
 | Style Orders | ✓ | ✓ | ✓ | — |
 | Work Records | ✓ | ✓ | ✓ | ✓ (contractors only, own) |
 | Payments | ✓ (submenu) | ✓ (submenu) | ✓ (submenu) | ✓ (single link to own records) |
-| Analytics | ✓ | ✓ | ✓ | — |
 | Passbook | — | — | — | ✓ (own only) |
 
 ---
@@ -56,6 +57,7 @@ This document lists all features, actions, and buttons in the Factory Management
 | My Stats (employee) | — | — | — | ✓ |
 | My Work Trend (employee) | — | — | — | ✓ |
 | My Payment Trend (employee) | — | — | — | ✓ |
+| Birthdays & Anniversaries | ✓ (all) | ✓ (all) | ✓ (all) | ✓ (same branch only) |
 
 ---
 

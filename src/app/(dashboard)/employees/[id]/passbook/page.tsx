@@ -9,6 +9,7 @@ import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
 import { formatDate } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 
 type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number };
 
@@ -58,7 +59,11 @@ export default function EmployeePassbookPage() {
         setHasMore(data.hasMore ?? false);
         setOutstanding(data.outstanding ?? 0);
       })
-      .catch(() => setError(t('error')))
+      .catch(() => {
+        const errMsg = t('error');
+        setError(errMsg);
+        toast.error(errMsg);
+      })
       .finally(() => setLoading(false));
   }, [employeeId, canView, page, t]);
 
@@ -106,17 +111,30 @@ export default function EmployeePassbookPage() {
           <PageHeader title={t('passbook')} />
         </div>
         {rowsWithBalance.length > 0 && (
-          <a
-            href={`/api/employees/${employeeId}/passbook?format=excel`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium text-sm hover:bg-slate-50 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {t('export')} Excel
-          </a>
+          <div className="flex gap-2">
+            <a
+              href={`/api/employees/${employeeId}/passbook?format=excel`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium text-sm hover:bg-slate-50 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {t('export')} Excel
+            </a>
+            <a
+              href={`/api/reports/payslip/${employeeId}?month=${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium text-sm hover:bg-slate-50 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              {t('payslip')}
+            </a>
+          </div>
         )}
       </div>
 

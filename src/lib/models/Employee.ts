@@ -10,6 +10,8 @@ export interface IEmployee extends Document {
   emergencyNumber: string;
   dateOfBirth: Date;
   gender: 'male' | 'female' | 'other';
+  maritalStatus?: 'single' | 'married' | 'other';
+  anniversaryDate?: Date;
   aadhaarNumber?: string;
   pfNumber?: string;
   panNumber?: string;
@@ -19,6 +21,7 @@ export interface IEmployee extends Document {
   accountNumber?: string;
   upiId?: string;
   photo?: string;
+  documents?: { type: string; name?: string; fileUrl: string; uploadedAt: Date }[];
   employeeType: EmployeeType;
   branches: mongoose.Types.ObjectId[];
   pfOpted?: boolean;
@@ -44,6 +47,8 @@ const EmployeeSchema = new Schema<IEmployee>(
     emergencyNumber: { type: String, required: true },
     dateOfBirth: { type: Date, required: true },
     gender: { type: String, enum: ['male', 'female', 'other'], required: true },
+    maritalStatus: { type: String, enum: ['single', 'married', 'other'], required: false },
+    anniversaryDate: { type: Date, required: false },
     aadhaarNumber: { type: String, default: '' },
     pfNumber: { type: String, default: '' },
     panNumber: { type: String, default: '' },
@@ -53,6 +58,12 @@ const EmployeeSchema = new Schema<IEmployee>(
     accountNumber: { type: String, default: '' },
     upiId: { type: String, default: '' },
     photo: { type: String, default: '' },
+    documents: [{
+      type: { type: String, required: true },
+      name: { type: String, default: '' },
+      fileUrl: { type: String, required: true },
+      uploadedAt: { type: Date, default: Date.now },
+    }],
     employeeType: { type: String, enum: ['full_time', 'contractor'], default: 'full_time' },
     branches: [{ type: Schema.Types.ObjectId, ref: 'Branch' }],
     pfOpted: { type: Boolean, default: false },

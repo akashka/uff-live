@@ -10,6 +10,7 @@ import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -30,6 +31,8 @@ interface Payment {
   paymentType: string;
   month: string;
   baseAmount: number;
+  daysWorked?: number;
+  totalWorkingDays?: number;
   addDeductAmount: number;
   addDeductRemarks: string;
   pfDeducted: number;
@@ -95,7 +98,6 @@ export default function FullTimePayments() {
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [exportModal, setExportModal] = useState(false);
   const [exportMonth, setExportMonth] = useState(getCurrentMonth());
   const [exportIncludeZero, setExportIncludeZero] = useState(true);
@@ -159,7 +161,7 @@ export default function FullTimePayments() {
 
   const openSalaryModal = (emp?: Employee) => {
     if (employees.length === 0 && !emp?._id) {
-      setMessage({ type: 'error', text: t('noEmployees') });
+      toast.error(t('noEmployees'));
       return;
     }
     const empId = emp?._id || '';
@@ -181,7 +183,7 @@ export default function FullTimePayments() {
 
   const openAdvanceModal = (emp?: Employee) => {
     if (employees.length === 0 && !emp?._id) {
-      setMessage({ type: 'error', text: t('noEmployees') });
+      toast.error(t('noEmployees'));
       return;
     }
     setAdvanceForm({
@@ -229,7 +231,6 @@ export default function FullTimePayments() {
 
   const doSalarySubmit = async (carryAmount?: number, carryRemarks?: string) => {
     setSaving(true);
-    setMessage(null);
     try {
       const payload = {
         employeeId: salaryForm.employeeId,
@@ -250,6 +251,8 @@ export default function FullTimePayments() {
         carriedForwardRemarks: carryRemarks ?? '',
         isAdvance: false,
         workRecordIds: [],
+        daysWorked,
+        totalWorkingDays,
       };
       const res = await fetch('/api/payments', {
         method: 'POST',
@@ -258,11 +261,11 @@ export default function FullTimePayments() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setSalaryModal(false);
       mutatePayments();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -270,11 +273,10 @@ export default function FullTimePayments() {
 
   const handleAdvanceSubmit = async () => {
     if (!advanceForm.employeeId || !advanceForm.amount || advanceForm.amount <= 0) {
-      setMessage({ type: 'error', text: t('error') });
+      toast.error(t('error'));
       return;
     }
     setSaving(true);
-    setMessage(null);
     try {
       const payload = {
         employeeId: advanceForm.employeeId,
@@ -303,11 +305,11 @@ export default function FullTimePayments() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setAdvanceModal(false);
       mutatePayments();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -388,12 +390,6 @@ export default function FullTimePayments() {
         </div>
       </PageHeader>
 
-      {message && (
-        <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
-
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">
           {!isEmployee && (
@@ -441,6 +437,7 @@ export default function FullTimePayments() {
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('daysWorked')}</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('paymentAmount')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('advanceDeducted')}</th>
@@ -452,13 +449,20 @@ export default function FullTimePayments() {
                 <tbody className="divide-y divide-slate-200">
                   {sorted.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                      <td colSpan={9} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                     </tr>
                   ) : (
                     sorted.map((p) => (
                       <tr key={p._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-slate-800">{(p.employee as { name?: string })?.name}</td>
                         <td className="px-4 py-3 text-slate-600 text-sm">{formatMonth(p.month)}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {!p.isAdvance && p.daysWorked != null ? (
+                            <span className="font-medium">{p.daysWorked}{p.totalWorkingDays ? ` / ${p.totalWorkingDays}` : ''}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right">₹{p.totalPayable?.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-medium">₹{p.paymentAmount?.toLocaleString()}</td>
                         <td className="px-4 py-3">
@@ -516,6 +520,9 @@ export default function FullTimePayments() {
               <div key={p._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(p.employee as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{formatMonth(p.month)}</p>
+                {!p.isAdvance && p.daysWorked != null && (
+                  <p className="text-sm font-medium text-slate-700 mt-1">{t('daysWorked')}: {p.daysWorked}{p.totalWorkingDays ? ` / ${p.totalWorkingDays}` : ''}</p>
+                )}
                 <p className="mt-2 font-semibold text-slate-900">₹{p.paymentAmount?.toLocaleString()}</p>
                 <p className="text-sm text-slate-600">{formatMode(p.paymentMode)}</p>
                 {!p.isAdvance && (
@@ -716,6 +723,9 @@ export default function FullTimePayments() {
               <p><span className="font-medium text-slate-700">{t('advance')}:</span> ₹{detailPayment.paymentAmount?.toLocaleString()}</p>
             ) : (
               <>
+                {detailPayment.daysWorked != null && (
+                  <p><span className="font-medium text-slate-700">{t('daysWorked')}:</span> {detailPayment.daysWorked}{detailPayment.totalWorkingDays ? ` / ${detailPayment.totalWorkingDays} ${t('totalWorkingDays')}` : ''}</p>
+                )}
                 <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{detailPayment.baseAmount?.toLocaleString()}</p>
                 {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{detailPayment.addDeductAmount?.toLocaleString()} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
                 {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> -₹{(detailPayment.advanceDeducted ?? 0).toLocaleString()}</p>}

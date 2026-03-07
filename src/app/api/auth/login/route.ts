@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
 import { signToken } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +23,17 @@ export async function POST(req: NextRequest) {
     if (!valid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
+
+    logAudit({
+      actorId: user._id.toString(),
+      actorEmail: user.email,
+      actorRole: user.role,
+      action: 'login',
+      entityType: 'auth',
+      entityId: null,
+      summary: `User ${user.email} logged in`,
+      req,
+    }).catch(() => {});
 
     const token = signToken({
       userId: user._id.toString(),

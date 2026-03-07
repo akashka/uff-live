@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -90,6 +91,16 @@ export async function POST(req: NextRequest) {
       message: `${user.role} created style order "${styleCode}".`,
       link: '/style-orders',
       metadata: { entityId: String(doc._id), entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'style_order_create',
+      entityType: 'style_order',
+      entityId: String(doc._id),
+      summary: `Style order "${styleCode}" created`,
+      metadata: { styleCode },
+      req,
     }).catch(() => {});
 
     return NextResponse.json(populated);

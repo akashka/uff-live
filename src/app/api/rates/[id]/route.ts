@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import RateMaster from '@/lib/models/RateMaster';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -52,6 +53,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await rate.save();
     revalidateTag('rates', 'default');
+
+    logAudit({
+      user,
+      action: 'rate_update',
+      entityType: 'rate',
+      entityId: id,
+      summary: `Rate "${rate.name}" updated`,
+      metadata: { name: rate.name },
+      req,
+    }).catch(() => {});
+
     const updated = await RateMaster.findById(id)
       .populate('branchRates.branch', 'name')
       .lean();

@@ -22,6 +22,8 @@ import MultiselectDropdown from '@/components/MultiselectDropdown';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, useBranches } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
+import { EmployeeDocuments } from '@/components/EmployeeDocuments';
+import { toast } from '@/lib/toast';
 
 interface Branch {
   _id: string;
@@ -36,6 +38,8 @@ interface Employee {
   emergencyNumber: string;
   dateOfBirth: string;
   gender: string;
+  maritalStatus?: string;
+  anniversaryDate?: string;
   photo?: string;
   aadhaarNumber?: string;
   pfNumber?: string;
@@ -54,6 +58,7 @@ interface Employee {
   esiOpted?: boolean;
   monthlyEsiAmount?: number;
   isActive: boolean;
+  documents?: { type: string; name?: string; fileUrl: string; uploadedAt: string }[];
 }
 
 export default function EmployeesPage() {
@@ -72,7 +77,6 @@ export default function EmployeesPage() {
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
@@ -84,6 +88,8 @@ export default function EmployeesPage() {
     emergencyNumber: '',
     dateOfBirth: '',
     gender: 'male' as 'male' | 'female' | 'other',
+    maritalStatus: '' as '' | 'single' | 'married' | 'other',
+    anniversaryDate: '',
     aadhaarNumber: '',
     pfNumber: '',
     panNumber: '',
@@ -101,6 +107,7 @@ export default function EmployeesPage() {
     esiOpted: false,
     monthlyEsiAmount: 0,
     role: 'employee' as string,
+    documents: [] as { type: string; name?: string; fileUrl: string; uploadedAt: string }[],
   });
 
 
@@ -134,6 +141,8 @@ export default function EmployeesPage() {
       emergencyNumber: '',
       dateOfBirth: '',
       gender: 'male',
+      maritalStatus: '',
+      anniversaryDate: '',
       aadhaarNumber: '',
       pfNumber: '',
       panNumber: '',
@@ -151,6 +160,7 @@ export default function EmployeesPage() {
       esiOpted: false,
       monthlyEsiAmount: 0,
       role: 'employee',
+      documents: [],
     });
     setModal('create');
     setEditingId(null);
@@ -171,6 +181,8 @@ export default function EmployeesPage() {
       emergencyNumber: e.emergencyNumber,
       dateOfBirth: e.dateOfBirth ? e.dateOfBirth.slice(0, 10) : '',
       gender: e.gender as 'male' | 'female' | 'other',
+      maritalStatus: (e.maritalStatus || '') as '' | 'single' | 'married' | 'other',
+      anniversaryDate: e.anniversaryDate ? String(e.anniversaryDate).slice(0, 10) : '',
       aadhaarNumber: e.aadhaarNumber || '',
       pfNumber: e.pfNumber || '',
       panNumber: e.panNumber || '',
@@ -187,6 +199,10 @@ export default function EmployeesPage() {
         esi: e.salaryBreakup?.esi ?? 0,
         other: e.salaryBreakup?.other ?? 0,
       },
+      documents: (e.documents ?? []).map((d) => ({
+        ...d,
+        uploadedAt: typeof d.uploadedAt === 'string' ? d.uploadedAt : (d.uploadedAt as Date)?.toISOString?.() ?? '',
+      })),
       pfOpted: e.pfOpted ?? false,
       monthlyPfAmount: e.monthlyPfAmount || 0,
       esiOpted: e.esiOpted ?? false,
@@ -209,7 +225,6 @@ export default function EmployeesPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       if (modal === 'create') {
         const payload = {
@@ -227,7 +242,7 @@ export default function EmployeesPage() {
         if (empId && photoFile) {
           await uploadPhoto(empId, photoFile);
         }
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         if (data.generatedPassword) setPasswordModal(data.generatedPassword);
         mutateEmployees();
@@ -247,12 +262,12 @@ export default function EmployeesPage() {
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error((await res.json()).error);
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         mutateEmployees();
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -270,6 +285,7 @@ export default function EmployeesPage() {
           body: JSON.stringify({ isActive: !e.isActive }),
         });
         if (!res.ok) throw new Error();
+        toast.success(t('saveSuccess'));
         mutateEmployees();
       },
     });
@@ -356,12 +372,6 @@ export default function EmployeesPage() {
             </button>
           </div>
         </div>
-
-        {message && (
-          <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-            {message.text}
-          </div>
-        )}
 
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl space-y-8">
@@ -452,6 +462,30 @@ export default function EmployeesPage() {
                     <option value="female">{t('female')}</option>
                     <option value="other">{t('other')}</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('maritalStatus')}</label>
+                  <select
+                    value={form.maritalStatus}
+                    onChange={(e) => setForm((f) => ({ ...f, maritalStatus: e.target.value as '' | 'single' | 'married' | 'other' }))}
+                    disabled={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                  >
+                    <option value="">—</option>
+                    <option value="single">{t('single')}</option>
+                    <option value="married">{t('married')}</option>
+                    <option value="other">{t('other')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('anniversaryDate')}</label>
+                  <ValidatedInput
+                    type="date"
+                    value={form.anniversaryDate}
+                    onChange={(v) => setForm((f) => ({ ...f, anniversaryDate: v }))}
+                    fieldType="date"
+                    readOnly={modal === 'view'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeType')} <span className="text-red-500" aria-hidden="true">*</span></label>
@@ -685,6 +719,22 @@ export default function EmployeesPage() {
               </div>
             </FormSection>
 
+            {editingId && (
+              <FormSection title={t('documents')}>
+                <EmployeeDocuments
+                  documents={form.documents ?? []}
+                  employeeId={editingId}
+                  canUpload={modal !== 'view' && !!user && ['admin', 'finance', 'hr'].includes(user.role)}
+                  onUploadSuccess={async () => {
+                    const r = await fetch(`/api/employees/${editingId}`);
+                    const emp = await r.json();
+                    if (emp?.documents) setForm((f) => ({ ...f, documents: emp.documents }));
+                  }}
+                  uploadEndpoint={`/api/employees/${editingId}/documents`}
+                />
+              </FormSection>
+            )}
+
             <FormSection title={t('selectBranches')}>
               {branches.length === 0 && (
                 <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
@@ -732,14 +782,6 @@ export default function EmployeesPage() {
           {t('add')} {t('employees')}
         </button>
       </PageHeader>
-
-      {message && (
-        <div
-          className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-        >
-          {message.text}
-        </div>
-      )}
 
       <ListToolbar
         search={search}
@@ -838,7 +880,7 @@ export default function EmployeesPage() {
                     <h3 className="font-semibold text-slate-900 truncate">{e.name}</h3>
                     <p className="text-sm text-slate-600 truncate">{e.email}</p>
                     <p className="text-sm text-slate-600">{e.contactNumber}</p>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${e.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                         {e.isActive ? t('active') : t('inactive')}
                       </span>
@@ -920,7 +962,7 @@ export default function EmployeesPage() {
             try {
               await confirmModal.onConfirm();
             } catch (err) {
-              setMessage({ type: 'error', text: t('error') });
+              toast.error(t('error'));
               throw err;
             }
           }}

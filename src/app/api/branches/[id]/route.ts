@@ -3,6 +3,7 @@ import { revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -43,6 +44,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await branch.save();
     revalidateTag('branches', 'default');
+
+    logAudit({
+      user,
+      action: 'branch_update',
+      entityType: 'branch',
+      entityId: id,
+      summary: `Branch "${branch.name}" updated`,
+      metadata: { name: branch.name, isActive: branch.isActive },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json(branch);
   } catch (e) {
     console.error(e);

@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import RateMaster from '@/lib/models/RateMaster';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx');
 
@@ -99,6 +100,16 @@ export async function POST(req: NextRequest) {
       });
       created.push(item.name);
     }
+
+    logAudit({
+      user,
+      action: 'rate_import',
+      entityType: 'rate',
+      entityId: null,
+      summary: `Rates imported from Excel: ${created.length} created, ${skipped.length} skipped`,
+      metadata: { mode, createdCount: created.length, skippedCount: skipped.length },
+      req,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

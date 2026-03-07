@@ -9,6 +9,7 @@ import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import ConfirmModal from '@/components/ConfirmModal';
+import { toast } from '@/lib/toast';
 
 interface UserRecord {
   _id: string;
@@ -31,7 +32,6 @@ export default function UsersPage() {
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterByEmployeeType, setFilterByEmployeeType] = useState<string>('all');
   const [filterByRole, setFilterByRole] = useState<string>('all');
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
@@ -107,7 +107,7 @@ export default function UsersPage() {
           : (Array.isArray(data) ? data : []);
         setUsers(list);
       })
-      .catch(() => setMessage({ type: 'error', text: t('error') }))
+      .catch(() => toast.error(t('error')))
       .finally(() => setLoading(false));
   };
 
@@ -118,7 +118,6 @@ export default function UsersPage() {
 
   const handleCreateAdmin = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       const res = await fetch('/api/users', {
         method: 'POST',
@@ -127,13 +126,13 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setModal(null);
       setAdminForm({ email: '', password: '' });
       if (data.generatedPassword) setPasswordModal(data.generatedPassword);
       fetchUsers();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -154,7 +153,6 @@ export default function UsersPage() {
   const handleUpdateUser = async () => {
     if (!editingUserId) return;
     setSaving(true);
-    setMessage(null);
     try {
       const body: { email?: string; password?: string; isActive?: boolean; role?: string } = {
         email: editAdminForm.email,
@@ -169,12 +167,12 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
-      setMessage({ type: 'success', text: t('saveSuccess') });
+      toast.success(t('saveSuccess'));
       setModal(null);
       setEditingUserId(null);
       fetchUsers();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -192,6 +190,7 @@ export default function UsersPage() {
           body: JSON.stringify({ isActive: !u.isActive }),
         });
         if (!res.ok) throw new Error();
+        toast.success(t('saveSuccess'));
         fetchUsers();
       },
     });
@@ -233,14 +232,6 @@ export default function UsersPage() {
           {t('add')} {t('admin')}
         </button>
       </PageHeader>
-
-      {message && (
-        <div
-          className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-        >
-          {message.text}
-        </div>
-      )}
 
       <ListToolbar
         search={search}
@@ -613,7 +604,7 @@ export default function UsersPage() {
             try {
               await confirmModal.onConfirm();
             } catch (err) {
-              setMessage({ type: 'error', text: t('error') });
+              toast.error(t('error'));
               throw err;
             }
           }}

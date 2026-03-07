@@ -5,6 +5,7 @@ import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -43,6 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.emergencyNumber !== undefined) employee.emergencyNumber = body.emergencyNumber;
     if (body.dateOfBirth !== undefined) employee.dateOfBirth = body.dateOfBirth;
     if (body.gender !== undefined) employee.gender = body.gender;
+    if (body.maritalStatus !== undefined) employee.maritalStatus = body.maritalStatus || undefined;
+    if (body.anniversaryDate !== undefined) employee.anniversaryDate = body.anniversaryDate ? new Date(body.anniversaryDate) : undefined;
     if (body.aadhaarNumber !== undefined) employee.aadhaarNumber = body.aadhaarNumber;
     if (body.pfNumber !== undefined) employee.pfNumber = body.pfNumber;
     if (body.panNumber !== undefined) employee.panNumber = body.panNumber;
@@ -91,6 +94,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       message: `${user.role} updated employee "${employee.name}".`,
       link: `/employees/${id}`,
       metadata: { entityId: id, entityType: 'employee', actorId: user.userId, actorRole: user.role, employeeId: id, employeeName: employee.name },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'employee_update',
+      entityType: 'employee',
+      entityId: id,
+      summary: `Employee "${employee.name}" updated`,
+      metadata: { employeeName: employee.name },
+      req,
     }).catch(() => {});
 
     return NextResponse.json(updated);

@@ -18,6 +18,8 @@ const NOTIFICATION_TYPES = [
   { value: 'style_order_deleted', labelKey: 'style_order_deleted' },
   { value: 'employee_created', labelKey: 'employee_created' },
   { value: 'employee_updated', labelKey: 'employee_updated' },
+  { value: 'birthday_reminder', labelKey: 'birthday_reminder' },
+  { value: 'anniversary_reminder', labelKey: 'anniversary_reminder' },
 ] as const;
 
 interface Notification {
@@ -123,7 +125,7 @@ export default function NotificationsPage() {
           >
             {NOTIFICATION_TYPES.map((opt) => (
               <option key={opt.value || 'all'} value={opt.value}>
-                {opt.value ? opt.labelKey.replace(/_/g, ' ') : t('all')}
+                {opt.value ? t(opt.labelKey) : t('all')}
               </option>
             ))}
           </select>

@@ -11,6 +11,7 @@ import { useStyleOrders, useBranches, useRates } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
+import { toast } from '@/lib/toast';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
 
 interface Branch {
@@ -55,7 +56,6 @@ export default function StyleOrdersPage() {
   const [sortBy, setSortBy] = useState('code-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const [form, setForm] = useState({
@@ -157,7 +157,6 @@ export default function StyleOrdersPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       const payload = {
         styleCode: form.styleCode.trim(),
@@ -181,7 +180,7 @@ export default function StyleOrdersPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         mutate();
       } else if (editingId) {
@@ -192,12 +191,12 @@ export default function StyleOrdersPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
-        setMessage({ type: 'success', text: t('saveSuccess') });
+        toast.success(t('saveSuccess'));
         setModal(null);
         mutate();
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('error') });
+      toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
     }
@@ -215,6 +214,7 @@ export default function StyleOrdersPage() {
           body: JSON.stringify({ isActive: !s.isActive }),
         });
         if (!res.ok) throw new Error();
+        toast.success(t('saveSuccess'));
         mutate();
       },
     });
@@ -272,12 +272,6 @@ export default function StyleOrdersPage() {
           {t('add')} {t('styleOrder')}
         </button>
       </PageHeader>
-
-      {message && (
-        <div className={`mb-4 p-3 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -539,7 +533,7 @@ export default function StyleOrdersPage() {
             try {
               await confirmModal.onConfirm();
             } catch (err) {
-              setMessage({ type: 'error', text: t('error') });
+              toast.error(t('error'));
               throw err;
             }
           }}

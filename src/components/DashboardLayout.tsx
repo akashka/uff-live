@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { useUnreadNotificationCount } from '@/lib/hooks/useApi';
@@ -107,6 +108,22 @@ function AnalyticsIcon() {
   );
 }
 
+function AuditLogIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  );
+}
+
+function ReportsIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
 function LogoutIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,12 +141,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const canAccessBranches = user?.role === 'admin';
   const canAccessUsers = user?.role === 'admin';
+  const canAccessAuditLog = user?.role === 'admin';
   const canAccessEmployees = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessRates = user?.role === 'admin';
   const canAccessStyleOrders = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessWorkRecords = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessPayments = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessAnalytics = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccessReports = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const isEmployee = !!user?.employeeId;
   const isContractorEmployee = isEmployee && user?.employeeType === 'contractor';
 
@@ -164,8 +183,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
     ...(isContractorEmployee ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
-    ...(canAccessAnalytics ? [{ href: '/style-orders/analytics', label: t('analytics'), icon: <AnalyticsIcon /> }] : []),
+    ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),
     ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
+    ...(canAccessAuditLog ? [{ href: '/audit-logs', label: t('auditLog'), icon: <AuditLogIcon /> }] : []),
   ];
 
   const navContent = (
@@ -212,7 +232,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             key={href}
             href={href}
             onClick={() => setSidebarOpen(false)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
               isActive
                 ? 'bg-uff-accent text-uff-primary font-medium'
                 : 'text-slate-200 hover:bg-white/10 hover:text-white'
@@ -313,20 +333,30 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Sidebar overlay - mobile */}
-      {sidebarOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40 top-14"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            className="lg:hidden fixed inset-0 bg-black/50 z-40 top-14"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar - mobile drawer (below header) */}
-      <aside
-        className={`lg:hidden fixed left-0 top-14 bottom-0 w-60 bg-uff-primary text-white z-50 transform transition-transform duration-200 ease-out flex flex-col ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.aside
+            className="lg:hidden fixed left-0 top-14 bottom-0 w-60 bg-uff-primary text-white z-50 flex flex-col"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          >
         <div className="p-4 flex items-center justify-end border-b border-white/10">
           <button
             onClick={() => setSidebarOpen(false)}
@@ -344,7 +374,9 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         <div className="border-t border-white/10 p-3 shrink-0">
           {logoutButton}
         </div>
-      </aside>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* Content area: fixed sidebar + main */}
       <div className="flex flex-1 min-h-0">
@@ -360,9 +392,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
         {/* Main content - offset by sidebar width, scrollable */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 lg:pl-60 overflow-y-auto">
-          <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <motion.main
+            className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
             {children}
-          </main>
+          </motion.main>
 
           <footer className="border-t border-slate-200 bg-white py-4 mt-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

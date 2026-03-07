@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export type ConfirmVariant = 'danger' | 'warning' | 'neutral';
 
@@ -48,11 +49,26 @@ export default function ConfirmModal({
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[60]" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[60]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-title"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <motion.div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
         {title && (
           <h2 id="confirm-title" className="text-lg font-semibold text-slate-800 mb-2">
             {title}
@@ -77,7 +93,9 @@ export default function ConfirmModal({
             {loading ? '...' : confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

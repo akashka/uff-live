@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import UFFLogo from '@/components/UFFLogo';
 import ValidatedInput from '@/components/ValidatedInput';
+import { toast } from '@/lib/toast';
 
 function LoginContent() {
   const { t } = useApp();
@@ -32,10 +34,13 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('invalidCredentials'));
+      toast.success(t('login'));
       router.push('/');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('error'));
+      const msg = err instanceof Error ? err.message : t('error');
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -53,10 +58,13 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
+      toast.success(t('otpSent'));
       setOtpSent(true);
       setMode('reset');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('error'));
+      const msg = err instanceof Error ? err.message : t('error');
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -82,13 +90,16 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
+      toast.success(t('passwordResetSuccess'));
       setMode('password');
       setOtpSent(false);
       setOtp('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('error'));
+      const msg = err instanceof Error ? err.message : t('error');
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -96,8 +107,18 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-uff-primary via-uff-primary-light to-uff-primary p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8">
+      <motion.div
+        className="w-full max-w-md"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
+        <motion.div
+          className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
           <div className="flex flex-col items-center mb-6">
             <span className="flex items-center justify-center w-16 h-16 rounded-xl bg-white p-2 mb-3 overflow-hidden">
               <UFFLogo size="lg" className="w-full h-full object-contain" />
@@ -293,13 +314,13 @@ function LoginContent() {
               </button>
             </form>
           )}
-        </div>
+        </motion.div>
 
         <div className="mt-6 flex justify-center gap-4">
           <LanguageSelector />
           <FontSizeControls />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

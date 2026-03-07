@@ -9,7 +9,9 @@ export type NotificationType =
   | 'style_order_updated'
   | 'style_order_deleted'
   | 'employee_created'
-  | 'employee_updated';
+  | 'employee_updated'
+  | 'birthday_reminder'
+  | 'anniversary_reminder';
 
 export interface INotification extends Document {
   _id: mongoose.Types.ObjectId;

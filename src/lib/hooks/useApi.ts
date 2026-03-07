@@ -66,6 +66,34 @@ export function useRates(includeInactive = false, branchId?: string) {
   };
 }
 
+/** Full-time days worked by employee for a given month (from salary payments) */
+export function useFullTimeDaysWorked(month: string | null) {
+  const key = month ? `/api/full-time/days-worked?month=${month}` : null;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30_000,
+  });
+  const byEmployee = (data?.byEmployee ?? {}) as Record<string, { daysWorked: number; totalWorkingDays: number }>;
+  return { byEmployee, error, loading: isLoading, mutate };
+}
+
+/** Today's birthdays & anniversaries (role-filtered: admin/hr/finance see all, employee sees same-branch only) */
+export function useReminders(date?: string) {
+  const params = date ? `?date=${date}` : '';
+  const key = `/api/reminders/birthdays-anniversaries${params}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  return {
+    birthdays: (data?.birthdays ?? []) as { _id: string; name: string; dateOfBirth: string; branches?: { name: string }[] }[],
+    anniversaries: (data?.anniversaries ?? []) as { _id: string; name: string; anniversaryDate: string; branches?: { name: string }[] }[],
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
 /** Dashboard stats */
 export function useDashboardStats(range = '30') {
   const key = `/api/dashboard/stats?range=${range}`;

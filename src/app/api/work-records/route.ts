@@ -7,6 +7,7 @@ import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -214,6 +215,16 @@ export async function POST(req: NextRequest) {
       message: `${user.role} created a work record for ${empName} for ${monthStr}. Amount: ₹${finalTotal.toLocaleString()}`,
       link: `/work-records`,
       metadata: { entityId: String(record._id), entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'work_record_create',
+      entityType: 'work_record',
+      entityId: String(record._id),
+      summary: `Work record created for ${empName} (${monthStr}) - ₹${finalTotal.toLocaleString()}`,
+      metadata: { employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
+      req,
     }).catch(() => {});
 
     return NextResponse.json(populated);

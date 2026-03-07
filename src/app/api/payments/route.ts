@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -97,6 +99,8 @@ export async function POST(req: NextRequest) {
       carriedForwardRemarks,
       isAdvance,
       workRecordIds,
+      daysWorked,
+      totalWorkingDays,
     } = body;
 
     if (!employeeId || !paymentType || !month || totalPayable === undefined || paymentAmount === undefined || paymentAmount === null || !paymentMode) {
@@ -110,13 +114,18 @@ export async function POST(req: NextRequest) {
     const emp = await Employee.findById(employeeId).lean();
     if (!emp) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
-    let workRecordRefs: { workRecord: string; totalAmount: number }[] = [];
+    let workRecordRefs: { workRecord: mongoose.Types.ObjectId; totalAmount: number }[] = [];
     if (paymentType === 'contractor' && Array.isArray(workRecordIds) && workRecordIds.length > 0) {
       const records = await WorkRecord.find({ _id: { $in: workRecordIds }, employee: employeeId }).lean();
-      workRecordRefs = (records || []).map((r) => ({ workRecord: r._id.toString(), totalAmount: r.totalAmount || 0 }));
+      workRecordRefs = (records || []).map((r) => ({
+        workRecord: r._id instanceof mongoose.Types.ObjectId ? r._id : new mongoose.Types.ObjectId(r._id),
+        totalAmount: r.totalAmount || 0,
+      }));
     }
 
-    const payment = await Payment.create({
+    const isFullTimeSalary = paymentType === 'full_time' && (isAdvance === false || isAdvance === undefined);
+
+    const paymentData: Record<string, unknown> = {
       employee: employeeId,
       paymentType,
       month: monthStr,
@@ -137,7 +146,45 @@ export async function POST(req: NextRequest) {
       workRecordRefs,
       paidAt: new Date(),
       createdBy: user.userId,
-    });
+    };
+
+    if (isFullTimeSalary) {
+      paymentData.daysWorked = typeof body.daysWorked === 'number' ? body.daysWorked : Number(body.daysWorked) || 0;
+      paymentData.totalWorkingDays = typeof body.totalWorkingDays === 'number' ? body.totalWorkingDays : Number(body.totalWorkingDays) || 0;
+    }
+
+    // Use collection.insertOne to bypass Mongoose schema caching (ensures daysWorked is saved)
+    const doc: Record<string, unknown> = {
+      _id: new mongoose.Types.ObjectId(),
+      employee: new mongoose.Types.ObjectId(employeeId),
+      paymentType,
+      month: monthStr,
+      baseAmount: baseAmount ?? 0,
+      addDeductAmount: addDeductAmount ?? 0,
+      addDeductRemarks: addDeductRemarks || '',
+      pfDeducted: pfDeducted ?? 0,
+      esiDeducted: esiDeducted ?? 0,
+      advanceDeducted: advanceDeducted ?? 0,
+      totalPayable,
+      paymentAmount,
+      paymentMode,
+      transactionRef: transactionRef || '',
+      remainingAmount: remainingAmount ?? 0,
+      carriedForward: carriedForward ?? 0,
+      carriedForwardRemarks: carriedForwardRemarks || '',
+      isAdvance: isAdvance ?? false,
+      workRecordRefs,
+      paidAt: new Date(),
+      createdBy: new mongoose.Types.ObjectId(user.userId),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    if (isFullTimeSalary) {
+      doc.daysWorked = paymentData.daysWorked;
+      doc.totalWorkingDays = paymentData.totalWorkingDays;
+    }
+    await Payment.collection.insertOne(doc);
+    const payment = { _id: doc._id, ...doc };
 
     const populated = await Payment.findById(payment._id)
       .populate('employee', 'name employeeType')
@@ -160,6 +207,16 @@ export async function POST(req: NextRequest) {
       message: `${user.role} recorded a payment of ₹${paymentAmount.toLocaleString()} for ${empName} for ${monthStr}.`,
       link: paymentType === 'contractor' ? '/payments/contractors' : '/payments/full-time',
       metadata: { entityId: String(payment._id), entityType: 'payment', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: paymentAmount },
+    }).catch(() => {});
+
+    logAudit({
+      user,
+      action: 'payment_create',
+      entityType: 'payment',
+      entityId: String(payment._id),
+      summary: `Payment of ₹${paymentAmount.toLocaleString()} recorded for ${empName} (${monthStr})${isAdvance ? ' [Advance]' : ''}`,
+      metadata: { employeeId, employeeName: empName, month: monthStr, amount: paymentAmount, paymentType, isAdvance: isAdvance ?? false },
+      req,
     }).catch(() => {});
 
     return NextResponse.json(populated);

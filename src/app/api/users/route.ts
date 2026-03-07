@@ -4,6 +4,7 @@ import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
+import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -73,6 +74,17 @@ export async function POST(req: NextRequest) {
     });
 
     const created = await User.findById(user._id).select('email role isActive createdAt').lean();
+
+    logAudit({
+      user: authUser,
+      action: 'user_create',
+      entityType: 'user',
+      entityId: user._id.toString(),
+      summary: `User "${email}" created (admin)`,
+      metadata: { email, role: 'admin' },
+      req,
+    }).catch(() => {});
+
     return NextResponse.json({ user: created, generatedPassword: password ? undefined : pwd });
   } catch (e) {
     console.error(e);
