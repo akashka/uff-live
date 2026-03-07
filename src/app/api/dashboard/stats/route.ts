@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import { formatDate } from '@/lib/utils';
 
@@ -181,7 +182,8 @@ export async function GET(req: NextRequest) {
       if (employee) {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
-        const empFilter = { employee: user.employeeId };
+        const empObjId = new mongoose.Types.ObjectId(user.employeeId);
+        const empFilter = { employee: empObjId };
 
         const [
           myWorkTotals,
