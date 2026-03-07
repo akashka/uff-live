@@ -12,13 +12,15 @@ export async function GET() {
   let displayName: string | undefined;
   let photo: string | undefined;
 
+  let employeeType: 'contractor' | 'full_time' | undefined;
   if (user.employeeId) {
     try {
       await connectDB();
-      const emp = await Employee.findById(user.employeeId).select('name photo').lean();
+      const emp = await Employee.findById(user.employeeId).select('name photo employeeType').lean();
       if (emp) {
         displayName = emp.name;
         photo = emp.photo || undefined;
+        employeeType = (emp as { employeeType?: string }).employeeType as 'contractor' | 'full_time' | undefined;
       }
     } catch {
       // ignore
@@ -31,6 +33,7 @@ export async function GET() {
       email: user.email,
       role: user.role,
       employeeId: user.employeeId,
+      employeeType,
       displayName,
       photo,
     },

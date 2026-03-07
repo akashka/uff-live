@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { notifyAdminsIfNeeded } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
   try {
@@ -82,6 +83,15 @@ export async function POST(req: NextRequest) {
       .populate('branches', 'name _id')
       .populate('rateMasterItems', 'name unit _id')
       .lean();
+
+    notifyAdminsIfNeeded(user, {
+      type: 'style_order_created',
+      title: 'Style order created',
+      message: `${user.role} created style order "${styleCode}".`,
+      link: '/style-orders',
+      metadata: { entityId: String(doc._id), entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode },
+    }).catch(() => {});
+
     return NextResponse.json(populated);
   } catch (e) {
     console.error(e);

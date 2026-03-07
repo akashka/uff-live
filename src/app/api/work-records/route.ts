@@ -6,6 +6,7 @@ import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
   try {
@@ -195,6 +196,26 @@ export async function POST(req: NextRequest) {
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode _id')
       .lean();
+
+    const empName = (populated?.employee as { name?: string })?.name || 'Employee';
+    const branchName = (populated?.branch as { name?: string })?.name || '';
+
+    notifyEmployee(employeeId, {
+      type: 'work_record_created',
+      title: 'Work record created',
+      message: `A work record has been created for you for ${monthStr}${branchName ? ` (${branchName})` : ''}. Total: ₹${finalTotal.toLocaleString()}`,
+      link: '/work-records',
+      metadata: { entityId: String(record._id), entityType: 'work_record', employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
+    }).catch(() => {});
+
+    notifyAdminsIfNeeded(user, {
+      type: 'work_record_created',
+      title: 'Work record created',
+      message: `${user.role} created a work record for ${empName} for ${monthStr}. Amount: ₹${finalTotal.toLocaleString()}`,
+      link: `/work-records`,
+      metadata: { entityId: String(record._id), entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
+    }).catch(() => {});
+
     return NextResponse.json(populated);
   } catch (e) {
     console.error(e);

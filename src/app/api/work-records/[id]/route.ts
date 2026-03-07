@@ -6,6 +6,7 @@ import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 
 async function getAvailableQuantity(
   styleOrderId: string,
@@ -163,6 +164,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .populate('branch', 'name')
       .populate('styleOrder', 'styleCode _id')
       .lean();
+
+    const empId = String(record.employee);
+    const empName = (updated?.employee as { name?: string })?.name || 'Employee';
+    notifyEmployee(empId, {
+      type: 'work_record_updated',
+      title: 'Work record updated',
+      message: `Your work record for ${record.month} has been updated. New total: ₹${record.totalAmount.toLocaleString()}`,
+      link: '/work-records',
+      metadata: { entityId: id, entityType: 'work_record', employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
+    }).catch(() => {});
+    notifyAdminsIfNeeded(user, {
+      type: 'work_record_updated',
+      title: 'Work record updated',
+      message: `${user.role} updated work record for ${empName} (${record.month}). Amount: ₹${record.totalAmount.toLocaleString()}`,
+      link: '/work-records',
+      metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);
@@ -178,8 +197,28 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const { id } = await params;
     await connectDB();
-    const record = await WorkRecord.findByIdAndDelete(id);
+    const record = await WorkRecord.findById(id).populate('employee', 'name').lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const empObj = record.employee as { _id?: unknown; name?: string } | undefined;
+    const empId = empObj && typeof empObj === 'object' && '_id' in empObj ? String(empObj._id) : String(record.employee);
+    const empName = empObj?.name || 'Employee';
+    await WorkRecord.findByIdAndDelete(id);
+
+    notifyEmployee(empId, {
+      type: 'work_record_deleted',
+      title: 'Work record deleted',
+      message: `Your work record for ${record.month} has been deleted.`,
+      link: '/work-records',
+      metadata: { entityId: id, entityType: 'work_record', employeeId: empId, employeeName: empName, month: record.month },
+    }).catch(() => {});
+    notifyAdminsIfNeeded(user, {
+      type: 'work_record_deleted',
+      title: 'Work record deleted',
+      message: `${user.role} deleted work record for ${empName} (${record.month}).`,
+      link: '/work-records',
+      metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month },
+    }).catch(() => {});
+
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

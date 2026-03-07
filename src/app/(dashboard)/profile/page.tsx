@@ -41,9 +41,10 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: '',
+    email: '',
     contactNumber: '',
-    emergencyNumber: '',
+    dateOfBirth: '',
+    gender: '',
     bankName: '',
     bankBranch: '',
     ifscCode: '',
@@ -62,9 +63,10 @@ export default function ProfilePage() {
         setData(d);
         if (d.employee) {
           setEditForm({
-            name: d.employee.name,
+            email: d.employee.email || d.user?.email || '',
             contactNumber: d.employee.contactNumber,
-            emergencyNumber: d.employee.emergencyNumber,
+            dateOfBirth: d.employee.dateOfBirth ? String(d.employee.dateOfBirth).slice(0, 10) : '',
+            gender: d.employee.gender || '',
             bankName: d.employee.bankName || '',
             bankBranch: d.employee.bankBranch || '',
             ifscCode: d.employee.ifscCode || '',
@@ -95,9 +97,10 @@ export default function ProfilePage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: editForm.name,
+          email: editForm.email,
           contactNumber: editForm.contactNumber,
-          emergencyNumber: editForm.emergencyNumber,
+          dateOfBirth: editForm.dateOfBirth || undefined,
+          gender: editForm.gender || undefined,
           bankName: editForm.bankName,
           bankBranch: editForm.bankBranch,
           ifscCode: editForm.ifscCode,
@@ -105,13 +108,17 @@ export default function ProfilePage() {
           upiId: editForm.upiId,
         }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed');
+      }
       const d = await res.json();
       setData((prev) => (prev && d.employee ? { ...prev, employee: d.employee } : prev));
       setEditForm({
-        name: d.employee.name,
+        email: d.employee.email || '',
         contactNumber: d.employee.contactNumber,
-        emergencyNumber: d.employee.emergencyNumber,
+        dateOfBirth: d.employee.dateOfBirth ? String(d.employee.dateOfBirth).slice(0, 10) : '',
+        gender: d.employee.gender || '',
         bankName: d.employee.bankName || '',
         bankBranch: d.employee.bankBranch || '',
         ifscCode: d.employee.ifscCode || '',
@@ -120,8 +127,8 @@ export default function ProfilePage() {
       });
       setEditing(false);
       setMessage({ type: 'success', text: t('saveSuccess') });
-    } catch {
-      setMessage({ type: 'error', text: t('error') });
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : t('error') });
     } finally {
       setSaving(false);
     }
@@ -156,7 +163,17 @@ export default function ProfilePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700">{t('email')}</label>
-              <p className="mt-1 text-slate-800">{data.user?.email ?? '-'}</p>
+              {emp && editing ? (
+                <ValidatedInput
+                  type="email"
+                  value={editForm.email}
+                  onChange={(v) => setEditForm((f) => ({ ...f, email: v }))}
+                  fieldType="email"
+                  className="mt-1"
+                />
+              ) : (
+                <p className="mt-1 text-slate-800">{data.user?.email ?? emp?.email ?? '-'}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">{t('role')}</label>
@@ -204,18 +221,8 @@ export default function ProfilePage() {
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                  {editing ? (
-                    <ValidatedInput
-                      type="text"
-                      value={editForm.name}
-                      onChange={(v) => setEditForm((f) => ({ ...f, name: v }))}
-                      fieldType="name"
-                      className="mt-1"
-                    />
-                  ) : (
-                    <p className="mt-1 text-slate-800">{emp.name}</p>
-                  )}
+                  <label className="block text-sm font-medium text-slate-700">{t('employeeName')}</label>
+                  <p className="mt-1 text-slate-800">{emp.name}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('contactNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
@@ -232,26 +239,38 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('emergencyNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                  {editing ? (
-                    <ValidatedInput
-                      type="tel"
-                      value={editForm.emergencyNumber}
-                      onChange={(v) => setEditForm((f) => ({ ...f, emergencyNumber: v }))}
-                      fieldType="phone"
-                      className="mt-1"
-                    />
-                  ) : (
-                    <p className="mt-1 text-slate-800">{emp.emergencyNumber}</p>
-                  )}
+                  <label className="block text-sm font-medium text-slate-700">{t('emergencyNumber')}</label>
+                  <p className="mt-1 text-slate-800">{emp.emergencyNumber || '-'}</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('dateOfBirth')}</label>
-                  <p className="mt-1 text-slate-800">{emp.dateOfBirth ? formatDate(emp.dateOfBirth) : '-'}</p>
+                  {editing ? (
+                    <input
+                      type="date"
+                      value={editForm.dateOfBirth}
+                      onChange={(e) => setEditForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+                    />
+                  ) : (
+                    <p className="mt-1 text-slate-800">{emp.dateOfBirth ? formatDate(emp.dateOfBirth) : '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('gender')}</label>
-                  <p className="mt-1 text-slate-800">{emp.gender === 'male' ? t('male') : emp.gender === 'female' ? t('female') : t('other')}</p>
+                  {editing ? (
+                    <select
+                      value={editForm.gender}
+                      onChange={(e) => setEditForm((f) => ({ ...f, gender: e.target.value }))}
+                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800"
+                    >
+                      <option value="">—</option>
+                      <option value="male">{t('male')}</option>
+                      <option value="female">{t('female')}</option>
+                      <option value="other">{t('other')}</option>
+                    </select>
+                  ) : (
+                    <p className="mt-1 text-slate-800">{emp.gender === 'male' ? t('male') : emp.gender === 'female' ? t('female') : emp.gender === 'other' ? t('other') : '-'}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('employeeType')}</label>
@@ -406,9 +425,10 @@ export default function ProfilePage() {
                     onClick={() => {
                       setEditing(false);
                       setEditForm({
-                        name: emp.name,
+                        email: emp.email || data.user?.email || '',
                         contactNumber: emp.contactNumber,
-                        emergencyNumber: emp.emergencyNumber,
+                        dateOfBirth: emp.dateOfBirth ? String(emp.dateOfBirth).slice(0, 10) : '',
+                        gender: emp.gender || '',
                         bankName: emp.bankName || '',
                         bankBranch: emp.bankBranch || '',
                         ifscCode: emp.ifscCode || '',

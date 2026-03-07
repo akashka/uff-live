@@ -6,6 +6,7 @@ import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
+import { notifyAdminsIfNeeded } from '@/lib/notifications';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -156,6 +157,15 @@ export async function POST(req: NextRequest) {
 
     const emp = await Employee.findById(employee._id).populate('branches', 'name').lean();
     revalidateTag('employees', 'default');
+
+    notifyAdminsIfNeeded(user, {
+      type: 'employee_created',
+      title: 'Employee created',
+      message: `${user.role} created employee "${name}".`,
+      link: '/employees',
+      metadata: { entityId: String(employee._id), entityType: 'employee', actorId: user.userId, actorRole: user.role, employeeName: name },
+    }).catch(() => {});
+
     return NextResponse.json({ employee: emp, generatedPassword: password });
   } catch (e) {
     console.error(e);

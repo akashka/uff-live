@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { useUnreadNotificationCount } from '@/lib/hooks/useApi';
 import UFFLogo from '@/components/UFFLogo';
 import UserAvatar from '@/components/UserAvatar';
 
@@ -14,6 +15,14 @@ function HomeIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+    </svg>
+  );
+}
+
+function NotificationsIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
     </svg>
   );
 }
@@ -111,6 +120,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { t, locale, setLocale, increaseFont, decreaseFont } = useApp();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const unreadCount = useUnreadNotificationCount();
 
   const canAccessBranches = user?.role === 'admin';
   const canAccessUsers = user?.role === 'admin';
@@ -119,13 +129,32 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessStyleOrders = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessWorkRecords = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessPayments = ['admin', 'finance', 'hr'].includes(user?.role || '');
-  const canAccessAnalytics = ['admin', 'finance', 'hr'].includes(user?.role || '') || !!user?.employeeId;
+  const canAccessAnalytics = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const isEmployee = !!user?.employeeId;
+  const isContractorEmployee = isEmployee && user?.employeeType === 'contractor';
 
-  const hasPayments = canAccessPayments || (isEmployee && !canAccessPayments);
+  const hasPayments = canAccessPayments || isEmployee;
 
-  const navItems: { href?: string; label: string; icon: React.ReactNode; children?: { href: string; label: string }[] }[] = [
+  const paymentsNavItem = canAccessPayments
+    ? {
+        label: t('payments'),
+        icon: <PaymentsIcon />,
+        children: [
+          { href: '/payments/contractors', label: t('contractors') },
+          { href: '/payments/full-time', label: t('fullTime') },
+        ],
+      }
+    : isEmployee
+      ? {
+          href: user?.employeeType === 'full_time' ? '/payments/full-time' : '/payments/contractors',
+          label: t('payments'),
+          icon: <PaymentsIcon />,
+        }
+      : null;
+
+  const navItems: { href?: string; label: string; icon: React.ReactNode; children?: { href: string; label: string }[]; badge?: number }[] = [
     { href: '/', label: t('home'), icon: <HomeIcon /> },
+    { href: '/notifications', label: t('notifications'), icon: <NotificationsIcon />, badge: unreadCount },
     { href: '/profile', label: t('profile'), icon: <ProfileIcon /> },
     ...(canAccessBranches ? [{ href: '/branches', label: t('branches'), icon: <BranchesIcon /> }] : []),
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
@@ -133,19 +162,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster'), icon: <RatesIcon /> }] : []),
     ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders'), icon: <StyleOrderIcon /> }] : []),
     ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
-    ...(hasPayments
-      ? [
-          {
-            label: t('payments'),
-            icon: <PaymentsIcon />,
-            children: [
-              { href: '/payments/contractors', label: t('contractors') },
-              { href: '/payments/full-time', label: t('fullTime') },
-            ],
-          },
-        ]
-      : []),
-    ...(isEmployee && !canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(isContractorEmployee ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessAnalytics ? [{ href: '/style-orders/analytics', label: t('analytics'), icon: <AnalyticsIcon /> }] : []),
     ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
   ];
@@ -188,6 +206,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           : isAnalytics
             ? pathname.startsWith('/style-orders/analytics')
             : pathname === href;
+        const badge = 'badge' in item ? (item as { badge?: number }).badge : undefined;
         return (
           <Link
             key={href}
@@ -200,7 +219,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             }`}
           >
             {item.icon}
-            <span>{item.label}</span>
+            <span className="flex-1 min-w-0">{item.label}</span>
+            {badge != null && badge > 0 && (
+              <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold flex items-center justify-center">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
           </Link>
         );
       })}

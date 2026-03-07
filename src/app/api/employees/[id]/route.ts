@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { notifyAdminsIfNeeded } from '@/lib/notifications';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -83,6 +84,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await employee.save();
     revalidateTag('employees', 'default');
     const updated = await Employee.findById(id).populate('branches', 'name').lean();
+
+    notifyAdminsIfNeeded(user, {
+      type: 'employee_updated',
+      title: 'Employee updated',
+      message: `${user.role} updated employee "${employee.name}".`,
+      link: `/employees/${id}`,
+      metadata: { entityId: id, entityType: 'employee', actorId: user.userId, actorRole: user.role, employeeId: id, employeeName: employee.name },
+    }).catch(() => {});
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error(e);

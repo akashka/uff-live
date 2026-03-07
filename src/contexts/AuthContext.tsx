@@ -8,6 +8,7 @@ interface AuthUser {
   email: string;
   role: UserRole;
   employeeId?: string;
+  employeeType?: 'contractor' | 'full_time';
   displayName?: string;
   photo?: string;
 }

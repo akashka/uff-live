@@ -4,6 +4,7 @@ import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 
 export async function GET(req: NextRequest) {
   try {
@@ -142,6 +143,25 @@ export async function POST(req: NextRequest) {
       .populate('employee', 'name employeeType')
       .populate('workRecordRefs.workRecord')
       .lean();
+
+    const empName = (populated?.employee as { name?: string })?.name || 'Employee';
+    const passbookLink = `/employees/${employeeId}/passbook`;
+
+    notifyEmployee(employeeId, {
+      type: 'payment_created',
+      title: 'Payment recorded',
+      message: `A payment of ₹${paymentAmount.toLocaleString()} has been recorded for you for ${monthStr}${isAdvance ? ' (Advance)' : ''}.`,
+      link: passbookLink,
+      metadata: { entityId: String(payment._id), entityType: 'payment', employeeId, employeeName: empName, month: monthStr, amount: paymentAmount },
+    }).catch(() => {});
+    notifyAdminsIfNeeded(user, {
+      type: 'payment_created',
+      title: 'Payment recorded',
+      message: `${user.role} recorded a payment of ₹${paymentAmount.toLocaleString()} for ${empName} for ${monthStr}.`,
+      link: paymentType === 'contractor' ? '/payments/contractors' : '/payments/full-time',
+      metadata: { entityId: String(payment._id), entityType: 'payment', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: paymentAmount },
+    }).catch(() => {});
+
     return NextResponse.json(populated);
   } catch (e) {
     console.error(e);

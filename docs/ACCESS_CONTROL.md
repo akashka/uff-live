@@ -18,16 +18,16 @@ This document lists all features, actions, and buttons in the Factory Management
 | Page | Admin | Finance | HR | Employee |
 |------|-------|---------|-----|----------|
 | Home | ✓ | ✓ | ✓ | ✓ |
+| Notifications | ✓ | ✓ | ✓ | ✓ |
 | Profile | ✓ | ✓ | ✓ | ✓ |
 | Branches | ✓ | — | — | — |
 | Employees | ✓ | ✓ | ✓ | — |
 | Users | ✓ | — | — | — |
 | Rate Master | ✓ | — | — | — |
 | Style Orders | ✓ | ✓ | ✓ | — |
-| Work Records | ✓ | ✓ | ✓ | ✓ (own only) |
-| Payments → Contractors | ✓ | ✓ | ✓ | ✓ (own only) |
-| Payments → Full-time | ✓ | ✓ | ✓ | ✓ (own only) |
-| Analytics | ✓ | ✓ | ✓ | ✓ |
+| Work Records | ✓ | ✓ | ✓ | ✓ (contractors only, own) |
+| Payments | ✓ (submenu) | ✓ (submenu) | ✓ (submenu) | ✓ (single link to own records) |
+| Analytics | ✓ | ✓ | ✓ | — |
 | Passbook | — | — | — | ✓ (own only) |
 
 ---

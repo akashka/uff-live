@@ -4,6 +4,7 @@ import User from '@/lib/models/User';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser } from '@/lib/auth';
 
+// Employee can edit only: photo, email, contactNumber, gender, dateOfBirth, banking details
 export async function GET() {
   try {
     const user = await getAuthUser();
@@ -31,7 +32,7 @@ export async function GET() {
   }
 }
 
-// Editable: name, contactNumber, emergencyNumber (if employee)
+// Editable by employee: email, contactNumber, gender, dateOfBirth, banking details (photo via separate endpoint)
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getAuthUser();
@@ -44,15 +45,20 @@ export async function PATCH(req: NextRequest) {
       const employee = await Employee.findById(user.employeeId);
       if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
-      if (body.name !== undefined) employee.name = body.name;
+      if (body.email !== undefined) {
+        const existing = await User.findOne({ email: body.email, _id: { $ne: user.userId } });
+        if (existing) return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
+        employee.email = body.email;
+        await User.findByIdAndUpdate(user.userId, { email: body.email });
+      }
       if (body.contactNumber !== undefined) employee.contactNumber = body.contactNumber;
-      if (body.emergencyNumber !== undefined) employee.emergencyNumber = body.emergencyNumber;
+      if (body.gender !== undefined) employee.gender = body.gender;
+      if (body.dateOfBirth !== undefined) employee.dateOfBirth = body.dateOfBirth;
       if (body.bankName !== undefined) employee.bankName = body.bankName;
       if (body.bankBranch !== undefined) employee.bankBranch = body.bankBranch;
       if (body.ifscCode !== undefined) employee.ifscCode = body.ifscCode;
       if (body.accountNumber !== undefined) employee.accountNumber = body.accountNumber;
       if (body.upiId !== undefined) employee.upiId = body.upiId;
-      if (body.photo !== undefined) employee.photo = body.photo;
 
       await employee.save();
       const updated = await Employee.findById(user.employeeId).populate('branches', 'name').lean();

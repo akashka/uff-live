@@ -185,6 +185,51 @@ export function useStyleOrdersByBranchMonth(branchId?: string, month?: string, e
   };
 }
 
+/** Notifications list - with polling for real-time feel */
+export function useNotifications(options?: {
+  unreadOnly?: boolean;
+  readOnly?: boolean;
+  type?: string;
+  page?: number;
+  limit?: number;
+  refreshInterval?: number;
+}) {
+  const params = new URLSearchParams();
+  if (options?.unreadOnly) params.set('unread', 'true');
+  if (options?.readOnly) params.set('unread', 'false');
+  if (options?.type) params.set('type', options.type);
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit) params.set('limit', String(options.limit));
+  const key = `/api/notifications${params.toString() ? `?${params}` : ''}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: true,
+    dedupingInterval: 5_000,
+    refreshInterval: options?.refreshInterval ?? 15_000,
+  });
+  const notifications = Array.isArray(data?.data) ? data.data : [];
+  return {
+    notifications,
+    total: data?.total ?? 0,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
+    unreadCount: data?.unreadCount ?? 0,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Unread notification count - for sidebar badge, polls every 15s */
+export function useUnreadNotificationCount() {
+  const { data } = useSWR('/api/notifications/unread-count', fetcher, {
+    revalidateOnFocus: true,
+    dedupingInterval: 5_000,
+    refreshInterval: 15_000,
+  });
+  return data?.count ?? 0;
+}
+
 /** Users list - paginated */
 export function useUsers(options?: { page?: number; limit?: number }) {
   const params = new URLSearchParams();
