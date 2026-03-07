@@ -24,6 +24,7 @@ This document lists all features, actions, and buttons in the Factory Management
 | Employees | ✓ | ✓ | ✓ | — |
 | Users | ✓ | — | — | — |
 | Audit Log | ✓ | — | — | — |
+| System | ✓ | — | — | — |
 | Reports (incl. Style Analytics) | ✓ | ✓ | ✓ | — |
 | Rate Master | ✓ | — | — | — |
 | Style Orders | ✓ | ✓ | ✓ | — |
@@ -225,6 +226,11 @@ This document lists all features, actions, and buttons in the Factory Management
 | `/api/dashboard/stats` | admin, finance, hr, employee | — | — | — |
 | `/api/profile` | any logged-in | — | — | — |
 | `/api/profile/photo` | — | any logged-in (own) | — | — |
+| `/api/system/health` | admin | — | — | — |
+| `/api/system/backup` | — | admin | — | — |
+| `/api/system/restore` | — | admin | — | — |
+| `/api/system/retention` | admin | — | admin | — |
+| `/api/system/retention/purge` | — | admin | — | — |
 
 ---
 
