@@ -11,6 +11,9 @@ import {
   WorkTrendChart,
   PaymentModeChart,
   EmployeeTypeChart,
+  StyleWiseProductionChart,
+  StyleCompletionChart,
+  type StyleWiseItem,
 } from '@/components/dashboard/DashboardCharts';
 import { Skeleton, DashboardSkeleton } from '@/components/Skeleton';
 import { useDashboardStats } from '@/lib/hooks/useApi';
@@ -20,6 +23,21 @@ const DASHBOARD_CONFIG_KEY = 'uff-dashboard-widgets';
 interface DashboardStats {
   employees?: { total: number; active: number; contractors: number; fullTime: number };
   branches?: number;
+  styleOrders?: {
+    count: number;
+    workRecordsWithStyle: number;
+    workAmountWithStyle: number;
+    byStyle?: StyleWiseItem[];
+    completedCount?: number;
+    behindCount?: number;
+    overallCompletion?: number;
+    totalOrderQty?: number;
+    totalProduced?: number;
+    estimatedRemaining?: number;
+    estCompletionDays?: number | null;
+    suggestions?: string[];
+  };
+  alerts?: { type: string; message: string; priority: string; href?: string }[];
   payments?: {
     totalPaid: number;
     totalPayable: number;
@@ -57,7 +75,7 @@ const PAYMENT_MODE_LABELS: Record<string, string> = {
 export default function HomePage() {
   const { t } = useApp();
   const { user } = useAuth();
-  const [range, setRange] = useState('30');
+  const [range, setRange] = useState('1'); // 1=current month, 3=last 3 months, 6=last 6 months
   const { stats, loading } = useDashboardStats(range);
   const [config, setConfig] = useState<Record<string, boolean>>({});
   const [configOpen, setConfigOpen] = useState(false);
@@ -80,6 +98,9 @@ export default function HomePage() {
         overview: true,
         employees: true,
         branches: true,
+        styleOrders: true,
+        styleWiseChart: true,
+        styleSuggestions: true,
         payments: true,
         workRecords: true,
         paymentTrend: true,
@@ -135,9 +156,9 @@ export default function HomePage() {
             onChange={(e) => setRange(e.target.value)}
             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 shadow-sm focus:border-uff-accent focus:ring-2 focus:ring-uff-accent/20"
           >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
+            <option value="1">{t('currentMonthOption')}</option>
+            <option value="3">{t('last3Months')}</option>
+            <option value="6">{t('last6Months')}</option>
           </select>
           {(isAdmin || isFinance || isHR || isEmployee) && (
             <button
@@ -149,7 +170,28 @@ export default function HomePage() {
           )}
         </div>
       </PageHeader>
-      <p className="-mt-4 mb-6 text-slate-700">{t('dashboardWelcome')}</p>
+      <p className="-mt-4 mb-6 text-slate-600">{t('dashboardWelcome')}</p>
+
+      {/* Alerts */}
+      {(stats?.alerts?.length ?? 0) > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('alerts')}</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(stats.alerts as { type: string; message: string; priority: string; href?: string }[]).map((a, i) => (
+              <Link
+                key={i}
+                href={a.href || '#'}
+                className={`flex items-start gap-3 rounded-xl border p-4 transition hover:shadow-md ${
+                  a.priority === 'high' ? 'border-rose-200 bg-rose-50' : a.priority === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <span className={`mt-0.5 shrink-0 text-lg ${a.priority === 'high' ? 'text-rose-500' : a.priority === 'medium' ? 'text-amber-500' : 'text-slate-500'}`}>!</span>
+                <span className="text-sm font-medium text-slate-800">{a.message}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {configOpen && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
@@ -178,15 +220,44 @@ export default function HomePage() {
               </>
             )}
             {isAdmin && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.branches ?? true}
-                  onChange={() => toggleWidget('branches')}
-                  className="rounded border-slate-400"
-                />
-                <span className="text-sm text-slate-800">{t('branches')}</span>
-              </label>
+              <>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.branches ?? true}
+                    onChange={() => toggleWidget('branches')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('branches')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.styleOrders ?? true}
+                    onChange={() => toggleWidget('styleOrders')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('styleOrders')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.styleWiseChart ?? true}
+                    onChange={() => toggleWidget('styleWiseChart')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('styleWiseProduction')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.styleSuggestions ?? true}
+                    onChange={() => toggleWidget('styleSuggestions')}
+                    className="rounded border-slate-400"
+                  />
+                  <span className="text-sm text-slate-800">{t('suggestions')}</span>
+                </label>
+              </>
             )}
             {isFinance && (
               <>
@@ -276,13 +347,15 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Overview - Employee */}
       {isEmployee && (config.myStats ?? true) && stats?.myStats && (
-        <>
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title={stats.myStats.employeeType === 'contractor' ? t('workRecords') : t('monthlySalary')}
             value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
-            subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : 'Fixed monthly'}
+            subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : t('fixedMonthly')}
             icon={<UsersIcon />}
             href="/work-records"
             gradient="from-violet-500 to-purple-600"
@@ -309,16 +382,17 @@ export default function HomePage() {
             icon={<DueIcon />}
             gradient={stats.myStats.dueTotal > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-600'}
           />
-        </div>
-        {stats.myStats.employeeType === 'contractor' && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="font-semibold text-slate-800 mb-1">{t('estimatedNextPayment')}</h3>
-            <p className="text-slate-600 text-sm">
+          </div>
+          {stats.myStats.employeeType === 'contractor' && (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 p-6 text-white shadow-xl">
+            <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
+            <h3 className="relative text-sm font-medium opacity-90">{t('estimatedNextPayment')}</h3>
+            <p className="relative mt-1 text-sm opacity-90">
               {stats.myStats.workRecords > 0
                 ? t('estimatedNextPaymentHint')
                 : t('estimatedNextPaymentNoData')}
             </p>
-            <p className="mt-2 text-lg font-semibold text-uff-accent">
+            <p className="relative mt-2 text-lg font-semibold">
               {stats.myStats.workRecords > 0 && stats.myStats.payments > 0
                 ? `~₹${Math.round((stats.myStats.workTotal || 0) / Math.max(1, stats.myStats.workRecords || 1) * 2).toLocaleString()} ${t('perMonth')}`
                 : stats.myStats.workRecords > 0
@@ -326,50 +400,163 @@ export default function HomePage() {
                   : t('noData')}
             </p>
           </div>
-        )}
-        </>
-      )}
-
-      {(isHR || isAdmin) && (config.employees ?? true) && stats?.employees && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title={t('employees')}
-            value={stats.employees.active}
-            subtitle={`${stats.employees.total} total`}
-            icon={<UsersIcon />}
-            href="/employees"
-            gradient="from-blue-500 to-indigo-600"
-          />
-          <StatCard
-            title={t('contractor')}
-            value={stats.employees.contractors}
-            subtitle={t('contractors')}
-            icon={<ContractorIcon />}
-            href="/employees"
-            gradient="from-amber-500 to-orange-600"
-          />
-          <StatCard
-            title={t('fullTime')}
-            value={stats.employees.fullTime}
-            subtitle={t('fullTime')}
-            icon={<FullTimeIcon />}
-            href="/employees"
-            gradient="from-emerald-500 to-teal-600"
-          />
-          {isAdmin && (config.branches ?? true) && stats?.branches !== undefined && (
-            <StatCard
-              title={t('branches')}
-              value={stats.branches}
-              icon={<BranchIcon />}
-              href="/branches"
-              gradient="from-violet-500 to-purple-600"
-            />
           )}
-        </div>
+        </section>
       )}
 
+      {/* Overview - People & Organization */}
+      {(isHR || isAdmin) && (config.employees ?? true) && stats?.employees && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title={t('employees')}
+              value={stats.employees.active}
+              subtitle={`${stats.employees.total} total`}
+              icon={<UsersIcon />}
+              href="/employees"
+              gradient="from-blue-500 to-indigo-600"
+            />
+            <StatCard
+              title={t('contractor')}
+              value={stats.employees.contractors}
+              subtitle={t('contractors')}
+              icon={<ContractorIcon />}
+              href="/employees"
+              gradient="from-amber-500 to-orange-600"
+            />
+            <StatCard
+              title={t('fullTime')}
+              value={stats.employees.fullTime}
+              subtitle={t('fullTime')}
+              icon={<FullTimeIcon />}
+              href="/employees"
+              gradient="from-emerald-500 to-teal-600"
+            />
+            {isAdmin && (config.branches ?? true) && stats?.branches !== undefined ? (
+              <StatCard
+                title={t('branches')}
+                value={stats.branches}
+                icon={<BranchIcon />}
+                href="/branches"
+                gradient="from-violet-500 to-purple-600"
+              />
+            ) : (config.workRecords ?? true) && stats?.workRecords ? (
+              <StatCard
+                title={t('workRecords')}
+                value={stats.workRecords.count}
+                subtitle={`₹${stats.workRecords.total?.toLocaleString()} work`}
+                icon={<WorkIcon />}
+                href="/work-records"
+                gradient="from-teal-500 to-cyan-600"
+              />
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      {/* Production - Style Orders & Completion */}
+      {(isAdmin || isHR) && (config.styleOrders ?? true) && stats?.styleOrders && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('production')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+            {isAdmin && (
+              <StatCard
+                title={t('styleOrders')}
+                value={stats.styleOrders.count}
+                subtitle={`₹${stats.styleOrders.workAmountWithStyle?.toLocaleString()} work`}
+                icon={<WorkIcon />}
+                href="/style-orders"
+                gradient="from-cyan-500 to-blue-600"
+              />
+            )}
+            {stats.styleOrders.byStyle && stats.styleOrders.byStyle.length > 0 && (
+              <>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 text-white shadow-xl">
+                  <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
+                  <p className="relative text-sm font-medium opacity-90">{t('overallCompletion')}</p>
+                  <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                    {stats.styleOrders.overallCompletion ?? 0}%
+                  </p>
+                  <p className="relative mt-1 text-xs opacity-90">
+                    {stats.styleOrders.totalProduced?.toLocaleString()} / {stats.styleOrders.totalOrderQty?.toLocaleString()} {t('produced')}
+                  </p>
+                </div>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white shadow-xl">
+                  <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
+                  <p className="relative text-sm font-medium opacity-90">{t('estimatedRemaining')}</p>
+                  <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                    {(stats.styleOrders.estimatedRemaining ?? 0).toLocaleString()}
+                  </p>
+                  <p className="relative mt-1 text-xs opacity-90">{t('unitsToComplete')}</p>
+                  {stats.styleOrders.estCompletionDays != null && stats.styleOrders.estCompletionDays > 0 && (
+                    <p className="relative mt-2 text-xs font-medium opacity-95">{t('estCompletionDays')}: ~{stats.styleOrders.estCompletionDays}</p>
+                  )}
+                </div>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 text-white shadow-xl">
+                  <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
+                  <p className="relative text-sm font-medium opacity-90">{t('completed')}</p>
+                  <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                    {stats.styleOrders.completedCount ?? 0}
+                  </p>
+                  <p className="relative mt-1 text-xs opacity-90">{t('styles')}</p>
+                </div>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 p-6 text-white shadow-xl">
+                  <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
+                  <p className="relative text-sm font-medium opacity-90">{t('needAttention')}</p>
+                  <p className="relative mt-1 text-2xl font-bold tracking-tight">
+                    {stats.styleOrders.behindCount ?? 0}
+                  </p>
+                  <p className="relative mt-1 text-xs opacity-90">{t('styles')}</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {(config.styleSuggestions ?? true) && stats.styleOrders.suggestions && stats.styleOrders.suggestions.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="font-semibold text-slate-800">{t('suggestions')} & {t('insights')}</h3>
+              <ul className="mt-3 space-y-2">
+                {stats.styleOrders.suggestions.map((s: string, i: number) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                    <span className="mt-1 shrink-0 text-uff-accent">•</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {(config.styleWiseChart ?? true) && stats.styleOrders.byStyle && stats.styleOrders.byStyle.length > 0 && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                <div className="border-b border-slate-100 bg-gradient-to-r from-cyan-50 to-white px-6 py-4">
+                  <h3 className="font-semibold text-slate-800">{t('styleWiseProduction')}</h3>
+                  <p className="text-sm text-slate-600">{t('currentMonth')} — Order vs Produced</p>
+                </div>
+                <div className="p-6">
+                  <StyleWiseProductionChart data={stats.styleOrders.byStyle} />
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white px-6 py-4">
+                  <h3 className="font-semibold text-slate-800">{t('styleCompletion')}</h3>
+                  <p className="text-sm text-slate-600">{t('currentMonth')} — {t('completionPercent')}</p>
+                </div>
+                <div className="p-6">
+                  <StyleCompletionChart data={stats.styleOrders.byStyle} />
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Overview - Finance */}
       {isFinance && (config.payments ?? true) && stats?.payments && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('overview')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title={t('totalPaid')}
             value={`₹${stats.payments.totalPaid?.toLocaleString()}`}
@@ -396,33 +583,27 @@ export default function HomePage() {
           <StatCard
             title={t('paymentCount')}
             value={stats.payments.count}
-            subtitle={`${t('last')} ${range} ${t('days')}`}
+            subtitle={`${t('last')} ${range} ${range === '1' ? t('month') : t('months') || 'months'}`}
             icon={<CountIcon />}
             href="/payments"
             gradient="from-blue-500 to-indigo-600"
           />
-        </div>
+          </div>
+        </section>
       )}
 
-      {isHR && (config.workRecords ?? true) && stats?.workRecords && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title={t('workRecords')}
-            value={stats.workRecords.count}
-            subtitle={`₹${stats.workRecords.total?.toLocaleString()} total work`}
-            icon={<WorkIcon />}
-            href="/work-records"
-            gradient="from-teal-500 to-cyan-600"
-          />
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Charts - Analytics */}
+      {((isFinance && ((config.paymentTrend ?? true) || (config.paymentMode ?? true))) ||
+        (isHR && ((config.workTrend ?? true) || (config.employeeType ?? true))) ||
+        (isEmployee && (config.myStats ?? true))) && (
+      <section className="mb-8">
+        <h2 className="mb-4 text-lg font-semibold text-slate-800">{t('analytics')}</h2>
+        <div className="grid gap-6 sm:grid-cols-1 lg:grid-cols-2">
         {isFinance && (config.paymentTrend ?? true) && stats?.payments?.trend && (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
             <div className="border-b border-slate-100 bg-gradient-to-r from-uff-surface to-white px-6 py-4">
               <h3 className="font-semibold text-slate-800">{t('paymentTrend')}</h3>
-              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+              <p className="text-sm text-slate-700">{t('last')} {range} {range === '1' ? t('month') : t('months') || 'months'}</p>
             </div>
             <div className="p-6">
               {stats.payments.trend.length > 0 ? (
@@ -438,7 +619,7 @@ export default function HomePage() {
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
             <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
               <h3 className="font-semibold text-slate-900">{t('workTrend')}</h3>
-              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+              <p className="text-sm text-slate-700">{t('last')} {range} {range === '1' ? t('month') : t('months') || 'months'}</p>
             </div>
             <div className="p-6">
               {stats.workRecords.trend.length > 0 ? (
@@ -483,7 +664,7 @@ export default function HomePage() {
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
             <div className="border-b border-slate-100 bg-gradient-to-r from-uff-surface to-white px-6 py-4">
               <h3 className="font-semibold text-slate-800">{t('myWorkTrend')}</h3>
-              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+              <p className="text-sm text-slate-700">{t('last')} {range} {range === '1' ? t('month') : t('months') || 'months'}</p>
             </div>
             <div className="p-6">
               <WorkTrendChart data={stats.myStats.workTrend} />
@@ -495,14 +676,16 @@ export default function HomePage() {
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
             <div className="border-b border-slate-100 bg-gradient-to-r from-uff-surface to-white px-6 py-4">
               <h3 className="font-semibold text-slate-800">{t('myPaymentTrend')}</h3>
-              <p className="text-sm text-slate-700">{t('last')} {range} {t('days')}</p>
+              <p className="text-sm text-slate-700">{t('last')} {range} {range === '1' ? t('month') : t('months') || 'months'}</p>
             </div>
             <div className="p-6">
               <PaymentsTrendChart data={stats.myStats.paymentTrend} />
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </section>
+      )}
 
       {!stats?.employees && !stats?.payments && !stats?.workRecords && !stats?.myStats && (
         <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm">

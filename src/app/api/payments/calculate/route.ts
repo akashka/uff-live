@@ -13,13 +13,14 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get('employeeId');
-    const periodStart = searchParams.get('periodStart');
-    const periodEnd = searchParams.get('periodEnd');
+    const month = searchParams.get('month');
     const type = searchParams.get('type');
 
-    if (!employeeId || !periodStart || !periodEnd || !type) {
-      return NextResponse.json({ error: 'employeeId, periodStart, periodEnd, type required' }, { status: 400 });
+    if (!employeeId || !month || !type) {
+      return NextResponse.json({ error: 'employeeId, month, type required' }, { status: 400 });
     }
+
+    const monthStr = String(month).slice(0, 7); // YYYY-MM
 
     await connectDB();
 
@@ -29,11 +30,10 @@ export async function GET(req: NextRequest) {
     if (type === 'contractor') {
       const workRecords = await WorkRecord.find({
         employee: employeeId,
-        periodStart: { $lte: new Date(periodEnd) },
-        periodEnd: { $gte: new Date(periodStart) },
+        month: monthStr,
       })
         .populate('branch', 'name')
-        .sort({ periodStart: 1 })
+        .sort({ month: 1 })
         .lean();
 
       const totalWorkAmount = workRecords.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
@@ -56,14 +56,30 @@ export async function GET(req: NextRequest) {
 
     if (type === 'full_time') {
       const gross = emp.monthlySalary || 0;
-      const deductions = (emp.salaryBreakup?.pf || 0) + (emp.salaryBreakup?.esi || 0) + (emp.salaryBreakup?.other || 0);
-      const baseAmount = gross - deductions;
+      const pf = emp.salaryBreakup?.pf || 0;
+      const esi = emp.salaryBreakup?.esi || 0;
+      const other = emp.salaryBreakup?.other || 0;
+      const totalDeductions = pf + esi + other;
+      const baseAmount = gross - totalDeductions;
+
+      // Working days in month (excluding Sundays)
+      const [y, m] = monthStr.split('-').map(Number);
+      const lastDay = new Date(y, m, 0);
+      let totalWorkingDays = 0;
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const day = new Date(y, m - 1, d);
+        if (day.getDay() !== 0) totalWorkingDays++;
+      }
 
       return NextResponse.json({
         type: 'full_time',
         baseAmount,
         grossSalary: gross,
-        deductions,
+        pf,
+        esi,
+        other,
+        totalDeductions,
+        totalWorkingDays,
       });
     }
 

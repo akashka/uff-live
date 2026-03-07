@@ -13,23 +13,28 @@ export async function GET(req: NextRequest) {
     await connectDB();
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get('employeeId');
-    const paymentRun = searchParams.get('paymentRun');
+    const month = searchParams.get('month');
+    const paymentType = searchParams.get('paymentType'); // 'contractor' | 'full_time'
+    const isAdvance = searchParams.get('isAdvance'); // 'true' | 'false' - filter by advance (full_time only)
 
     let filter: Record<string, unknown> = {};
-    if (paymentRun) filter.paymentRun = paymentRun;
+    if (month) filter.month = String(month).slice(0, 7);
+    if (paymentType === 'contractor' || paymentType === 'full_time') filter.paymentType = paymentType;
+    // Salary/work payment = isAdvance false or missing (legacy). Advance = isAdvance true.
+    if ((paymentType === 'full_time' || paymentType === 'contractor') && isAdvance === 'true') {
+      filter.isAdvance = true;
+    } else if ((paymentType === 'full_time' || paymentType === 'contractor') && isAdvance === 'false') {
+      filter.$or = [{ isAdvance: false }, { isAdvance: { $exists: false } }];
+    }
     if (employeeId) {
-      if (hasRole(user, ['admin', 'finance', 'hr'])) {
-        filter = { employee: employeeId };
-      } else if (user.employeeId === employeeId) {
-        filter = { employee: employeeId };
+      if (hasRole(user, ['admin', 'finance', 'hr']) || user.employeeId === employeeId) {
+        filter.employee = employeeId;
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     } else if (user.employeeId) {
-      filter = { employee: user.employeeId };
-    } else if (hasRole(user, ['admin', 'finance', 'hr'])) {
-      filter = {};
-    } else {
+      filter.employee = user.employeeId;
+    } else if (!hasRole(user, ['admin', 'finance', 'hr'])) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -75,8 +80,7 @@ export async function POST(req: NextRequest) {
     const {
       employeeId,
       paymentType,
-      periodStart,
-      periodEnd,
+      month,
       baseAmount,
       addDeductAmount,
       addDeductRemarks,
@@ -92,12 +96,13 @@ export async function POST(req: NextRequest) {
       carriedForwardRemarks,
       isAdvance,
       workRecordIds,
-      paymentRun,
     } = body;
 
-    if (!employeeId || !paymentType || !periodStart || !periodEnd || totalPayable === undefined || paymentAmount === undefined || paymentAmount === null || !paymentMode) {
+    if (!employeeId || !paymentType || !month || totalPayable === undefined || paymentAmount === undefined || paymentAmount === null || !paymentMode) {
       return NextResponse.json({ error: 'Required fields missing' }, { status: 400 });
     }
+
+    const monthStr = String(month).slice(0, 7); // YYYY-MM
 
     await connectDB();
 
@@ -113,8 +118,7 @@ export async function POST(req: NextRequest) {
     const payment = await Payment.create({
       employee: employeeId,
       paymentType,
-      periodStart: new Date(periodStart),
-      periodEnd: new Date(periodEnd),
+      month: monthStr,
       baseAmount: baseAmount ?? 0,
       addDeductAmount: addDeductAmount ?? 0,
       addDeductRemarks: addDeductRemarks || '',
@@ -130,7 +134,6 @@ export async function POST(req: NextRequest) {
       carriedForwardRemarks: carriedForwardRemarks || '',
       isAdvance: isAdvance ?? false,
       workRecordRefs,
-      paymentRun: paymentRun || '',
       paidAt: new Date(),
       createdBy: user.userId,
     });

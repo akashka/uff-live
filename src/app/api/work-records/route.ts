@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import WorkRecord from '@/lib/models/WorkRecord';
 import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
+import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -13,8 +15,8 @@ export async function GET(req: NextRequest) {
     await connectDB();
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get('employeeId');
-    const periodStart = searchParams.get('periodStart');
-    const periodEnd = searchParams.get('periodEnd');
+    const branchId = searchParams.get('branchId');
+    const month = searchParams.get('month');
 
     let filter: Record<string, unknown> = {};
 
@@ -34,8 +36,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (periodStart) filter = { ...filter, periodEnd: { $gte: new Date(periodStart) } };
-    if (periodEnd) filter = { ...filter, periodStart: { $lte: new Date(periodEnd) } };
+    if (branchId) filter = { ...filter, branch: branchId };
+    if (month) filter = { ...filter, month: String(month).slice(0, 7) };
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
@@ -45,7 +47,8 @@ export async function GET(req: NextRequest) {
       WorkRecord.find(filter)
         .populate('employee', 'name _id')
         .populate('branch', 'name _id')
-        .sort({ periodEnd: -1 })
+        .populate('styleOrder', 'styleCode _id')
+        .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -65,6 +68,39 @@ export async function GET(req: NextRequest) {
   }
 }
 
+async function getAvailableQuantity(
+  styleOrderId: string,
+  branchId: string,
+  month: string,
+  rateMasterId: string,
+  excludeWorkRecordId?: string
+): Promise<number> {
+  const styleOrder = await StyleOrder.findById(styleOrderId).lean();
+  if (!styleOrder) return 0;
+
+  const monthStr = String(month).slice(0, 7);
+  const monthData = (styleOrder.monthWiseData as { month: string; totalOrderQuantity: number }[])?.find(
+    (m) => m.month === monthStr
+  );
+  const totalOrderQty = monthData?.totalOrderQuantity ?? 0;
+
+  const producedFilter: Record<string, unknown> = {
+    styleOrder: styleOrderId,
+    branch: branchId,
+    month: monthStr,
+  };
+  if (excludeWorkRecordId) producedFilter._id = { $ne: excludeWorkRecordId };
+
+  const produced = await WorkRecord.aggregate([
+    { $match: producedFilter },
+    { $unwind: '$workItems' },
+    { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+    { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+  ]);
+  const producedQty = produced[0]?.total ?? 0;
+  return Math.max(0, totalOrderQty - producedQty);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getAuthUser();
@@ -72,11 +108,13 @@ export async function POST(req: NextRequest) {
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { employeeId, branchId, periodStart, periodEnd, workItems, notes, otHours, otAmount } = body;
+    const { employeeId, branchId, month, styleOrderId, workItems, notes, otHours, otAmount } = body;
 
-    if (!employeeId || !branchId || !periodStart || !periodEnd || !Array.isArray(workItems)) {
-      return NextResponse.json({ error: 'Employee, branch, period and work items required' }, { status: 400 });
+    if (!employeeId || !branchId || !month || !Array.isArray(workItems)) {
+      return NextResponse.json({ error: 'Employee, branch, month and work items required' }, { status: 400 });
     }
+
+    const monthStr = String(month).slice(0, 7);
 
     await connectDB();
 
@@ -84,6 +122,11 @@ export async function POST(req: NextRequest) {
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     if (employee.employeeType !== 'contractor') {
       return NextResponse.json({ error: 'Work records are for contractor employees only' }, { status: 400 });
+    }
+
+    const branchIds = (employee.branches || []).map((b: unknown) => (typeof b === 'object' && b && '_id' in b ? (b as { _id: { toString: () => string } })._id.toString() : String(b)));
+    if (!branchIds.includes(branchId)) {
+      return NextResponse.json({ error: 'Employee is not associated with this branch' }, { status: 400 });
     }
 
     const rateMasterIds = workItems.map((w: { rateMasterId: string }) => w.rateMasterId);
@@ -103,14 +146,25 @@ export async function POST(req: NextRequest) {
       const ratePerUnit = branchRate?.amount ?? 0;
       const quantity = Number(item.quantity) || 0;
       const multiplier = Number(item.multiplier) || 1;
-      const amount = quantity * multiplier * ratePerUnit;
 
+      if (styleOrderId && quantity > 0) {
+        const available = await getAvailableQuantity(styleOrderId, branchId, monthStr, item.rateMasterId);
+        if (quantity > available) {
+          return NextResponse.json(
+            { error: `Quantity ${quantity} exceeds available ${available} for this rate. Reduce and try again.` },
+            { status: 400 }
+          );
+        }
+      }
+
+      const amount = quantity * multiplier * ratePerUnit;
       workItemsWithAmounts.push({
         rateMaster: item.rateMasterId,
         rateName: (rateMaster as { name: string }).name,
         unit: (rateMaster as { unit: string }).unit,
         quantity,
         multiplier,
+        remarks: item.remarks || '',
         ratePerUnit,
         amount,
       });
@@ -127,8 +181,8 @@ export async function POST(req: NextRequest) {
     const record = await WorkRecord.create({
       employee: employeeId,
       branch: branchId,
-      periodStart: new Date(periodStart),
-      periodEnd: new Date(periodEnd),
+      month: monthStr,
+      styleOrder: styleOrderId || undefined,
       workItems: workItemsWithAmounts,
       otHours: Number(otHours) || 0,
       otAmount: otAmt,
@@ -139,6 +193,7 @@ export async function POST(req: NextRequest) {
     const populated = await WorkRecord.findById(record._id)
       .populate('employee', 'name _id')
       .populate('branch', 'name _id')
+      .populate('styleOrder', 'styleCode _id')
       .lean();
     return NextResponse.json(populated);
   } catch (e) {

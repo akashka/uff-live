@@ -82,6 +82,22 @@ function RatesIcon() {
   );
 }
 
+function StyleOrderIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+    </svg>
+  );
+}
+
+function AnalyticsIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  );
+}
+
 function LogoutIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,33 +116,82 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessUsers = user?.role === 'admin';
   const canAccessEmployees = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessRates = user?.role === 'admin';
+  const canAccessStyleOrders = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessWorkRecords = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const canAccessPayments = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccessAnalytics = ['admin', 'finance', 'hr'].includes(user?.role || '') || !!user?.employeeId;
   const isEmployee = !!user?.employeeId;
 
-  const navItems = [
+  const hasPayments = canAccessPayments || (isEmployee && !canAccessPayments);
+
+  const navItems: { href?: string; label: string; icon: React.ReactNode; children?: { href: string; label: string }[] }[] = [
     { href: '/', label: t('home'), icon: <HomeIcon /> },
     { href: '/profile', label: t('profile'), icon: <ProfileIcon /> },
     ...(canAccessBranches ? [{ href: '/branches', label: t('branches'), icon: <BranchesIcon /> }] : []),
-    ...(canAccessUsers ? [{ href: '/users', label: t('users'), icon: <UsersIcon /> }] : []),
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
-    ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
-    ...(canAccessPayments ? [{ href: '/payments', label: t('payments'), icon: <PaymentsIcon /> }] : []),
-    ...(isEmployee && !canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
-    ...(isEmployee && !canAccessPayments ? [{ href: '/payments', label: t('payments'), icon: <PaymentsIcon /> }] : []),
-    ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
+    ...(canAccessUsers ? [{ href: '/users', label: t('users'), icon: <UsersIcon /> }] : []),
     ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster'), icon: <RatesIcon /> }] : []),
+    ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders'), icon: <StyleOrderIcon /> }] : []),
+    ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(hasPayments
+      ? [
+          {
+            label: t('payments'),
+            icon: <PaymentsIcon />,
+            children: [
+              { href: '/payments/contractors', label: t('contractors') },
+              { href: '/payments/full-time', label: t('fullTime') },
+            ],
+          },
+        ]
+      : []),
+    ...(isEmployee && !canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(canAccessAnalytics ? [{ href: '/style-orders/analytics', label: t('analytics'), icon: <AnalyticsIcon /> }] : []),
+    ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
   ];
 
   const navContent = (
     <>
-      {navItems.map((item) => {
-        const isPassbook = item.href.includes('/passbook');
-        const isActive = isPassbook ? pathname.includes('/passbook') && pathname.startsWith('/employees/') : pathname === item.href;
+      {navItems.map((item, idx) => {
+        if (item.children) {
+          return (
+            <div key={`payments-${idx}`} className="space-y-0.5">
+              <div className="flex items-center gap-3 px-4 py-2.5 text-slate-300 text-sm font-medium">
+                {item.icon}
+                <span>{item.label}</span>
+              </div>
+              {item.children.map((child) => {
+                const isActive = pathname === child.href;
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 pl-11 pr-4 py-2.5 rounded-lg transition text-sm ${
+                      isActive
+                        ? 'bg-uff-accent text-uff-primary font-medium'
+                        : 'text-slate-200 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>{child.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          );
+        }
+        const href = item.href!;
+        const isPassbook = href.includes('/passbook');
+        const isAnalytics = href.includes('/analytics');
+        const isActive = isPassbook
+          ? pathname.includes('/passbook') && pathname.startsWith('/employees/')
+          : isAnalytics
+            ? pathname.startsWith('/style-orders/analytics')
+            : pathname === href;
         return (
           <Link
-            key={item.href}
-            href={item.href}
+            key={href}
+            href={href}
             onClick={() => setSidebarOpen(false)}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
               isActive

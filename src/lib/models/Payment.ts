@@ -11,8 +11,7 @@ export interface IPayment extends Document {
   _id: mongoose.Types.ObjectId;
   employee: mongoose.Types.ObjectId;
   paymentType: 'contractor' | 'full_time';
-  periodStart: Date;
-  periodEnd: Date;
+  month: string; // YYYY-MM
   baseAmount: number;
   addDeductAmount: number;
   addDeductRemarks: string;
@@ -28,7 +27,6 @@ export interface IPayment extends Document {
   carriedForwardRemarks: string;
   isAdvance: boolean;
   workRecordRefs: IWorkRecordRef[];
-  paymentRun?: string;
   paidAt: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -47,8 +45,7 @@ const PaymentSchema = new Schema<IPayment>(
   {
     employee: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
     paymentType: { type: String, enum: ['contractor', 'full_time'], required: true },
-    periodStart: { type: Date, required: true },
-    periodEnd: { type: Date, required: true },
+    month: { type: String, required: true }, // YYYY-MM
     baseAmount: { type: Number, required: true, default: 0 },
     addDeductAmount: { type: Number, default: 0 },
     addDeductRemarks: { type: String, default: '' },
@@ -64,7 +61,6 @@ const PaymentSchema = new Schema<IPayment>(
     carriedForwardRemarks: { type: String, default: '' },
     isAdvance: { type: Boolean, default: false },
     workRecordRefs: [WorkRecordRefSchema],
-    paymentRun: { type: String, default: '' },
     paidAt: { type: Date, required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
@@ -74,8 +70,7 @@ const PaymentSchema = new Schema<IPayment>(
 // Indexes for list queries at scale (lakhs of payments)
 PaymentSchema.index({ employee: 1, paidAt: -1 });
 PaymentSchema.index({ paidAt: -1 });
-PaymentSchema.index({ paymentRun: 1 });
-PaymentSchema.index({ employee: 1, periodStart: 1, periodEnd: 1 });
+PaymentSchema.index({ employee: 1, month: 1 });
 
 export default (mongoose.models.Payment as Model<IPayment>) ||
   mongoose.model<IPayment>('Payment', PaymentSchema);

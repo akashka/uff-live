@@ -96,10 +96,12 @@ export function useProfile() {
 }
 
 /** Payments list - paginated */
-export function usePayments(employeeId?: string, paymentRun?: string, enabled = true, options?: { page?: number; limit?: number }) {
+export function usePayments(employeeId?: string, enabled = true, options?: { page?: number; limit?: number; month?: string; paymentType?: 'contractor' | 'full_time'; isAdvance?: boolean }) {
   const params = new URLSearchParams();
   if (employeeId) params.set('employeeId', employeeId);
-  if (paymentRun) params.set('paymentRun', paymentRun);
+  if (options?.month) params.set('month', options.month);
+  if (options?.paymentType) params.set('paymentType', options.paymentType);
+  if (options?.isAdvance !== undefined) params.set('isAdvance', String(options.isAdvance));
   if (options?.page) params.set('page', String(options.page));
   if (options?.limit) params.set('limit', String(options.limit));
   const key = `/api/payments${params.toString() ? `?${params}` : ''}`;
@@ -121,11 +123,11 @@ export function usePayments(employeeId?: string, paymentRun?: string, enabled = 
 }
 
 /** Work records - paginated */
-export function useWorkRecords(params?: { employeeId?: string; periodStart?: string; periodEnd?: string; page?: number; limit?: number }, enabled = true) {
+export function useWorkRecords(params?: { employeeId?: string; branchId?: string; month?: string; page?: number; limit?: number }, enabled = true) {
   const search = new URLSearchParams();
   if (params?.employeeId) search.set('employeeId', params.employeeId);
-  if (params?.periodStart) search.set('periodStart', params.periodStart);
-  if (params?.periodEnd) search.set('periodEnd', params.periodEnd);
+  if (params?.branchId) search.set('branchId', params.branchId);
+  if (params?.month) search.set('month', params.month);
   if (params?.page) search.set('page', String(params.page));
   if (params?.limit) search.set('limit', String(params.limit));
   const key = `/api/work-records?${search.toString() || 'all'}`;
@@ -140,6 +142,43 @@ export function useWorkRecords(params?: { employeeId?: string; periodStart?: str
     page: data?.page ?? 1,
     limit: data?.limit ?? 50,
     hasMore: data?.hasMore ?? false,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Style orders list */
+export function useStyleOrders(includeInactive = false, branchId?: string, month?: string) {
+  const params = new URLSearchParams();
+  params.set('includeInactive', String(includeInactive));
+  if (branchId) params.set('branchId', branchId);
+  if (month) params.set('month', month);
+  const key = `/api/style-orders?${params.toString()}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  return {
+    styleOrders: Array.isArray(data) ? data : [],
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Style orders by branch+month (with available quantities) */
+export function useStyleOrdersByBranchMonth(branchId?: string, month?: string, enabled = true) {
+  const params = new URLSearchParams();
+  if (branchId) params.set('branchId', branchId);
+  if (month) params.set('month', month);
+  const key = branchId && month ? `/api/style-orders/by-branch-month?${params.toString()}` : null;
+  const { data, error, isLoading, mutate } = useSWR(enabled && key ? key : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  });
+  return {
+    styleOrders: Array.isArray(data) ? data : [],
     error,
     loading: isLoading,
     mutate,

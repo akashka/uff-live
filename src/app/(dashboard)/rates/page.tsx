@@ -8,6 +8,8 @@ import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useRates, useBranches } from '@/lib/hooks/useApi';
+import ConfirmModal from '@/components/ConfirmModal';
+import Modal from '@/components/Modal';
 import ValidatedInput from '@/components/ValidatedInput';
 
 interface Branch {
@@ -42,6 +44,7 @@ export default function RatesPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -189,6 +192,22 @@ export default function RatesPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/rates/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rate_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMessage({ type: 'error', text: t('error') });
+    }
+  };
+
   const handleImport = async () => {
     if (!importFile) return;
     setImporting(true);
@@ -214,17 +233,21 @@ export default function RatesPage() {
     }
   };
 
-  const handleToggleActive = async (r: RateMaster) => {
-    try {
-      await fetch(`/api/rates/${r._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !r.isActive }),
-      });
-      mutateRates();
-    } catch {
-      setMessage({ type: 'error', text: t('error') });
-    }
+  const handleToggleActive = (r: RateMaster) => {
+    setConfirmModal({
+      message: r.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
+      confirmLabel: r.isActive ? t('makeInactive') : t('makeActive'),
+      variant: 'warning',
+      onConfirm: async () => {
+        const res = await fetch(`/api/rates/${r._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !r.isActive }),
+        });
+        if (!res.ok) throw new Error();
+        mutateRates();
+      },
+    });
   };
 
   const formatRate = (r: RateMaster) => {
@@ -360,13 +383,30 @@ export default function RatesPage() {
         </div>
       )}
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 my-8">
-            <h2 className="text-lg font-semibold mb-4">
-              {modal === 'view' ? t('view') : modal === 'create' ? t('create') : t('edit')} {t('rate')}
-            </h2>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+      <Modal
+        open={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal === 'view' ? t('view') : modal === 'create' ? t('create') : t('edit')} ${t('rate')}`}
+        size="xl"
+        footer={
+          <div className="flex gap-3 justify-end">
+            {modal !== 'view' && (
+              <button onClick={handleSave} disabled={saving || !form.name || !form.unit} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
+                {saving ? '...' : t('save')}
+              </button>
+            )}
+            {modal === 'view' && editingId && (
+              <button onClick={() => setModal('edit')} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium transition">
+                {t('edit')}
+              </button>
+            )}
+            <button onClick={() => setModal(null)} className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-50 transition">
+              {modal === 'view' ? t('close') : t('cancel')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('rateName')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <ValidatedInput
@@ -489,43 +529,28 @@ export default function RatesPage() {
                   </div>
                 )}
               </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              {modal !== 'view' && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !form.name || !form.unit}
-                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
-                >
-                  {saving ? '...' : t('save')}
-                </button>
-              )}
-              {modal === 'view' && editingId && (
-                <button
-                  onClick={() => setModal('edit')}
-                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
-                >
-                  {t('edit')}
-                </button>
-              )}
-              <button
-                onClick={() => setModal(null)}
-                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface"
-              >
-                {modal === 'view' ? t('close') : t('cancel')}
-              </button>
-            </div>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {importModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h2 className="text-lg font-semibold mb-4">{t('importFromExcel')}</h2>
             <p className="text-sm text-slate-600 mb-4">
-              Upload an Excel file (.xls or .xlsx) with columns: SL NO, DESCRIPTION, RATE. Same format as RATE LIST.xlsx.
+              Upload an Excel file (.xls or .xlsx) with columns: SL NO, DESCRIPTION, RATE.
             </p>
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-uff-accent bg-uff-accent/10 text-uff-accent hover:bg-uff-accent/20 font-medium text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {t('downloadTemplate')}
+              </button>
+            </div>
             <div className="space-y-4">
               <div>
                 <input
@@ -566,6 +591,25 @@ export default function RatesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          open={!!confirmModal}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={t('cancel')}
+          variant={confirmModal.variant}
+          onConfirm={async () => {
+            try {
+              await confirmModal.onConfirm();
+            } catch (err) {
+              setMessage({ type: 'error', text: t('error') });
+              throw err;
+            }
+          }}
+          onCancel={() => setConfirmModal(null)}
+        />
       )}
     </div>
   );

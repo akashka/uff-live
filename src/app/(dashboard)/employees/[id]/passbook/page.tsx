@@ -91,7 +91,7 @@ export default function EmployeePassbookPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href={isOwnProfile ? '/profile' : '/employees'}
@@ -105,6 +105,19 @@ export default function EmployeePassbookPage() {
           </Link>
           <PageHeader title={t('passbook')} />
         </div>
+        {rowsWithBalance.length > 0 && (
+          <a
+            href={`/api/employees/${employeeId}/passbook?format=excel`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium text-sm hover:bg-slate-50 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {t('export')} Excel
+          </a>
+        )}
       </div>
 
       <div className="rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm">
@@ -118,6 +131,11 @@ export default function EmployeePassbookPage() {
               </p>
             </div>
           </div>
+          {employee.employeeType === 'full_time' && (
+            <p className="mt-4 text-sm text-slate-600 bg-slate-100/80 rounded-lg px-4 py-2.5 border border-slate-200">
+              {t('passbookFullTimeHelp')}
+            </p>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -161,8 +179,13 @@ export default function EmployeePassbookPage() {
                         <span className="text-slate-400">–</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-slate-800">
-                      ₹{(row.balance ?? 0).toLocaleString()}
+                    <td className="px-4 py-3 text-sm text-right font-medium">
+                      {((): React.ReactNode => {
+                        const bal = row.balance ?? 0;
+                        if (bal > 0) return <span className="text-green-700">₹{bal.toLocaleString()}</span>;
+                        if (bal < 0) return <span className="text-red-700">₹{bal.toLocaleString()}</span>;
+                        return <span className="text-slate-600">₹0</span>;
+                      })()}
                     </td>
                   </tr>
                 ))
@@ -173,15 +196,19 @@ export default function EmployeePassbookPage() {
 
         {rowsWithBalance.length > 0 && (
           <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
-            <span className="text-sm font-semibold text-slate-800">
-              {t('outstanding')}: ₹{outstanding.toLocaleString()}
+            <span className="text-sm font-semibold">
+              {outstanding >= 0 ? (
+                <span className="text-slate-800">{t('outstanding')}: ₹{outstanding.toLocaleString()}</span>
+              ) : (
+                <span className="text-red-700">{t('outstanding')}: ₹{outstanding.toLocaleString()} <span className="text-slate-600 font-normal">({t('advance')} {t('toRecover')})</span></span>
+              )}
             </span>
             {hasMore && (
               <button
                 onClick={() => setPage((p) => p + 1)}
                 className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-sm"
               >
-                Load more
+                {t('loadMore')}
               </button>
             )}
           </div>

@@ -58,6 +58,7 @@ export default function ProfilePage() {
     fetch('/api/profile')
       .then((r) => r.json())
       .then((d) => {
+        if (d?.error) return;
         setData(d);
         if (d.employee) {
           setEditForm({
@@ -155,11 +156,11 @@ export default function ProfilePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700">{t('email')}</label>
-              <p className="mt-1 text-slate-800">{data.user.email}</p>
+              <p className="mt-1 text-slate-800">{data.user?.email ?? '-'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">{t('role')}</label>
-              <p className="mt-1 text-slate-800">{roleLabels[data.user.role] || data.user.role}</p>
+              <p className="mt-1 text-slate-800">{roleLabels[data.user?.role ?? ''] ?? data.user?.role ?? '-'}</p>
             </div>
           </div>
 

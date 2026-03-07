@@ -184,8 +184,7 @@ async function seed() {
     const workRecords: {
       employee: mongoose.Types.ObjectId;
       branch: mongoose.Types.ObjectId;
-      periodStart: Date;
-      periodEnd: Date;
+      month: string;
       workItems: { rateMaster: mongoose.Types.ObjectId; rateName: string; unit: string; quantity: number; ratePerUnit: number; amount: number }[];
       totalAmount: number;
     }[] = [];
@@ -200,10 +199,9 @@ async function seed() {
       const rateName = (rateEntry as { name?: string }).name || 'Stitching';
       const amountPerUnit = ((rateEntry as { branchRates?: { amount: number }[] }).branchRates?.[0]?.amount) ?? 18;
 
-      const periodEnd = new Date(now);
-      periodEnd.setDate(periodEnd.getDate() - i * 7);
-      const periodStart = new Date(periodEnd);
-      periodStart.setDate(periodStart.getDate() - 13);
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - i);
+      const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
       const qty = 40 + (i % 50);
       const amount = qty * amountPerUnit;
@@ -211,8 +209,7 @@ async function seed() {
       workRecords.push({
         employee: emp._id,
         branch: branchId,
-        periodStart,
-        periodEnd,
+        month,
         workItems: [{ rateMaster: rateId, rateName, unit: 'per piece', quantity: qty, ratePerUnit: amountPerUnit, amount }],
         totalAmount: amount,
       });
@@ -230,13 +227,14 @@ async function seed() {
     const existingPeriods = new Set<string>();
     const paidWorkRecords = await Payment.find().lean();
     paidWorkRecords.forEach((p) => {
-      existingPeriods.add(`${p.employee}-${p.periodStart}-${p.periodEnd}`);
+      existingPeriods.add(`${p.employee}-${(p as { month?: string }).month}`);
     });
 
     let added = 0;
     for (const wr of workRecords) {
       if (added >= targetPayments - paymentCount) break;
-      const key = `${wr.employee}-${wr.periodStart}-${wr.periodEnd}`;
+      const month = (wr as { month?: string }).month || '';
+      const key = `${wr.employee}-${month}`;
       if (existingPeriods.has(key)) continue;
 
       const totalAmount = wr.totalAmount ?? 0;
@@ -246,8 +244,7 @@ async function seed() {
       await Payment.create({
         employee: wr.employee,
         paymentType: 'contractor',
-        periodStart: wr.periodStart,
-        periodEnd: wr.periodEnd,
+        month,
         baseAmount: totalAmount,
         addDeductAmount: 0,
         addDeductRemarks: '',
@@ -266,7 +263,7 @@ async function seed() {
         paidAt: new Date(),
         createdBy: adminUser._id,
       });
-      existingPeriods.add(key);
+      existingPeriods.add(`${wr.employee}-${month}`);
       added++;
     }
     if (added > 0) console.log(`✓ Payments: added ${added} dummy payments`);
@@ -274,16 +271,14 @@ async function seed() {
 
   // Full-time salary payments (if no contractor work records for them)
   if (fullTimers.length > 0 && adminUser && paymentCount < targetPayments) {
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     for (const emp of fullTimers.slice(0, 3)) {
       const existing = await Payment.findOne({
         employee: emp._id,
         paymentType: 'full_time',
-        periodStart: { $lte: monthStart },
-        periodEnd: { $gte: monthEnd },
+        month,
       });
       if (existing) continue;
 
@@ -295,8 +290,7 @@ async function seed() {
       await Payment.create({
         employee: emp._id,
         paymentType: 'full_time',
-        periodStart: monthStart,
-        periodEnd: monthEnd,
+        month,
         baseAmount: salary,
         addDeductAmount: 0,
         addDeductRemarks: '',

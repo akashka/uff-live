@@ -19,12 +19,12 @@ export async function GET(req: NextRequest) {
     await connectDB();
     const lastPayment = await Payment.findOne({ employee: employeeId })
       .sort({ paidAt: -1 })
-      .select('paidAt periodEnd')
+      .select('paidAt month')
       .lean();
 
     return NextResponse.json({
       lastPaidAt: lastPayment?.paidAt || null,
-      lastPeriodEnd: lastPayment?.periodEnd || null,
+      lastMonth: lastPayment?.month || null,
     });
   } catch (e) {
     console.error(e);

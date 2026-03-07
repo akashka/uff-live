@@ -8,6 +8,8 @@ import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useBranches } from '@/lib/hooks/useApi';
+import ConfirmModal from '@/components/ConfirmModal';
+import Modal from '@/components/Modal';
 
 interface Branch {
   _id: string;
@@ -30,6 +32,7 @@ export default function BranchesPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const openCreate = () => {
     setForm({ name: '', address: '', phoneNumber: '', email: '' });
@@ -88,17 +91,21 @@ export default function BranchesPage() {
     }
   };
 
-  const handleToggleActive = async (b: Branch) => {
-    try {
-      await fetch(`/api/branches/${b._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !b.isActive }),
-      });
-      mutateBranches();
-    } catch {
-      setMessage({ type: 'error', text: t('error') });
-    }
+  const handleToggleActive = (b: Branch) => {
+    setConfirmModal({
+      message: b.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
+      confirmLabel: b.isActive ? t('makeInactive') : t('makeActive'),
+      variant: 'warning',
+      onConfirm: async () => {
+        const res = await fetch(`/api/branches/${b._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !b.isActive }),
+        });
+        if (!res.ok) throw new Error();
+        mutateBranches();
+      },
+    });
   };
 
   const filtered = (Array.isArray(branches) ? branches : []).filter((b) => {
@@ -212,13 +219,30 @@ export default function BranchesPage() {
         </div>
       )}
 
-      {modal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              {modal === 'view' ? t('view') : modal === 'create' ? t('create') : t('edit')} {t('branches')}
-            </h2>
-            <div className="space-y-4">
+      <Modal
+        open={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal === 'view' ? t('view') : modal === 'create' ? t('create') : t('edit')} ${t('branches')}`}
+        size="lg"
+        footer={
+          <div className="flex gap-3 justify-end">
+            {modal !== 'view' && (
+              <button onClick={handleSave} disabled={saving || !form.name || !form.address || !form.phoneNumber} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
+                {saving ? '...' : t('save')}
+              </button>
+            )}
+            {modal === 'view' && editingId && (
+              <button onClick={() => setModal('edit')} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium transition">
+                {t('edit')}
+              </button>
+            )}
+            <button onClick={() => setModal(null)} className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-50 transition">
+              {modal === 'view' ? t('close') : t('cancel')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('branchName')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <ValidatedInput
@@ -261,33 +285,25 @@ export default function BranchesPage() {
                 />
               </div>
             </div>
-            <div className="flex gap-2 mt-6">
-              {modal !== 'view' && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !form.name || !form.address || !form.phoneNumber}
-                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
-                >
-                  {saving ? '...' : t('save')}
-                </button>
-              )}
-              {modal === 'view' && editingId && (
-                <button
-                  onClick={() => setModal('edit')}
-                  className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
-                >
-                  {t('edit')}
-                </button>
-              )}
-              <button
-                onClick={() => setModal(null)}
-                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface"
-              >
-                {modal === 'view' ? t('close') : t('cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
+      </Modal>
+
+      {confirmModal && (
+        <ConfirmModal
+          open={!!confirmModal}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={t('cancel')}
+          variant={confirmModal.variant}
+          onConfirm={async () => {
+            try {
+              await confirmModal.onConfirm();
+            } catch (err) {
+              setMessage({ type: 'error', text: t('error') });
+              throw err;
+            }
+          }}
+          onCancel={() => setConfirmModal(null)}
+        />
       )}
     </div>
   );

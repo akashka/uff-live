@@ -9,7 +9,10 @@
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
-    "seed:dummy": "tsx scripts/seed-dummy-data.ts"
+    "seed:dummy": "tsx scripts/seed-dummy-data.ts",
+    "seed:fresh": "tsx scripts/seed-fresh.ts",
+    "migrate": "tsx scripts/migrate-to-month-based.ts",
+    "migrate:style-order": "tsx scripts/migrate-style-order-to-multi-branch.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

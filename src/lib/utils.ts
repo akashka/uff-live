@@ -1,9 +1,18 @@
-/** Format date as dd MMM yyyy (e.g. 15 Mar 2025) */
+/** Format date as dd MMMM yyyy (e.g. 15 March 2025) */
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+/** Format month YYYY-MM as "MMMM YYYY" (e.g. March 2025) */
+export function formatMonth(month: string | null | undefined): string {
+  if (!month) return '';
+  const [y, m] = String(month).split('-').map(Number);
+  if (!y || !m) return month;
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
 /** Format date range as dd MMM yyyy – dd MMM yyyy */

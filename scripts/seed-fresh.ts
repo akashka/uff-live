@@ -1,0 +1,272 @@
+/**
+ * Seed fresh dummy data: Clears ALL existing data, then seeds branches, employees,
+ * rates, style orders (with month-wise data), work records (linked to style orders), payments.
+ *
+ * Run: npm run seed:fresh
+ * Or: MONGODB_URI=... npx tsx scripts/seed-fresh.ts
+ */
+
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
+import mongoose from 'mongoose';
+
+const envPath = resolve(process.cwd(), '.env.local');
+if (existsSync(envPath)) {
+  const content = readFileSync(envPath, 'utf8');
+  content.split('\n').forEach((line) => {
+    const match = line.match(/^([^#=]+)=(.*)$/);
+    if (match) {
+      const key = match[1]?.trim() ?? '';
+      if (key && process.env[key] === undefined) {
+        process.env[key] = match[2]?.trim().replace(/^["']|["']$/g, '') ?? '';
+      }
+    }
+  });
+}
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/factory-management';
+
+async function seedFresh() {
+  console.log('Connecting to MongoDB...');
+  await mongoose.connect(MONGODB_URI);
+
+  const Branch = (await import('../src/lib/models/Branch')).default;
+  const Employee = (await import('../src/lib/models/Employee')).default;
+  const RateMaster = (await import('../src/lib/models/RateMaster')).default;
+  const StyleOrder = (await import('../src/lib/models/StyleOrder')).default;
+  const WorkRecord = (await import('../src/lib/models/WorkRecord')).default;
+  const Payment = (await import('../src/lib/models/Payment')).default;
+  const User = (await import('../src/lib/models/User')).default;
+
+  // 1. Clear all existing data (order matters)
+  console.log('\nClearing existing data...');
+  await Payment.deleteMany({});
+  await WorkRecord.deleteMany({});
+  await StyleOrder.deleteMany({});
+  await RateMaster.deleteMany({});
+  await Employee.deleteMany({});
+  await User.deleteMany({});
+  await Branch.deleteMany({});
+  console.log('✓ All data cleared\n');
+
+  // 2. Create branches
+  const branches = await Branch.insertMany([
+    { name: 'UFF Main Factory', address: '123 Industrial Area, Bangalore', phoneNumber: '+91 9876543210', email: 'main@uff.com' },
+    { name: 'UFF North Unit', address: '456 Sector B, Bangalore', phoneNumber: '+91 9876543211', email: 'north@uff.com' },
+    { name: 'UFF South Unit', address: '789 Export Zone, Chennai', phoneNumber: '+91 9876543212', email: 'south@uff.com' },
+  ]);
+  console.log('✓ Branches created (3)');
+  const branchIds = branches.map((b) => b._id);
+
+  // 3. Create employees
+  const employees = await Employee.insertMany([
+    {
+      name: 'Ramesh Kumar',
+      contactNumber: '+91 9000111111',
+      email: 'ramesh@uff.com',
+      emergencyNumber: '+91 9000111112',
+      dateOfBirth: new Date('1990-05-15'),
+      gender: 'male',
+      employeeType: 'contractor',
+      branches: [branchIds[0], branchIds[1]],
+      pfOpted: true,
+      monthlyPfAmount: 500,
+      esiOpted: true,
+      monthlyEsiAmount: 200,
+    },
+    {
+      name: 'Priya Sharma',
+      contactNumber: '+91 9000222222',
+      email: 'priya@uff.com',
+      emergencyNumber: '+91 9000222223',
+      dateOfBirth: new Date('1992-08-20'),
+      gender: 'female',
+      employeeType: 'contractor',
+      branches: [branchIds[0]],
+    },
+    {
+      name: 'Suresh Reddy',
+      contactNumber: '+91 9000333333',
+      email: 'suresh@uff.com',
+      emergencyNumber: '+91 9000333334',
+      dateOfBirth: new Date('1988-01-10'),
+      gender: 'male',
+      employeeType: 'full_time',
+      branches: [branchIds[0]],
+      monthlySalary: 35000,
+      salaryBreakup: { pf: 2100, esi: 525, other: 0 },
+    },
+    {
+      name: 'Lakshmi Nair',
+      contactNumber: '+91 9000444444',
+      email: 'lakshmi@uff.com',
+      emergencyNumber: '+91 9000444445',
+      dateOfBirth: new Date('1995-11-25'),
+      gender: 'female',
+      employeeType: 'full_time',
+      branches: [branchIds[1]],
+      monthlySalary: 28000,
+      salaryBreakup: { pf: 1680, esi: 420, other: 0 },
+    },
+  ]);
+  console.log('✓ Employees created (4)');
+  const contractors = employees.filter((e) => e.employeeType === 'contractor');
+
+  // 4. Create admin user
+  const bcrypt = (await import('bcryptjs')).default;
+  const adminUser = await User.create({
+    email: 'admin@uff.com',
+    password: 'Admin@123',
+    role: 'admin',
+    isActive: true,
+  });
+  console.log('✓ Admin user created (admin@uff.com / Admin@123)');
+
+  // 5. Create rate masters
+  const rates = await RateMaster.insertMany([
+    { name: 'Stitching', description: 'Garment stitching work', unit: 'per piece', branchRates: branchIds.map((b) => ({ branch: b, amount: 18 })), isActive: true },
+    { name: 'Cutting', description: 'Fabric cutting', unit: 'per piece', branchRates: branchIds.map((b) => ({ branch: b, amount: 12 })), isActive: true },
+    { name: 'Finishing', description: 'Final finishing work', unit: 'per piece', branchRates: branchIds.map((b) => ({ branch: b, amount: 8 })), isActive: true },
+    { name: 'Quality Check', description: 'QC inspection', unit: 'per piece', branchRates: branchIds.map((b) => ({ branch: b, amount: 15 })), isActive: true },
+    { name: 'Packaging', description: 'Packing and packaging', unit: 'per piece', branchRates: branchIds.map((b) => ({ branch: b, amount: 5 })), isActive: true },
+  ]);
+  console.log(`✓ Rate Master created (${rates.length} rates)`);
+
+  // 6. Create style orders with month-wise data (current month + last 2 months)
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const d1 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const d2 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const prevMonth1 = `${d1.getFullYear()}-${String(d1.getMonth() + 1).padStart(2, '0')}`;
+  const prevMonth2 = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, '0')}`;
+
+  const styleOrders = await StyleOrder.insertMany([
+    {
+      styleCode: 'STYLE-001',
+      details: 'Summer T-Shirt Order - stitching at Main, cutting at North',
+      branches: [branchIds[0], branchIds[1]],
+      rateMasterItems: [rates[0]._id, rates[1]._id, rates[2]._id],
+      monthWiseData: [
+        { month: currentMonth, totalOrderQuantity: 500, sellingPricePerQuantity: 120 },
+        { month: prevMonth1, totalOrderQuantity: 300, sellingPricePerQuantity: 115 },
+      ],
+      isActive: true,
+    },
+    {
+      styleCode: 'STYLE-002',
+      details: 'Formal Shirt Batch',
+      branches: [branchIds[0]],
+      rateMasterItems: [rates[0]._id, rates[2]._id, rates[3]._id],
+      monthWiseData: [
+        { month: currentMonth, totalOrderQuantity: 800, sellingPricePerQuantity: 180 },
+      ],
+      isActive: true,
+    },
+    {
+      styleCode: 'STYLE-003',
+      details: 'Kurti Export Order - cutting at North, finishing at South',
+      branches: [branchIds[1], branchIds[2]],
+      rateMasterItems: [rates[0]._id, rates[1]._id, rates[4]._id],
+      monthWiseData: [
+        { month: currentMonth, totalOrderQuantity: 1200, sellingPricePerQuantity: 95 },
+      ],
+      isActive: true,
+    },
+  ]);
+  console.log(`✓ Style Orders created (${styleOrders.length}) with month-wise data for ${currentMonth}`);
+
+  // 7. Create work records linked to style orders (current month)
+  const workRecords: {
+    employee: mongoose.Types.ObjectId;
+    branch: mongoose.Types.ObjectId;
+    month: string;
+    styleOrder: mongoose.Types.ObjectId;
+    workItems: { rateMaster: mongoose.Types.ObjectId; rateName: string; unit: string; quantity: number; ratePerUnit: number; amount: number }[];
+    totalAmount: number;
+  }[] = [];
+
+  for (let i = 0; i < 12; i++) {
+    const emp = contractors[i % contractors.length];
+    const styleOrder = styleOrders[i % styleOrders.length];
+    const branches = (styleOrder as { branches?: mongoose.Types.ObjectId[] }).branches || [];
+    const branchId = branches[0] || branchIds[0];
+    const rateEntry = rates[i % 3];
+    const rateName = (rateEntry as { name?: string }).name || 'Stitching';
+    const amountPerUnit = ((rateEntry as { branchRates?: { amount: number }[] }).branchRates?.[0]?.amount) ?? 18;
+    const qty = 30 + (i % 60);
+    const amount = qty * amountPerUnit;
+
+    workRecords.push({
+      employee: emp._id,
+      branch: branchId,
+      month: currentMonth,
+      styleOrder: styleOrder._id,
+      workItems: [{ rateMaster: rateEntry._id, rateName, unit: 'per piece', quantity: qty, ratePerUnit: amountPerUnit, amount }],
+      totalAmount: amount,
+    });
+  }
+  await WorkRecord.insertMany(workRecords);
+  console.log(`✓ Work Records created (${workRecords.length}) linked to style orders`);
+
+  // 8. Create payments
+  const workRecs = await WorkRecord.find().limit(8).lean();
+  let paidCount = 0;
+  for (const wr of workRecs) {
+    const totalAmount = wr.totalAmount ?? 0;
+    const paidAmount = Math.floor(totalAmount * (0.9 + Math.random() * 0.1));
+    await Payment.create({
+      employee: wr.employee,
+      paymentType: 'contractor',
+      month: (wr as { month?: string }).month ?? currentMonth,
+      baseAmount: totalAmount,
+      addDeductAmount: 0,
+      addDeductRemarks: '',
+      pfDeducted: 0,
+      esiDeducted: 0,
+      advanceDeducted: 0,
+      totalPayable: totalAmount,
+      paymentAmount: paidAmount,
+      paymentMode: ['upi', 'bank_transfer', 'cash'][Math.floor(Math.random() * 3)] as 'upi' | 'bank_transfer' | 'cash',
+      transactionRef: `TXN${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
+      remainingAmount: totalAmount - paidAmount,
+      carriedForward: 0,
+      carriedForwardRemarks: '',
+      isAdvance: false,
+      workRecordRefs: [{ workRecord: wr._id, totalAmount }],
+      paidAt: new Date(),
+      createdBy: adminUser._id,
+    });
+    paidCount++;
+  }
+  console.log(`✓ Payments created (${paidCount})`);
+
+  // 9. Create employee users
+  const { generatePassword } = await import('../src/lib/utils');
+  for (const emp of employees) {
+    const empObj = emp as { _id: mongoose.Types.ObjectId; email: string };
+    const pwd = generatePassword(12);
+    const hashed = await bcrypt.hash(pwd, 12);
+    await User.create({
+      email: empObj.email,
+      password: hashed,
+      role: 'employee',
+      employeeId: empObj._id,
+      isActive: true,
+    });
+  }
+  console.log(`✓ User accounts created for employees`);
+
+  console.log('\n' + '='.repeat(50));
+  console.log('FRESH SEED COMPLETE');
+  console.log('='.repeat(50));
+  console.log('\nAdmin: admin@uff.com / Admin@123');
+  console.log(`Style orders: ${styleOrders.length} (with month-wise data for ${currentMonth})`);
+  console.log('Dashboard style charts will show data for current month.\n');
+
+  process.exit(0);
+}
+
+seedFresh().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

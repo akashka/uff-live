@@ -15,6 +15,7 @@ import Employee from '@/lib/models/Employee';
 import Branch from '@/lib/models/Branch';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
+import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
@@ -24,8 +25,8 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const range = searchParams.get('range') || '30'; // days
-    const days = parseInt(range, 10) || 30;
+    const range = searchParams.get('range') || '1'; // months: 1=current month, 3=last 3 months, 6=last 6 months
+    const months = parseInt(range, 10) || 1;
 
     const isAdmin = hasRole(user, ['admin']);
     const isFinance = hasRole(user, ['admin', 'finance']);
@@ -48,8 +49,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (isFinance || isAdmin) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
       const [totals, byModeArr, weeklyTrend] = await Promise.all([
         Payment.aggregate([
@@ -98,7 +99,8 @@ export async function GET(req: NextRequest) {
         ])
       );
       const monthlyData: { month: string; paid: number; count: number }[] = [];
-      for (let i = days - 1; i >= 0; i -= 7) {
+      const daysForPaymentTrend = Math.min(months * 31, 180);
+      for (let i = daysForPaymentTrend - 1; i >= 0; i -= 7) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const weekStart = new Date(d);
@@ -123,8 +125,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (isHR || isAdmin) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
       const [workTotals, workWeeklyTrend] = await Promise.all([
         WorkRecord.aggregate([
@@ -160,7 +162,8 @@ export async function GET(req: NextRequest) {
         ])
       );
       const workTrend: { month: string; amount: number; count: number }[] = [];
-      for (let i = days - 1; i >= 0; i -= 7) {
+      const daysForWorkTrend = Math.min(months * 31, 180);
+      for (let i = daysForWorkTrend - 1; i >= 0; i -= 7) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const weekStart = new Date(d);
@@ -177,11 +180,156 @@ export async function GET(req: NextRequest) {
       stats.workRecords = { total: workTotal, count: workCount, trend: workTrend };
     }
 
+    if (isAdmin || isHR) {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const styleOrderCount = await StyleOrder.countDocuments({ isActive: true });
+      const workWithStyle = await WorkRecord.aggregate([
+        { $match: { createdAt: { $gte: startDate }, styleOrder: { $exists: true, $ne: null } } },
+        { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: '$totalAmount' } } },
+      ]);
+
+      // Style-wise stats for current month (aggregated by style)
+      const styles = await StyleOrder.find({ isActive: true })
+        .populate('branches', 'name _id')
+        .select('styleCode branches monthWiseData')
+        .lean();
+
+      const byStyle: { styleCode: string; branchName: string; totalOrderQty: number; totalProduced: number; mfgCost: number; completionPct: number }[] = [];
+      for (const s of styles) {
+        const monthData = (s.monthWiseData as { month: string; totalOrderQuantity: number }[])?.find((m) => m.month === currentMonth);
+        if (!monthData) continue;
+
+        const totalOrderQty = monthData.totalOrderQuantity ?? 0;
+
+        const produced = await WorkRecord.aggregate([
+          { $match: { styleOrder: s._id, month: currentMonth } },
+          { $unwind: '$workItems' },
+          { $group: { _id: null, totalQty: { $sum: '$workItems.quantity' }, totalMfg: { $sum: '$workItems.amount' } } },
+        ]);
+        const totalProduced = produced[0]?.totalQty ?? 0;
+        const mfgCost = produced[0]?.totalMfg ?? 0;
+        const completionPct = totalOrderQty > 0 ? Math.round((totalProduced / totalOrderQty) * 100) : 0;
+        const branchesList = (s.branches || []) as { name?: string }[];
+        const branchName = branchesList.map((b) => b?.name || '').filter(Boolean).join(', ') || '';
+
+        byStyle.push({
+          styleCode: s.styleCode,
+          branchName,
+          totalOrderQty,
+          totalProduced,
+          mfgCost,
+          completionPct,
+        });
+      }
+
+      const completedStyles = byStyle.filter((x) => x.completionPct >= 100);
+      const behindStyles = byStyle.filter((x) => x.totalOrderQty > 0 && x.completionPct < 100);
+      const suggestions: string[] = [];
+      if (completedStyles.length > 0) {
+        suggestions.push(`${completedStyles.length} style(s) completed: ${completedStyles.map((x) => x.styleCode).join(', ')}`);
+      }
+      if (behindStyles.length > 0) {
+        const lowest = [...behindStyles].sort((a, b) => a.completionPct - b.completionPct).slice(0, 3);
+        suggestions.push(`Need attention: ${lowest.map((x) => `${x.styleCode} (${x.completionPct}%)`).join(', ')}`);
+      }
+      if (byStyle.length === 0 && styleOrderCount > 0) {
+        suggestions.push('Add month-wise data to style orders for current month to track production.');
+      }
+      if (byStyle.length === 0 && styleOrderCount === 0) {
+        suggestions.push('Create style/order codes and link work records to track production.');
+      }
+      if (behindStyles.length > 0) {
+        const avgCompletion = behindStyles.reduce((s, x) => s + x.completionPct, 0) / behindStyles.length;
+        suggestions.push(`Avg completion of behind styles: ${Math.round(avgCompletion)}%. Focus on lowest performers first.`);
+      }
+      if (completedStyles.length > 0 && behindStyles.length === 0) {
+        suggestions.push('All active styles on track. Great job!');
+      }
+
+      const totalOrderAll = byStyle.reduce((s, x) => s + x.totalOrderQty, 0);
+      const totalProducedAll = byStyle.reduce((s, x) => s + x.totalProduced, 0);
+      const overallCompletion = totalOrderAll > 0 ? Math.round((totalProducedAll / totalOrderAll) * 100) : 0;
+      const estimatedRemaining = totalOrderAll - totalProducedAll;
+
+      // Estimate days to complete (based on last 7 days production rate)
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const recentProduced = await WorkRecord.aggregate([
+        { $match: { createdAt: { $gte: weekAgo }, styleOrder: { $exists: true, $ne: null } } },
+        { $unwind: '$workItems' },
+        { $group: { _id: null, totalQty: { $sum: '$workItems.quantity' } } },
+      ]);
+      const weeklyRate = recentProduced[0]?.totalQty ?? 0;
+      const estCompletionDays = weeklyRate > 0 && estimatedRemaining > 0
+        ? Math.ceil((estimatedRemaining / (weeklyRate / 7)))
+        : null;
+
+      stats.styleOrders = {
+        count: styleOrderCount,
+        workRecordsWithStyle: workWithStyle[0]?.count ?? 0,
+        workAmountWithStyle: workWithStyle[0]?.totalAmount ?? 0,
+        byStyle,
+        completedCount: completedStyles.length,
+        behindCount: behindStyles.length,
+        overallCompletion,
+        totalOrderQty: totalOrderAll,
+        totalProduced: totalProducedAll,
+        estimatedRemaining,
+        estCompletionDays,
+        suggestions,
+      };
+    }
+
+    // Alerts & updates (for admin, finance, hr)
+    if (isAdmin || isFinance || isHR) {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const alerts: { type: string; message: string; priority: 'high' | 'medium' | 'low'; href?: string }[] = [];
+
+      if (isFinance || isAdmin) {
+        const unpaidWork = await WorkRecord.aggregate([
+          { $match: { month: currentMonth } },
+          { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+        ]);
+        const paidThisMonth = await Payment.aggregate([
+          { $match: { month: currentMonth, isAdvance: false } },
+          { $group: { _id: null, paid: { $sum: '$paymentAmount' } } },
+        ]);
+        const workTotal = unpaidWork[0]?.total ?? 0;
+        const paidTotal = paidThisMonth[0]?.paid ?? 0;
+        const pending = workTotal - paidTotal;
+        if (pending > 0) {
+          alerts.push({
+            type: 'payment',
+            message: `₹${pending.toLocaleString()} work amount pending payment this month`,
+            priority: 'high',
+            href: '/payments/contractors',
+          });
+        }
+      }
+
+      if (isAdmin || isHR) {
+        const styleStats = stats.styleOrders as { behindCount?: number; completedCount?: number } | undefined;
+        if (styleStats?.behindCount && styleStats.behindCount > 0) {
+          alerts.push({
+            type: 'production',
+            message: `${styleStats.behindCount} style(s) behind target — review production`,
+            priority: 'medium',
+            href: '/style-orders/analytics',
+          });
+        }
+      }
+
+      stats.alerts = alerts;
+    }
+
     if (isEmployee && user.employeeId) {
       const employee = await Employee.findById(user.employeeId).lean();
       if (employee) {
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
+        const now = new Date();
+        const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
         const empObjId = new mongoose.Types.ObjectId(user.employeeId);
         const empFilter = { employee: empObjId };
 
@@ -255,7 +403,8 @@ export async function GET(req: NextRequest) {
 
         const myWorkTrend: { month: string; amount: number; count: number }[] = [];
         const myPaymentTrend: { month: string; paid: number; count: number }[] = [];
-        for (let i = days - 1; i >= 0; i -= 7) {
+        const daysForTrend = Math.min(months * 31, 180);
+        for (let i = daysForTrend - 1; i >= 0; i -= 7) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const weekStart = new Date(d);

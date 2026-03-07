@@ -14,20 +14,15 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const format = searchParams.get('format') || 'csv'; // csv | excel
     const includeZero = searchParams.get('includeZero') === 'true';
-    const paymentRun = searchParams.get('paymentRun') || '';
-    const startDate = searchParams.get('startDate') || '';
-    const endDate = searchParams.get('endDate') || '';
+    const month = searchParams.get('month') || '';
+    const paymentType = searchParams.get('paymentType'); // 'contractor' | 'full_time'
 
     await connectDB();
 
     const filter: Record<string, unknown> = {};
-    if (paymentRun) filter.paymentRun = paymentRun;
-    if (startDate) filter.paidAt = { ...(filter.paidAt as object), $gte: new Date(startDate) };
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filter.paidAt = { ...(filter.paidAt as object), $lte: end };
-    }
+    if (month) filter.month = String(month).slice(0, 7);
+    if (paymentType === 'contractor' || paymentType === 'full_time') filter.paymentType = paymentType;
+    if (paymentType === 'full_time') filter.isAdvance = false; // Bank export: salary payments only, not advance
     if (!includeZero) filter.paymentAmount = { $gt: 0 };
 
     const limit = Math.min(50000, Math.max(1, parseInt(searchParams.get('limit') || '50000', 10) || 50000));
@@ -52,7 +47,7 @@ export async function GET(req: NextRequest) {
     if (format === 'excel') {
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
-      const sheetName = paymentRun || `Payments_${new Date().toISOString().slice(0, 10)}`;
+      const sheetName = `Payments_${new Date().toISOString().slice(0, 10)}`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
       const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
       return new NextResponse(buf, {

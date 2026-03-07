@@ -18,8 +18,10 @@ import UserAvatar from '@/components/UserAvatar';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import ValidatedInput from '@/components/ValidatedInput';
+import MultiselectDropdown from '@/components/MultiselectDropdown';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, useBranches } from '@/lib/hooks/useApi';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface Branch {
   _id: string;
@@ -72,6 +74,7 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const [form, setForm] = useState({
     name: '',
@@ -255,24 +258,21 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleToggleActive = async (e: Employee) => {
-    try {
-      await fetch(`/api/employees/${e._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !e.isActive }),
-      });
-      mutateEmployees();
-    } catch {
-      setMessage({ type: 'error', text: t('error') });
-    }
-  };
-
-  const toggleBranch = (id: string) => {
-    setForm((f) => ({
-      ...f,
-      branches: f.branches.includes(id) ? f.branches.filter((b) => b !== id) : [...f.branches, id],
-    }));
+  const handleToggleActive = (e: Employee) => {
+    setConfirmModal({
+      message: e.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
+      confirmLabel: e.isActive ? t('makeInactive') : t('makeActive'),
+      variant: 'warning',
+      onConfirm: async () => {
+        const res = await fetch(`/api/employees/${e._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !e.isActive }),
+        });
+        if (!res.ok) throw new Error();
+        mutateEmployees();
+      },
+    });
   };
 
   const copyPassword = (pwd: string) => {
@@ -689,14 +689,16 @@ export default function EmployeesPage() {
               {branches.length === 0 && (
                 <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
               )}
-              <div className="flex flex-wrap gap-3">
-                {(Array.isArray(branches) ? branches : []).map((b) => (
-                  <label key={b._id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 ${modal !== 'view' ? 'hover:bg-slate-50 cursor-pointer' : 'bg-slate-50 cursor-default'}`}>
-                    <input type="checkbox" checked={form.branches.includes(b._id)} onChange={() => toggleBranch(b._id)} disabled={modal === 'view'} className="rounded" />
-                    <span className="text-sm text-slate-800">{b.name}</span>
-                  </label>
-                ))}
-              </div>
+              <MultiselectDropdown
+                options={Array.isArray(branches) ? branches : []}
+                selectedIds={form.branches}
+                onChange={(ids) => setForm((f) => ({ ...f, branches: ids }))}
+                placeholder={t('selectBranches')}
+                label={undefined}
+                disabled={modal === 'view'}
+                selectAllLabel={t('selectAll')}
+                searchPlaceholder={t('search')}
+              />
             </FormSection>
           </div>
         </div>
@@ -875,7 +877,7 @@ export default function EmployeesPage() {
               onClick={() => setPage((p) => p + 1)}
               className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium"
             >
-              {t('loadMore') || 'Load more'}
+              {t('loadMore')}
             </button>
           )}
         </div>
@@ -905,6 +907,25 @@ export default function EmployeesPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          open={!!confirmModal}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={t('cancel')}
+          variant={confirmModal.variant}
+          onConfirm={async () => {
+            try {
+              await confirmModal.onConfirm();
+            } catch (err) {
+              setMessage({ type: 'error', text: t('error') });
+              throw err;
+            }
+          }}
+          onCancel={() => setConfirmModal(null)}
+        />
       )}
     </div>
   );

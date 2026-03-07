@@ -8,6 +8,7 @@ import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface UserRecord {
   _id: string;
@@ -33,6 +34,7 @@ export default function UsersPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterByEmployeeType, setFilterByEmployeeType] = useState<string>('all');
   const [filterByRole, setFilterByRole] = useState<string>('all');
+  const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const [adminForm, setAdminForm] = useState({ email: '', password: '' });
   const [editAdminForm, setEditAdminForm] = useState({ email: '', password: '', isActive: true, role: 'employee' as string });
@@ -178,17 +180,21 @@ export default function UsersPage() {
     }
   };
 
-  const handleToggleUserActive = async (u: UserRecord) => {
-    try {
-      await fetch(`/api/users/${u._id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !u.isActive }),
-      });
-      fetchUsers();
-    } catch {
-      setMessage({ type: 'error', text: t('error') });
-    }
+  const handleToggleUserActive = (u: UserRecord) => {
+    setConfirmModal({
+      message: u.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
+      confirmLabel: u.isActive ? t('makeInactive') : t('makeActive'),
+      variant: 'warning',
+      onConfirm: async () => {
+        const res = await fetch(`/api/users/${u._id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: !u.isActive }),
+        });
+        if (!res.ok) throw new Error();
+        fetchUsers();
+      },
+    });
   };
 
   const copyPassword = (pwd: string) => {
@@ -594,6 +600,25 @@ export default function UsersPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          open={!!confirmModal}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={t('cancel')}
+          variant={confirmModal.variant}
+          onConfirm={async () => {
+            try {
+              await confirmModal.onConfirm();
+            } catch (err) {
+              setMessage({ type: 'error', text: t('error') });
+              throw err;
+            }
+          }}
+          onCancel={() => setConfirmModal(null)}
+        />
       )}
     </div>
   );

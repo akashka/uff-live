@@ -205,12 +205,10 @@ async function seed() {
   if (workRecordCount === 0 && contractorIds.length > 0 && rates.length > 0) {
     const rateId = rates[0]._id;
     const rateName = (rates[0] as { name?: string }).name || 'Stitching';
-    const workRecords: { employee: unknown; branch: unknown; periodStart: Date; periodEnd: Date; workItems: unknown[]; totalAmount: number }[] = [];
+    const workRecords: { employee: unknown; branch: unknown; month: string; workItems: unknown[]; totalAmount: number }[] = [];
 
     for (let m = 1; m <= 3; m++) {
-      const periodEnd = new Date(2025, 2, m * 10);
-      const periodStart = new Date(periodEnd);
-      periodStart.setDate(periodStart.getDate() - 14);
+      const month = `2025-${String(m).padStart(2, '0')}`;
       contractorIds.forEach((empId, i) => {
         const qty = 50 + m * 10 + i * 5;
         const ratePerUnit = 18;
@@ -218,8 +216,7 @@ async function seed() {
         workRecords.push({
           employee: empId,
           branch: branchIds[0],
-          periodStart,
-          periodEnd,
+          month,
           workItems: [{ rateMaster: rateId, rateName, unit: 'per piece', quantity: qty, ratePerUnit, amount }],
           totalAmount: amount,
         });
@@ -242,11 +239,11 @@ async function seed() {
       const totalAmount = wr.totalAmount ?? 0;
       const paidAmount = Math.floor(totalAmount * 0.8);
       const remaining = totalAmount - paidAmount;
+      const month = (wr as { month?: string }).month || '2025-01';
       await Payment.create({
         employee: empId,
         paymentType: 'contractor',
-        periodStart: wr.periodStart,
-        periodEnd: wr.periodEnd,
+        month,
         baseAmount: totalAmount,
         addDeductAmount: 0,
         addDeductRemarks: '',
