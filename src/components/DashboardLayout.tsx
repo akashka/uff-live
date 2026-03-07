@@ -269,8 +269,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
 
-        {/* Main content - offset by sidebar width */}
-        <div className="flex-1 flex flex-col min-w-0 lg:pl-60">
+        {/* Main content - offset by sidebar width, scrollable */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 lg:pl-60 overflow-y-auto">
           <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             {children}
           </main>

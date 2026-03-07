@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useApp } from '@/contexts/AppContext';
 import ValidatedInput from '@/components/ValidatedInput';
 import { useAuth } from '@/contexts/AuthContext';
@@ -389,40 +388,6 @@ export default function ProfilePage() {
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-slate-700">{t('branches')}</label>
                     <p className="mt-1 text-slate-800">{(emp.branches || []).map((b: { name: string }) => b.name).join(', ') || '—'}</p>
-                  </div>
-                )}
-                {user?.employeeId && (
-                  <div className="sm:col-span-2 border-t border-slate-200 pt-4 mt-2">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('quickLinks')}</h3>
-                    <div className="flex flex-wrap gap-3">
-                      <Link
-                        href="/work-records"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-uff-surface font-medium text-sm text-slate-800"
-                      >
-                        {t('workRecords')}
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
-                      </Link>
-                      <Link
-                        href="/payments"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-uff-surface font-medium text-sm text-slate-800"
-                      >
-                        {t('payments')}
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                      </Link>
-                      <Link
-                        href={`/employees/${user.employeeId}/passbook`}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium text-sm"
-                      >
-                        {t('passbook')}
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                        </svg>
-                      </Link>
-                    </div>
                   </div>
                 )}
               </div>
