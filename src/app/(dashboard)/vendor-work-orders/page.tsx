@@ -240,7 +240,7 @@ export default function VendorWorkOrdersPage() {
       const next = { ...f.workItems };
       if (field === 'quantity') next[rateMasterId] = { ...item, quantity: Math.max(1, Number(value) || 1) };
       else if (field === 'ratePerUnit') next[rateMasterId] = { ...item, ratePerUnit: Math.max(0, Number(value) || 0) };
-      else next[rateMasterId] = { ...item, [field]: value };
+      else next[rateMasterId] = { ...item, remarks: String(value ?? '') };
       return { ...f, workItems: next };
     });
   };

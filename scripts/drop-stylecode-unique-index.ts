@@ -43,8 +43,11 @@ async function main() {
       !('brand' in i.key)
   );
   for (const idx of toDrop) {
-    await coll.dropIndex(idx.name);
-    console.log(`Dropped old index: ${idx.name} (did not include brand - was blocking same code for different brands)`);
+    const name = idx.name;
+    if (name) {
+      await coll.dropIndex(name);
+      console.log(`Dropped old index: ${name} (did not include brand - was blocking same code for different brands)`);
+    }
   }
   if (toDrop.length === 0) {
     try {
