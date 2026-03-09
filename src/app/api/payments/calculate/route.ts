@@ -4,12 +4,13 @@ import WorkRecord from '@/lib/models/WorkRecord';
 import Payment from '@/lib/models/Payment';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { roundAmount, roundDays } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!hasRole(user, ['admin', 'finance', 'accountancy', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get('employeeId');
@@ -36,9 +37,9 @@ export async function GET(req: NextRequest) {
         .sort({ month: 1 })
         .lean();
 
-      const totalWorkAmount = workRecords.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
-      const pfToDeduct = emp.pfOpted && emp.monthlyPfAmount ? emp.monthlyPfAmount : 0;
-      const esiToDeduct = emp.esiOpted && emp.monthlyEsiAmount ? emp.monthlyEsiAmount : 0;
+      const totalWorkAmount = roundAmount(workRecords.reduce((sum, r) => sum + (r.totalAmount || 0), 0));
+      const pfToDeduct = roundAmount(emp.pfOpted && emp.monthlyPfAmount ? emp.monthlyPfAmount : 0);
+      const esiToDeduct = roundAmount(emp.esiOpted && emp.monthlyEsiAmount ? emp.monthlyEsiAmount : 0);
 
       return NextResponse.json({
         type: 'contractor',
@@ -55,12 +56,12 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'full_time') {
-      const gross = emp.monthlySalary || 0;
-      const pf = emp.salaryBreakup?.pf || 0;
-      const esi = emp.salaryBreakup?.esi || 0;
-      const other = emp.salaryBreakup?.other || 0;
-      const totalDeductions = pf + esi + other;
-      const baseAmount = gross - totalDeductions;
+      const gross = roundAmount(emp.monthlySalary || 0);
+      const pf = roundAmount(emp.salaryBreakup?.pf || 0);
+      const esi = roundAmount(emp.salaryBreakup?.esi || 0);
+      const other = roundAmount(emp.salaryBreakup?.other || 0);
+      const totalDeductions = roundAmount(pf + esi + other);
+      const baseAmount = roundAmount(gross - totalDeductions);
 
       // Working days in month (excluding Sundays)
       const [y, m] = monthStr.split('-').map(Number);
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
         esi,
         other,
         totalDeductions,
-        totalWorkingDays,
+        totalWorkingDays: roundDays(totalWorkingDays),
       });
     }
 

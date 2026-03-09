@@ -19,6 +19,7 @@ import { Skeleton, DashboardSkeleton } from '@/components/Skeleton';
 import { AnimatePresence } from 'framer-motion';
 import { Animated, AnimatedStagger, AnimatedItem } from '@/components/Animated';
 import { useDashboardStats, useReminders } from '@/lib/hooks/useApi';
+import { formatAmount } from '@/lib/utils';
 
 const DASHBOARD_CONFIG_KEY = 'uff-dashboard-widgets';
 
@@ -91,8 +92,8 @@ export default function HomePage() {
   const [configOpen, setConfigOpen] = useState(false);
 
   const isAdmin = user?.role === 'admin';
-  const isFinance = ['admin', 'finance'].includes(user?.role || '');
-  const isHR = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const isFinance = ['admin', 'finance', 'accountancy'].includes(user?.role || '');
+  const isHR = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isEmployee = !!user?.employeeId;
 
   useEffect(() => {
@@ -159,7 +160,7 @@ export default function HomePage() {
       </div>
       <div className="space-y-8">
       <PageHeader
-        title={`${t('dashboard')} — ${user?.role === 'admin' ? t('admin') : user?.role === 'finance' ? t('finance') : user?.role === 'hr' ? t('hr') : t('employee')}`}
+        title={`${t('dashboard')} — ${user?.role === 'admin' ? t('admin') : user?.role === 'finance' ? t('finance') : user?.role === 'accountancy' ? t('accountancy') : user?.role === 'hr' ? t('hr') : t('employee')}`}
       >
         <div className="flex items-center gap-2">
           <select
@@ -426,7 +427,7 @@ export default function HomePage() {
             <AnimatedItem><StatCard
               title={stats.myStats.employeeType === 'contractor' ? t('workRecords') : t('monthlySalary')}
               value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
-              subtitle={stats.myStats.employeeType === 'contractor' ? `₹${stats.myStats.workTotal?.toLocaleString()} total` : t('fixedMonthly')}
+              subtitle={stats.myStats.employeeType === 'contractor' ? `₹${formatAmount(stats.myStats.workTotal)} total` : t('fixedMonthly')}
               icon={<UsersIcon />}
               href="/work-records"
               gradient="from-violet-500 to-purple-600"
@@ -434,21 +435,21 @@ export default function HomePage() {
             <AnimatedItem><StatCard
               title={t('payments')}
               value={stats.myStats.payments}
-              subtitle={`₹${stats.myStats.paidTotal?.toLocaleString()} received`}
+              subtitle={`₹${formatAmount(stats.myStats.paidTotal)} received`}
               icon={<PaymentIcon />}
               href="/payments"
               gradient="from-emerald-500 to-teal-600"
             /></AnimatedItem>
             <AnimatedItem><StatCard
               title={t('totalAmount')}
-              value={`₹${stats.myStats.paidTotalPayable?.toLocaleString()}`}
+              value={`₹${formatAmount(stats.myStats.paidTotalPayable)}`}
               subtitle={t('totalPayable')}
               icon={<AmountIcon />}
               gradient="from-amber-500 to-orange-600"
             /></AnimatedItem>
             <AnimatedItem><StatCard
               title={t('remainingDue')}
-              value={`₹${stats.myStats.dueTotal?.toLocaleString()}`}
+              value={`₹${formatAmount(stats.myStats.dueTotal)}`}
               subtitle={stats.myStats.dueTotal > 0 ? t('due') : t('paid')}
               icon={<DueIcon />}
               gradient={stats.myStats.dueTotal > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-600'}
@@ -465,7 +466,7 @@ export default function HomePage() {
             </p>
             <p className="relative mt-2 text-lg font-semibold">
               {stats.myStats.workRecords > 0 && stats.myStats.payments > 0
-                ? `~₹${Math.round((stats.myStats.workTotal || 0) / Math.max(1, stats.myStats.workRecords || 1) * 2).toLocaleString()} ${t('perMonth')}`
+                ? `~₹${formatAmount((stats.myStats.workTotal || 0) / Math.max(1, stats.myStats.workRecords || 1) * 2)} ${t('perMonth')}`
                 : stats.myStats.workRecords > 0
                   ? t('pendingWorkRecords')
                   : t('noData')}
@@ -516,7 +517,7 @@ export default function HomePage() {
               <AnimatedItem><StatCard
                 title={t('workRecords')}
                 value={stats.workRecords.count}
-                subtitle={`₹${stats.workRecords.total?.toLocaleString()} work`}
+                subtitle={`₹${formatAmount(stats.workRecords.total)} work`}
                 icon={<WorkIcon />}
                 href="/work-records"
                 gradient="from-teal-500 to-cyan-600"
@@ -570,7 +571,7 @@ export default function HomePage() {
               <StatCard
                 title={t('styleOrders')}
                 value={stats.styleOrders.count}
-                subtitle={`₹${stats.styleOrders.workAmountWithStyle?.toLocaleString()} work`}
+                subtitle={`₹${formatAmount(stats.styleOrders.workAmountWithStyle)} work`}
                 icon={<WorkIcon />}
                 href="/style-orders"
                 gradient="from-cyan-500 to-blue-600"
@@ -585,14 +586,14 @@ export default function HomePage() {
                     {stats.styleOrders.overallCompletion ?? 0}%
                   </p>
                   <p className="relative mt-1 text-xs opacity-90">
-                    {stats.styleOrders.totalProduced?.toLocaleString()} / {stats.styleOrders.totalOrderQty?.toLocaleString()} {t('produced')}
+                    {formatAmount(stats.styleOrders.totalProduced)} / {formatAmount(stats.styleOrders.totalOrderQty)} {t('produced')}
                   </p>
                 </div>
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white shadow-xl">
                   <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10" />
                   <p className="relative text-sm font-medium opacity-90">{t('estimatedRemaining')}</p>
                   <p className="relative mt-1 text-2xl font-bold tracking-tight">
-                    {(stats.styleOrders.estimatedRemaining ?? 0).toLocaleString()}
+                    {formatAmount(stats.styleOrders.estimatedRemaining)}
                   </p>
                   <p className="relative mt-1 text-xs opacity-90">{t('unitsToComplete')}</p>
                   {stats.styleOrders.estCompletionDays != null && stats.styleOrders.estCompletionDays > 0 && (
@@ -665,7 +666,7 @@ export default function HomePage() {
           <AnimatedStagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <AnimatedItem><StatCard
             title={t('totalPaid')}
-            value={`₹${stats.payments.totalPaid?.toLocaleString()}`}
+            value={`₹${formatAmount(stats.payments.totalPaid)}`}
             subtitle={`${stats.payments.count} payments`}
             icon={<PaymentIcon />}
             href="/payments"
@@ -673,14 +674,14 @@ export default function HomePage() {
           /></AnimatedItem>
           <AnimatedItem><StatCard
             title={t('totalPayable')}
-            value={`₹${stats.payments.totalPayable?.toLocaleString()}`}
+            value={`₹${formatAmount(stats.payments.totalPayable)}`}
             icon={<AmountIcon />}
             href="/payments"
             gradient="from-amber-500 to-orange-600"
           /></AnimatedItem>
           <AnimatedItem><StatCard
             title={t('remainingDue')}
-            value={`₹${stats.payments.totalRemaining?.toLocaleString()}`}
+            value={`₹${formatAmount(stats.payments.totalRemaining)}`}
             subtitle={t('outstanding')}
             icon={<DueIcon />}
             href="/payments"

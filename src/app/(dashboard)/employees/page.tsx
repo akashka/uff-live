@@ -24,6 +24,7 @@ import { useEmployees, useBranches } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 import { toast } from '@/lib/toast';
+import { formatAmount } from '@/lib/utils';
 
 interface Branch {
   _id: string;
@@ -79,6 +80,8 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+
+  const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || ''); // accountancy is read-only
 
   const [form, setForm] = useState({
     name: '',
@@ -359,7 +362,7 @@ export default function EmployeesPage() {
                 {saving ? '...' : t('save')}
               </button>
             )}
-            {modal === 'view' && editingId && (
+            {modal === 'view' && editingId && canAdd && (
               <button
                 onClick={() => setModal('edit')}
                 className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
@@ -508,6 +511,7 @@ export default function EmployeesPage() {
                         <>
                           <option value="hr">{t('hr')}</option>
                           <option value="finance">{t('finance')}</option>
+                          <option value="accountancy">{t('accountancy')}</option>
                           <option value="admin">{t('admin')}</option>
                         </>
                       )}
@@ -620,7 +624,7 @@ export default function EmployeesPage() {
                 </div>
                 {(form.monthlySalary || 0) > 0 && (
                   <p className="text-sm text-slate-600 mt-2">
-                    {t('netSalary')}: ₹{((form.monthlySalary || 0) - (form.salaryBreakup?.pf || 0) - (form.salaryBreakup?.esi || 0) - (form.salaryBreakup?.other || 0)).toLocaleString()}
+                    {t('netSalary')}: ₹{formatAmount((form.monthlySalary || 0) - (form.salaryBreakup?.pf || 0) - (form.salaryBreakup?.esi || 0) - (form.salaryBreakup?.other || 0))}
                   </p>
                 )}
               </FormSection>
@@ -773,14 +777,16 @@ export default function EmployeesPage() {
   return (
     <div>
       <PageHeader title={t('employees')}>
-        <button
-          onClick={openCreate}
-          disabled={branches.length === 0}
-          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
-        >
-          {t('add')} {t('employees')}
-        </button>
+        {canAdd && (
+          <button
+            onClick={openCreate}
+            disabled={branches.length === 0}
+            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
+          >
+            {t('add')} {t('employees')}
+          </button>
+        )}
       </PageHeader>
 
       <ListToolbar
@@ -845,8 +851,8 @@ export default function EmployeesPage() {
                       <td className="px-4 py-3">
                         <ActionButtons
                           onView={() => openView(e)}
-                          onEdit={() => openEdit(e)}
-                          onToggleActive={() => handleToggleActive(e)}
+                          onEdit={canAdd ? () => openEdit(e) : undefined}
+                          onToggleActive={canAdd ? () => handleToggleActive(e) : undefined}
                           passbookHref={`/employees/${e._id}/passbook`}
                           isActive={e.isActive}
                           viewLabel={t('view')}
@@ -893,8 +899,8 @@ export default function EmployeesPage() {
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <ActionButtons
                     onView={() => openView(e)}
-                    onEdit={() => openEdit(e)}
-                    onToggleActive={() => handleToggleActive(e)}
+                    onEdit={canAdd ? () => openEdit(e) : undefined}
+                    onToggleActive={canAdd ? () => handleToggleActive(e) : undefined}
                     passbookHref={`/employees/${e._id}/passbook`}
                     isActive={e.isActive}
                     viewLabel={t('view')}

@@ -9,7 +9,7 @@ import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, useBranches, useRates, useWorkRecords, useStyleOrdersByBranchMonth } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
-import { formatMonth } from '@/lib/utils';
+import { formatMonth, formatAmount } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
 import { toast } from '@/lib/toast';
@@ -72,7 +72,7 @@ export default function WorkRecordsPage() {
   const { t } = useApp();
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
-  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
+  const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterBranch, setFilterBranch] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
@@ -474,7 +474,7 @@ export default function WorkRecordsPage() {
                         <td className="px-4 py-3 text-slate-700">{(r.branch as { name?: string })?.name}</td>
                         <td className="px-4 py-3 text-slate-700 text-sm">{formatMonth((r as { month?: string }).month)}</td>
                         <td className="px-4 py-3 text-slate-700">{(r.styleOrder as { styleCode?: string })?.styleCode || '–'}</td>
-                        <td className="px-4 py-3 text-right font-medium">₹{r.totalAmount?.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(r.totalAmount)}</td>
                         <td className="px-4 py-3">
                           <ActionButtons
                             onView={() => openView(r)}
@@ -513,7 +513,7 @@ export default function WorkRecordsPage() {
                 <h3 className="font-semibold text-slate-900">{(r.employee as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{(r.branch as { name?: string })?.name}</p>
                 <p className="text-sm text-slate-600">{formatMonth((r as { month?: string }).month)} • {(r.styleOrder as { styleCode?: string })?.styleCode || '–'}</p>
-                <p className="mt-2 font-semibold text-slate-900">₹{r.totalAmount?.toLocaleString()}</p>
+                <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(r.totalAmount)}</p>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <ActionButtons
                     onView={() => openView(r)}
@@ -722,7 +722,7 @@ export default function WorkRecordsPage() {
                           />
                         </div>
                         <span className="text-sm text-slate-700 w-16 py-1">
-                          ₹{((wi.quantity || 0) * (wi.multiplier ?? 1) * (wi.ratePerUnit || 0)).toLocaleString()}
+                          ₹{formatAmount((wi.quantity || 0) * (wi.multiplier ?? 1) * (wi.ratePerUnit || 0))}
                         </span>
                         {modal !== 'view' && (
                           <button type="button" onClick={() => removeWorkItem(idx)} className="text-red-600 hover:text-red-700 text-sm self-end" aria-label={t('delete')}>
@@ -765,10 +765,10 @@ export default function WorkRecordsPage() {
               </div>
 
               <div className="flex justify-end font-semibold text-lg">
-                {t('totalAmount')}: ₹{totalAmount.toLocaleString()}
+                {t('totalAmount')}: ₹{formatAmount(totalAmount)}
                 {(form.otAmount ?? 0) > 0 && (
                   <span className="ml-2 text-sm font-normal text-slate-600">
-                    (work: ₹{workTotal.toLocaleString()} + OT: ₹{(form.otAmount ?? 0).toLocaleString()})
+                    (work: ₹{formatAmount(workTotal)} + OT: ₹{formatAmount(form.otAmount)})
                   </span>
                 )}
               </div>

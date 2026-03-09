@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const month = today.getMonth() + 1;
     const day = today.getDate();
 
-    const isUniversal = hasRole(user, ['admin', 'finance', 'hr']);
+    const isUniversal = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
     let branchFilter: mongoose.Types.ObjectId[] | null = null;
 
     if (!isUniversal) {

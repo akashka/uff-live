@@ -8,7 +8,7 @@ import PageHeader from '@/components/PageHeader';
 import { useEmployees, useBranches } from '@/lib/hooks/useApi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatMonth } from '@/lib/utils';
+import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -83,7 +83,7 @@ export default function ReportsPage() {
   } | null>(null);
   const [yoyLoading, setYoyLoading] = useState(false);
 
-  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isAdmin = user?.role === 'admin';
   const { employees } = useEmployees(false, { limit: 10000 });
   const { branches } = useBranches(true);
@@ -282,25 +282,25 @@ export default function ReportsPage() {
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6">
                     <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
                       <p className="text-sm text-emerald-700">{t('orderQty')}</p>
-                      <p className="text-xl font-bold text-emerald-900">{analyticsData.summary.totalOrderQuantity.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-emerald-900">{formatAmount(analyticsData.summary.totalOrderQuantity)}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-teal-50 border border-teal-100">
                       <p className="text-sm text-teal-700">{t('totalProduced')}</p>
-                      <p className="text-xl font-bold text-teal-900">{analyticsData.summary.totalProducedQuantity.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-teal-900">{formatAmount(analyticsData.summary.totalProducedQuantity)}</p>
                     </div>
                     {isAdmin && (
                       <>
                         <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
                           <p className="text-sm text-blue-700">{t('manufacturingCost')}</p>
-                          <p className="text-xl font-bold text-blue-900">₹{analyticsData.summary.totalManufacturingCost.toLocaleString()}</p>
+                          <p className="text-xl font-bold text-blue-900">₹{formatAmount(analyticsData.summary.totalManufacturingCost)}</p>
                         </div>
                         <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100">
                           <p className="text-sm text-indigo-700">{t('sellingPrice')}</p>
-                          <p className="text-xl font-bold text-indigo-900">₹{analyticsData.summary.totalSellingPrice.toLocaleString()}</p>
+                          <p className="text-xl font-bold text-indigo-900">₹{formatAmount(analyticsData.summary.totalSellingPrice)}</p>
                         </div>
                         <div className={`p-4 rounded-xl border ${analyticsData.summary.totalProfitLoss >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
                           <p className="text-sm text-slate-700">{t('profitLoss')}</p>
-                          <p className={`text-xl font-bold ${analyticsData.summary.totalProfitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{analyticsData.summary.totalProfitLoss.toLocaleString()}</p>
+                          <p className={`text-xl font-bold ${analyticsData.summary.totalProfitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{formatAmount(analyticsData.summary.totalProfitLoss)}</p>
                         </div>
                       </>
                     )}
@@ -334,13 +334,13 @@ export default function ReportsPage() {
                               <td className="px-4 py-3 text-slate-700">{r.branch?.name || '-'}</td>
                               <td className="px-4 py-3 text-slate-700">{formatMonth(r.month)}</td>
                               <td className="px-4 py-3 text-slate-700">{r.rateName}</td>
-                              <td className="px-4 py-3 text-right">{r.totalOrderQuantity.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right">{r.totalProducedQuantity.toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right">{formatAmount(r.totalOrderQuantity)}</td>
+                              <td className="px-4 py-3 text-right">{formatAmount(r.totalProducedQuantity)}</td>
                               {isAdmin && (
                                 <>
-                                  <td className="px-4 py-3 text-right">₹{r.manufacturingCost.toLocaleString()}</td>
-                                  <td className="px-4 py-3 text-right">₹{r.totalSellingPrice.toLocaleString()}</td>
-                                  <td className={`px-4 py-3 text-right font-medium ${r.profitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{r.profitLoss.toLocaleString()}</td>
+                                  <td className="px-4 py-3 text-right">₹{formatAmount(r.manufacturingCost)}</td>
+                                  <td className="px-4 py-3 text-right">₹{formatAmount(r.totalSellingPrice)}</td>
+                                  <td className={`px-4 py-3 text-right font-medium ${r.profitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{formatAmount(r.profitLoss)}</td>
                                 </>
                               )}
                             </tr>
@@ -395,16 +395,16 @@ export default function ReportsPage() {
                         {branchCompData.data.map((row) => (
                           <tr key={row.branchName} className="hover:bg-slate-50">
                             <td className="px-4 py-3 text-slate-800 font-medium">{row.branchName}</td>
-                            <td className="px-4 py-3 text-right">₹{row.workAmount.toLocaleString('en-IN')}</td>
-                            <td className="px-4 py-3 text-right">₹{row.paymentAmount.toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-3 text-right">₹{formatAmount(row.workAmount)}</td>
+                            <td className="px-4 py-3 text-right">₹{formatAmount(row.paymentAmount)}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="bg-slate-100 font-semibold">
                         <tr>
                           <td className="px-4 py-3">{t('all')}</td>
-                          <td className="px-4 py-3 text-right">₹{(branchCompData.totals?.workAmount ?? 0).toLocaleString('en-IN')}</td>
-                          <td className="px-4 py-3 text-right">₹{(branchCompData.totals?.paymentAmount ?? 0).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3 text-right">₹{formatAmount(branchCompData.totals?.workAmount)}</td>
+                          <td className="px-4 py-3 text-right">₹{formatAmount(branchCompData.totals?.paymentAmount)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -415,7 +415,7 @@ export default function ReportsPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="branchName" />
                         <YAxis />
-                        <Tooltip formatter={(v: number | undefined) => (v != null ? `₹${v.toLocaleString('en-IN')}` : '')} />
+                        <Tooltip formatter={(v: number | undefined) => (v != null ? `₹${formatAmount(v)}` : '')} />
                         <Legend />
                         <Bar dataKey="workAmount" name={t('workAmount')} fill="#3b82f6" radius={[4, 4, 0, 0]} />
                         <Bar dataKey="paymentAmount" name={t('payments')} fill="#6366f1" radius={[4, 4, 0, 0]} />
@@ -486,7 +486,7 @@ export default function ReportsPage() {
                         row.months.map((m) => (
                           <tr key={`${row.employeeName}-${m.month}`} className="hover:bg-slate-50">
                             <td className="px-4 py-2 text-slate-800 font-medium">{row.employeeName}</td>
-                            <td className="px-4 py-2 text-right">₹{m.amount.toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-2 text-right">₹{formatAmount(m.amount)}</td>
                             <td className="px-4 py-2 text-slate-600">{m.month}</td>
                           </tr>
                         ))
@@ -553,7 +553,7 @@ export default function ReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="monthLabel" />
                       <YAxis />
-                      <Tooltip formatter={(v: number | undefined) => (v != null ? `₹${v.toLocaleString('en-IN')}` : '')} />
+                      <Tooltip formatter={(v: number | undefined) => (v != null ? `₹${formatAmount(v)}` : '')} />
                       <Legend />
                       <Bar dataKey="currentYear.payments" name={`${yoyYear} ${t('payments')}`} fill="#f43f5e" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="previousYear.payments" name={`${yoyYear - 1} ${t('payments')}`} fill="#94a3b8" radius={[4, 4, 0, 0]} />

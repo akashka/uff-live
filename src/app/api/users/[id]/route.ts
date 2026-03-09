@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       user.password = await bcrypt.hash(body.password, 12);
     }
     if (body.isActive !== undefined) user.isActive = body.isActive;
-    if (body.role !== undefined && ['admin', 'finance', 'hr', 'employee'].includes(body.role)) {
+    if (body.role !== undefined && ['admin', 'finance', 'accountancy', 'hr', 'employee'].includes(body.role)) {
       user.role = body.role;
     }
 

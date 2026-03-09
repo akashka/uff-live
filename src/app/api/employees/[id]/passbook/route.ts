@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id: employeeId } = await params;
     if (!employeeId) return NextResponse.json({ error: 'Employee required' }, { status: 400 });
 
-    const canAccessAny = hasRole(user, ['admin', 'finance', 'hr']);
+    const canAccessAny = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
     const isOwnProfile = String(user.employeeId) === String(employeeId);
     if (!canAccessAny && !isOwnProfile) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

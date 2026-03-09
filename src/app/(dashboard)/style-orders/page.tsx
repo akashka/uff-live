@@ -66,7 +66,8 @@ export default function StyleOrdersPage() {
     monthWiseData: [] as { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }[],
   });
 
-  const canAccess = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || ''); // accountancy is read-only
 
   useEffect(() => {
     if (Array.isArray(branches) && branches.length === 1 && !filterBranch) {
@@ -263,14 +264,16 @@ export default function StyleOrdersPage() {
   return (
     <div>
       <PageHeader title={t('styleOrders')}>
-        <button
-          onClick={openCreate}
-          disabled={!Array.isArray(branches) || branches.length === 0}
-          className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
-        >
-          {t('add')} {t('styleOrder')}
-        </button>
+        {canAdd && (
+          <button
+            onClick={openCreate}
+            disabled={!Array.isArray(branches) || branches.length === 0}
+            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
+          >
+            {t('add')} {t('styleOrder')}
+          </button>
+        )}
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
@@ -325,8 +328,8 @@ export default function StyleOrdersPage() {
                       <td className="px-4 py-3">
                         <ActionButtons
                           onView={() => openView(s)}
-                          onEdit={() => openEdit(s)}
-                          onToggleActive={() => handleToggleActive(s)}
+                          onEdit={canAdd ? () => openEdit(s) : undefined}
+                          onToggleActive={canAdd ? () => handleToggleActive(s) : undefined}
                           isActive={s.isActive}
                           viewLabel={t('view')}
                           editLabel={t('edit')}
@@ -359,8 +362,8 @@ export default function StyleOrdersPage() {
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <ActionButtons
                     onView={() => openView(s)}
-                    onEdit={() => openEdit(s)}
-                    onToggleActive={() => handleToggleActive(s)}
+                    onEdit={canAdd ? () => openEdit(s) : undefined}
+                    onToggleActive={canAdd ? () => handleToggleActive(s) : undefined}
                     isActive={s.isActive}
                     viewLabel={t('view')}
                     editLabel={t('edit')}

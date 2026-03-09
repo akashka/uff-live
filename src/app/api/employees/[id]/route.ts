@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { id } = await params;
-    const canAccessAny = hasRole(user, ['admin', 'finance', 'hr']);
+    const canAccessAny = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
     const isOwnProfile = user.employeeId && String(user.employeeId) === String(id);
     if (!canAccessAny && !isOwnProfile) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 }); // accountancy is read-only
 
     const { id } = await params;
     const body = await req.json();

@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-export type UserRole = 'admin' | 'finance' | 'hr' | 'employee';
+export type UserRole = 'admin' | 'finance' | 'accountancy' | 'hr' | 'employee';
 
 export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
@@ -19,7 +19,7 @@ const UserSchema = new Schema<IUser>(
   {
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'finance', 'hr', 'employee'], required: true },
+    role: { type: String, enum: ['admin', 'finance', 'accountancy', 'hr', 'employee'], required: true },
     employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', default: null },
     isActive: { type: Boolean, default: true },
   },

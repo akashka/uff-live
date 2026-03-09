@@ -8,6 +8,7 @@ import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
+import { roundAmount } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     let filter: Record<string, unknown> = {};
 
     if (employeeId) {
-      if (hasRole(user, ['admin', 'finance', 'hr'])) {
+      if (hasRole(user, ['admin', 'finance', 'accountancy', 'hr'])) {
         filter = { employee: employeeId };
       } else if (user.employeeId && String(user.employeeId) === String(employeeId)) {
         filter = { employee: employeeId };
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       }
     } else if (user.employeeId) {
       filter = { employee: user.employeeId };
-    } else if (hasRole(user, ['admin', 'finance', 'hr'])) {
+    } else if (hasRole(user, ['admin', 'finance', 'accountancy', 'hr'])) {
       filter = {};
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const amount = quantity * multiplier * ratePerUnit;
+      const amount = roundAmount(quantity * multiplier * ratePerUnit);
       workItemsWithAmounts.push({
         rateMaster: item.rateMasterId,
         rateName: (rateMaster as { name: string }).name,
@@ -177,8 +178,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No valid work items' }, { status: 400 });
     }
 
-    const otAmt = Number(otAmount) || 0;
-    const finalTotal = totalAmount + otAmt;
+    const otAmt = roundAmount(Number(otAmount) || 0);
+    const finalTotal = roundAmount(totalAmount + otAmt);
 
     const record = await WorkRecord.create({
       employee: employeeId,

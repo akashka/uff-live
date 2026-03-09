@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatAmount } from './utils';
 
 const FONT_SIZE = 10;
 const HEADER_FONT = 14;
@@ -37,15 +38,15 @@ export function createPayslipPdf(params: {
   doc.text(`Type: ${params.employeeType === 'full_time' ? 'Full Time' : 'Contractor'}`, 20, yPos);
   yPos += 12;
 
-  const body: string[][] = [['Base Amount', params.baseAmount.toLocaleString('en-IN')]];
+  const body: string[][] = [['Base Amount', formatAmount(params.baseAmount)]];
   if (params.addDeductAmount !== 0) {
-    body.push([params.addDeductRemarks || 'Add/Deduct', params.addDeductAmount.toLocaleString('en-IN')]);
+    body.push([params.addDeductRemarks || 'Add/Deduct', formatAmount(params.addDeductAmount)]);
   }
-  body.push(['Gross Payable', params.totalPayable.toLocaleString('en-IN')]);
-  if (params.pfDeducted > 0) body.push(['PF Deducted', `-${params.pfDeducted.toLocaleString('en-IN')}`]);
-  if (params.esiDeducted > 0) body.push(['ESI Deducted', `-${params.esiDeducted.toLocaleString('en-IN')}`]);
-  if (params.advanceDeducted > 0) body.push(['Advance Deducted', `-${params.advanceDeducted.toLocaleString('en-IN')}`]);
-  body.push(['Net Pay', params.paymentAmount.toLocaleString('en-IN')]);
+  body.push(['Gross Payable', formatAmount(params.totalPayable)]);
+  if (params.pfDeducted > 0) body.push(['PF Deducted', `-${formatAmount(params.pfDeducted)}`]);
+  if (params.esiDeducted > 0) body.push(['ESI Deducted', `-${formatAmount(params.esiDeducted)}`]);
+  if (params.advanceDeducted > 0) body.push(['Advance Deducted', `-${formatAmount(params.advanceDeducted)}`]);
+  body.push(['Net Pay', formatAmount(params.paymentAmount)]);
   body.push(['Payment Mode', params.paymentMode]);
   if (params.bankName) body.push(['Bank', params.bankName]);
   if (params.accountNumber) body.push(['Account', `****${String(params.accountNumber).slice(-4)}`]);
@@ -78,12 +79,12 @@ export function createPaymentSummaryPdf(params: {
   doc.text('PAYMENT SUMMARY', 148, y, { align: 'center' });
   doc.setFontSize(FONT_SIZE);
   doc.text(`Month: ${params.monthLabel}`, 20, y + 10);
-  doc.text(`Total: ₹${params.total.toLocaleString('en-IN')}`, 20, y + 17);
+  doc.text(`Total: ₹${formatAmount(params.total)}`, 20, y + 17);
 
   const body = params.rows.map((r) => [
     r.employeeName,
-    r.totalPayable.toLocaleString('en-IN'),
-    r.paymentAmount.toLocaleString('en-IN'),
+    formatAmount(r.totalPayable),
+    formatAmount(r.paymentAmount),
     r.paymentMode,
   ]);
 
@@ -121,9 +122,9 @@ export function createMonthlyReportPdf(params: {
 
   doc.text(`Month: ${params.monthLabel}`, 20, y);
   y += 10;
-  doc.text(`Total Payments: ₹${params.totalPayments.toLocaleString('en-IN')}`, 20, y);
+  doc.text(`Total Payments: ₹${formatAmount(params.totalPayments)}`, 20, y);
   y += 7;
-  doc.text(`Total Work Amount: ₹${params.totalWorkAmount.toLocaleString('en-IN')}`, 20, y);
+  doc.text(`Total Work Amount: ₹${formatAmount(params.totalWorkAmount)}`, 20, y);
   y += 7;
   doc.text(`Employees: ${params.employeeCount}`, 20, y);
   y += 7;
@@ -138,8 +139,8 @@ export function createMonthlyReportPdf(params: {
 
     const body = params.byBranch.map((b) => [
       b.branchName,
-      b.workAmount.toLocaleString('en-IN'),
-      b.paymentAmount.toLocaleString('en-IN'),
+      formatAmount(b.workAmount),
+      formatAmount(b.paymentAmount),
     ]);
 
     autoTable(doc, {

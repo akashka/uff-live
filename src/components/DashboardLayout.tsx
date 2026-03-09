@@ -151,13 +151,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessBranches = user?.role === 'admin';
   const canAccessUsers = user?.role === 'admin';
   const canAccessSystem = user?.role === 'admin';
-  const canAccessEmployees = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccessEmployees = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAccessRates = user?.role === 'admin';
-  const canAccessStyleOrders = ['admin', 'finance', 'hr'].includes(user?.role || '');
-  const canAccessWorkRecords = ['admin', 'finance', 'hr'].includes(user?.role || '');
-  const canAccessPayments = ['admin', 'finance', 'hr'].includes(user?.role || '');
-  const canAccessAnalytics = ['admin', 'finance', 'hr'].includes(user?.role || '');
-  const canAccessReports = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccessStyleOrders = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAccessWorkRecords = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAccessPayments = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAccessAnalytics = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAccessReports = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isEmployee = !!user?.employeeId;
   const isContractorEmployee = isEmployee && user?.employeeType === 'contractor';
 

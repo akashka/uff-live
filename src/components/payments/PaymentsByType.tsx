@@ -9,7 +9,7 @@ import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
-import { formatMonth } from '@/lib/utils';
+import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -74,7 +74,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const { t } = useApp();
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
-  const canView = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
+  const canView = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth());
   const [filterType, setFilterType] = useState<'all' | 'salary' | 'advance'>('all');
@@ -484,14 +484,14 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
                       <tr key={p._id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-slate-800">{(p.employee as { name?: string })?.name}</td>
                         <td className="px-4 py-3 text-slate-600 text-sm">{formatMonth(p.month)}</td>
-                        <td className="px-4 py-3 text-right">₹{p.totalPayable?.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-medium">₹{p.paymentAmount?.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right">₹{formatAmount(p.totalPayable)}</td>
+                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(p.paymentAmount)}</td>
                         <td className="px-4 py-3">
                           {p.isAdvance ? (
                             <span className="text-slate-400 text-sm">—</span>
                           ) : (p.advanceDeducted ?? 0) > 0 ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-sm font-medium" title={t('advanceDeducted')}>
-                              ✓ ₹{(p.advanceDeducted ?? 0).toLocaleString()}
+                              ✓ ₹{formatAmount(p.advanceDeducted)}
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-sm" title={t('advanceNotDeducted')}>
@@ -502,7 +502,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
                         <td className="px-4 py-3 text-slate-800">{formatMode(p.paymentMode)}</td>
                         <td className="px-4 py-3">
                           {p.remainingAmount > 0 ? (
-                            <span className="text-uff-accent text-sm">₹{p.remainingAmount?.toLocaleString()} {t('due')}</span>
+                            <span className="text-uff-accent text-sm">₹{formatAmount(p.remainingAmount)} {t('due')}</span>
                           ) : p.isAdvance ? (
                             <span className="text-blue-600 text-sm">{t('advance')}</span>
                           ) : (
@@ -541,13 +541,13 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
               <div key={p._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(p.employee as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{formatMonth(p.month)}</p>
-                <p className="mt-2 font-semibold text-slate-900">₹{p.paymentAmount?.toLocaleString()}</p>
+                <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(p.paymentAmount)}</p>
                 <p className="text-sm text-slate-600">{formatMode(p.paymentMode)}</p>
                 {!p.isAdvance && (
                   <p className="mt-1 text-sm">
                     {(p.advanceDeducted ?? 0) > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-medium">
-                        ✓ {t('advanceDeducted')} ₹{(p.advanceDeducted ?? 0).toLocaleString()}
+                        ✓ {t('advanceDeducted')} ₹{formatAmount(p.advanceDeducted)}
                       </span>
                     ) : (
                       <span className="text-slate-500">{t('advanceNotDeducted')}</span>
@@ -555,7 +555,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
                   </p>
                 )}
                 {p.remainingAmount > 0 ? (
-                  <span className="inline-block mt-2 text-uff-accent text-sm">₹{p.remainingAmount?.toLocaleString()} {t('due')}</span>
+                  <span className="inline-block mt-2 text-uff-accent text-sm">₹{formatAmount(p.remainingAmount)} {t('due')}</span>
                 ) : p.isAdvance ? (
                   <span className="inline-block mt-2 text-blue-600 text-sm">{t('advance')}</span>
                 ) : (
@@ -614,15 +614,15 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           </button>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <p className="text-sm text-slate-800">{t('baseAmount')}: ₹{form.baseAmount?.toLocaleString()}</p>
+            <p className="text-sm text-slate-800">{t('baseAmount')}: ₹{formatAmount(form.baseAmount)}</p>
             {paymentType === 'contractor' && form.pfDeducted > 0 && (
-              <p className="text-sm text-slate-800">{t('pf')} {t('deducted')}: -₹{form.pfDeducted?.toLocaleString()}</p>
+              <p className="text-sm text-slate-800">{t('pf')} {t('deducted')}: -₹{formatAmount(form.pfDeducted)}</p>
             )}
             {paymentType === 'contractor' && form.esiDeducted > 0 && (
-              <p className="text-sm text-slate-800">{t('esi')} {t('deducted')}: -₹{form.esiDeducted?.toLocaleString()}</p>
+              <p className="text-sm text-slate-800">{t('esi')} {t('deducted')}: -₹{formatAmount(form.esiDeducted)}</p>
             )}
             {(form.advanceDeducted ?? 0) > 0 && (
-              <p className="text-sm text-slate-800">{t('advance')} {t('deducted')}: -₹{(form.advanceDeducted ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-slate-800">{t('advance')} {t('deducted')}: -₹{formatAmount(form.advanceDeducted)}</p>
             )}
           </div>
 
@@ -643,7 +643,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
 
           <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('totalPayable')}</label>
-            <p className="text-2xl font-bold text-slate-900">₹{totalPayable.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-slate-900">₹{formatAmount(totalPayable)}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -666,7 +666,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
             <ValidatedInput type="text" value={form.transactionRef} onChange={(v) => setForm((f) => ({ ...f, transactionRef: v }))} fieldType="text" placeholderHint="Cheque no, ref..." className="w-full px-3 py-2.5" />
           </div>
 
-          {remaining > 0 && <p className="text-uff-accent text-sm font-medium">{t('remainingDue')}: ₹{remaining.toLocaleString()}</p>}
+          {remaining > 0 && <p className="text-uff-accent text-sm font-medium">{t('remainingDue')}: ₹{formatAmount(remaining)}</p>}
         </div>
       </Modal>
 
@@ -730,17 +730,17 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           <div className="space-y-3 text-sm">
               <p><span className="font-medium text-slate-700">{t('employeeName')}:</span> {(detailPayment.employee as { name?: string })?.name}</p>
               <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth(detailPayment.month)}</p>
-              <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{detailPayment.baseAmount?.toLocaleString()}</p>
-              {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{detailPayment.addDeductAmount?.toLocaleString()} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
-              {detailPayment.pfDeducted > 0 && <p><span className="font-medium text-slate-700">{t('pf')}:</span> -₹{detailPayment.pfDeducted?.toLocaleString()}</p>}
-              {detailPayment.esiDeducted > 0 && <p><span className="font-medium text-slate-700">{t('esi')}:</span> -₹{detailPayment.esiDeducted?.toLocaleString()}</p>}
-              {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advance')}:</span> -₹{(detailPayment.advanceDeducted ?? 0).toLocaleString()}</p>}
-              <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{detailPayment.totalPayable?.toLocaleString()}</p>
-              <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{detailPayment.paymentAmount?.toLocaleString()}</p>
+              <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{formatAmount(detailPayment.baseAmount)}</p>
+              {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{formatAmount(detailPayment.addDeductAmount)} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
+              {detailPayment.pfDeducted > 0 && <p><span className="font-medium text-slate-700">{t('pf')}:</span> -₹{formatAmount(detailPayment.pfDeducted)}</p>}
+              {detailPayment.esiDeducted > 0 && <p><span className="font-medium text-slate-700">{t('esi')}:</span> -₹{formatAmount(detailPayment.esiDeducted)}</p>}
+              {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advance')}:</span> -₹{formatAmount(detailPayment.advanceDeducted)}</p>}
+              <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{formatAmount(detailPayment.totalPayable)}</p>
+              <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
               <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode(detailPayment.paymentMode)}</p>
               {detailPayment.transactionRef && <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {detailPayment.transactionRef}</p>}
-              {detailPayment.remainingAmount > 0 && <p className="text-uff-accent"><span className="font-medium">{t('remainingDue')}:</span> ₹{detailPayment.remainingAmount?.toLocaleString()}</p>}
-              {detailPayment.carriedForward > 0 && <p><span className="font-medium text-slate-700">{t('carryForward')}:</span> ₹{detailPayment.carriedForward?.toLocaleString()} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
+              {detailPayment.remainingAmount > 0 && <p className="text-uff-accent"><span className="font-medium">{t('remainingDue')}:</span> ₹{formatAmount(detailPayment.remainingAmount)}</p>}
+              {detailPayment.carriedForward > 0 && <p><span className="font-medium text-slate-700">{t('carryForward')}:</span> ₹{formatAmount(detailPayment.carriedForward)} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
               {detailPayment.isAdvance && <p className="text-blue-600">{t('advance')}</p>}
           </div>
         )}
@@ -768,7 +768,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           </div>
         }>
           <p className="text-slate-600 mb-4">
-            {t('remainingDue')}: ₹{carryModal.remaining.toLocaleString()}. {t('carryForwardQuestion')}
+            {t('remainingDue')}: ₹{formatAmount(carryModal.remaining)}. {t('carryForwardQuestion')}
           </p>
           <div className="space-y-4">
             <div>

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const employeeId = searchParams.get('employeeId');
     if (!employeeId) return NextResponse.json({ error: 'employeeId required' }, { status: 400 });
 
-    if (!hasRole(user, ['admin', 'finance', 'hr']) && user.employeeId !== employeeId) {
+    if (!hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) && user.employeeId !== employeeId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

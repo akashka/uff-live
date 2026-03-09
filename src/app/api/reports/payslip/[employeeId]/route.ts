@@ -17,7 +17,7 @@ export async function GET(
     const { employeeId } = await params;
     const month = req.nextUrl.searchParams.get('month') || '';
 
-    const canAccessAny = hasRole(user, ['admin', 'finance', 'hr']);
+    const canAccessAny = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
     const isOwn = String(user.employeeId) === String(employeeId);
     if (!canAccessAny && !isOwn) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

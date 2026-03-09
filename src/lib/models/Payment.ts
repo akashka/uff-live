@@ -31,6 +31,8 @@ export interface IPayment extends Document {
   daysWorked?: number;
   /** For full_time salary: total working days in the month */
   totalWorkingDays?: number;
+  /** For full_time salary: virtual days attended for accountancy compliance (salary paid * working days / minimum wages) */
+  virtualDaysAttended?: number;
   paidAt: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -67,6 +69,7 @@ const PaymentSchema = new Schema<IPayment>(
     workRecordRefs: [WorkRecordRefSchema],
     daysWorked: { type: Number },
     totalWorkingDays: { type: Number },
+    virtualDaysAttended: { type: Number },
     paidAt: { type: Date, required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

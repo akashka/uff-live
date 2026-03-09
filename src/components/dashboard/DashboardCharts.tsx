@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useApp } from '@/contexts/AppContext';
+import { formatAmount } from '@/lib/utils';
 import {
   AreaChart,
   Area,
@@ -35,7 +36,7 @@ export function PaymentsTrendChart({ data }: { data: { month: string; paid: numb
           <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#64748b" />
           <YAxis tick={{ fontSize: 11 }} stroke="#64748b" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
           <Tooltip
-            formatter={(value) => [`₹${(value ?? 0).toLocaleString()}`, t('paid')]}
+            formatter={(value) => [`₹${formatAmount(Number(value) || 0)}`, t('paid')]}
             contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }}
           />
           <Area type="monotone" dataKey="paid" stroke="#f59e0b" strokeWidth={2} fill="url(#paymentsGradient)" />
@@ -55,7 +56,7 @@ export function WorkTrendChart({ data }: { data: { month: string; amount: number
           <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#64748b" />
           <YAxis tick={{ fontSize: 11 }} stroke="#64748b" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
           <Tooltip
-            formatter={(value) => [`₹${(value ?? 0).toLocaleString()}`, t('workAmount')]}
+            formatter={(value) => [`₹${formatAmount(Number(value) || 0)}`, t('workAmount')]}
             contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }}
           />
           <Bar dataKey="amount" fill="#10b981" radius={[6, 6, 0, 0]} />
@@ -85,7 +86,7 @@ export function PaymentModeChart({ data }: { data: { name: string; value: number
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(value) => [`₹${(value ?? 0).toLocaleString()}`, t('amount')]} />
+          <Tooltip formatter={(value) => [`₹${formatAmount(Number(value) || 0)}`, t('amount')]} />
         </PieChart>
       </ResponsiveContainer>
     </div>
@@ -122,9 +123,9 @@ export function StyleWiseProductionChart({ data }: { data: StyleWiseItem[] }) {
             contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0' }}
             formatter={(value, name) => {
               const v = value ?? 0;
-              if (name === 'order') return [v.toLocaleString(), t('orderQty')];
-              if (name === 'produced') return [v.toLocaleString(), t('produced')];
-              if (name === 'mfgCost') return [`₹${v.toLocaleString()}`, t('manufacturingCost')];
+              if (name === 'order') return [Math.round(Number(v)).toLocaleString(), t('orderQty')];
+              if (name === 'produced') return [Math.round(Number(v)).toLocaleString(), t('produced')];
+              if (name === 'mfgCost') return [`₹${formatAmount(Number(v) || 0)}`, t('manufacturingCost')];
               return [v, name ?? ''];
             }}
           />

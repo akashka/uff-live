@@ -8,6 +8,7 @@ This document lists all features, actions, and buttons in the Factory Management
 |------|-------------|
 | **admin** | Full system access; manages branches, users, rates, and all other data |
 | **finance** | Financial operations: payments, exports, analytics; cannot manage branches/users/rates |
+| **accountancy** | Read-only access to all finance data; sees virtual days attended for full-time compliance (minimum wages); cannot add/edit payments or other data |
 | **hr** | HR operations: employees, style orders, work records; cannot manage branches/users/rates |
 | **employee** | Users with `employeeId` linked to an Employee record; limited to own data and passbook |
 
@@ -202,24 +203,24 @@ This document lists all features, actions, and buttons in the Factory Management
 
 | API | GET | POST | PATCH | DELETE |
 |-----|-----|------|-------|--------|
-| `/api/branches` | admin, finance, hr | admin | — | — |
+| `/api/branches` | admin, finance, accountancy, hr | admin | — | — |
 | `/api/branches/[id]` | admin | — | admin | — |
-| `/api/employees` | admin, finance, hr | admin, finance, hr | — | — |
-| `/api/employees/[id]` | admin, finance, hr, or own | — | admin, finance, hr, or own | — |
+| `/api/employees` | admin, finance, accountancy, hr | admin, finance, hr | — | — |
+| `/api/employees/[id]` | admin, finance, accountancy, hr, or own | — | admin, finance, hr, or own | — |
 | `/api/employees/[id]/photo` | — | admin, finance, hr | — | — |
-| `/api/employees/[id]/passbook` | admin, finance, hr, or own | — | — | — |
+| `/api/employees/[id]/passbook` | admin, finance, accountancy, hr, or own | — | — | — |
 | `/api/users` | admin | admin | — | — |
 | `/api/users/[id]` | — | — | admin | — |
-| `/api/rates` | admin, finance, hr, employee | admin | — | — |
+| `/api/rates` | admin, finance, accountancy, hr, employee | admin | — | — |
 | `/api/rates/[id]` | admin | — | admin | — |
 | `/api/rates/import-template` | admin | — | — | — |
-| `/api/style-orders` | admin, finance, hr | admin, finance, hr | — | — |
-| `/api/style-orders/[id]` | admin, finance, hr | — | admin, finance, hr | admin, finance, hr |
-| `/api/style-orders/analytics` | admin, finance, hr | — | — | — |
-| `/api/work-records` | admin, finance, hr, or own | admin, finance, hr, or own | — | — |
-| `/api/work-records/[id]` | admin, finance, hr, or own | — | admin, finance, hr, or own | admin, finance, hr, or own |
-| `/api/payments` | admin, finance, hr, or own | admin, finance | — | — |
-| `/api/payments/export` | admin, finance | — | — | — |
+| `/api/style-orders` | admin, finance, accountancy, hr | admin, finance, hr | — | — |
+| `/api/style-orders/[id]` | admin, finance, accountancy, hr | — | admin, finance, hr | admin, finance, hr |
+| `/api/style-orders/analytics` | admin, finance, accountancy, hr | — | — | — |
+| `/api/work-records` | admin, finance, accountancy, hr, or own | admin, finance, hr, or own | — | — |
+| `/api/work-records/[id]` | admin, finance, accountancy, hr, or own | — | admin, finance, hr, or own | admin, finance, hr, or own |
+| `/api/payments` | admin, finance, accountancy, hr, or own | admin, finance | — | — |
+| `/api/payments/export` | admin, finance, accountancy | — | — | — |
 | `/api/payments/calculate` | admin, finance, hr, or own | — | — | — |
 | `/api/payments/last-paid` | admin, finance, hr, or own | — | — | — |
 | `/api/payments/advance-outstanding` | admin, finance, hr | — | — | — |
@@ -237,7 +238,8 @@ This document lists all features, actions, and buttons in the Factory Management
 ## Notes
 
 1. **Employee role**: A user with `employeeId` is treated as an employee regardless of `role` for access to own data (work records, payments, passbook).
-2. **Create user from employee**: Admin can assign any role (admin, finance, hr, employee); Finance/HR can only assign employee role.
-3. **Export for Bank Transfer**: Only Admin and Finance can export payments in bank transfer format (NEFT/IMPS).
-4. **Style Analytics**: Admin sees selling price and profit/loss; Finance/HR see manufacturing cost and produced quantity only.
-5. **Branches page**: Nav shows Branches only to Admin; API GET allows Finance/HR for dropdowns in other pages.
+2. **Create user from employee**: Admin can assign any role (admin, finance, accountancy, hr, employee); Finance/HR can only assign employee role.
+3. **Export for Bank Transfer**: Admin, Finance, and Accountancy can export payments in bank transfer format (NEFT/IMPS).
+4. **Accountancy role**: Read-only. Sees virtual days for full-time salary when per-day pay is below minimum wages: if `paymentAmount/daysWorked >= MINIMUM_WAGES` then virtual days = actual days; else `virtualDays = paymentAmount / MINIMUM_WAGES`. Configure `MINIMUM_WAGES` in env (default 500 ₹/day).
+5. **Style Analytics**: Admin sees selling price and profit/loss; Finance/HR/Accountancy see manufacturing cost and produced quantity only.
+6. **Branches page**: Nav shows Branches only to Admin; API GET allows Finance/Accountancy/HR for dropdowns in other pages.

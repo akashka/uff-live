@@ -8,6 +8,7 @@ import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
+import { roundAmount } from '@/lib/utils';
 
 async function getAvailableQuantity(
   styleOrderId: string,
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const emp = record.employee as { _id?: unknown } | undefined;
     const empId = emp && typeof emp === 'object' && '_id' in emp ? String(emp._id) : String(record.employee);
-    const canAccess = hasRole(user, ['admin', 'finance', 'hr']) || (user.employeeId && String(user.employeeId) === empId);
+    const canAccess = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) || (user.employeeId && String(user.employeeId) === empId);
     if (!canAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -73,7 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 }); // accountancy is read-only
 
     const { id } = await params;
     const body = await req.json();
@@ -87,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (month !== undefined) record.month = String(month).slice(0, 7);
     if (notes !== undefined) record.notes = notes;
     if (otHours !== undefined) record.otHours = Number(otHours) || 0;
-    if (otAmount !== undefined) record.otAmount = Number(otAmount) || 0;
+    if (otAmount !== undefined) record.otAmount = roundAmount(Number(otAmount) || 0);
     if (styleOrderId !== undefined) record.styleOrder = styleOrderId || undefined;
 
     if (employeeId !== undefined) {
@@ -137,7 +138,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }
         }
 
-        const amount = quantity * multiplier * ratePerUnit;
+        const amount = roundAmount(quantity * multiplier * ratePerUnit);
         workItemsWithAmounts.push({
           rateMaster: item.rateMasterId,
           rateName: (rateMaster as { name: string }).name,
@@ -157,7 +158,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const workSum = (record.workItems || []).reduce((s: number, wi: { amount?: number }) => s + (wi.amount || 0), 0);
-    record.totalAmount = workSum + (record.otAmount || 0);
+    record.totalAmount = roundAmount(workSum + (record.otAmount || 0));
 
     await record.save();
     const updated = await WorkRecord.findById(id)
@@ -204,7 +205,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 }); // accountancy is read-only
 
     const { id } = await params;
     await connectDB();

@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { ProfileSkeleton } from '@/components/Skeleton';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 
@@ -155,7 +155,7 @@ export default function ProfilePage() {
   if (!data) return <div className="text-slate-800">{t('noData')}</div>;
 
   const emp = data.employee;
-  const roleLabels: Record<string, string> = { admin: t('admin'), finance: t('finance'), hr: t('hr'), employee: t('employee') };
+  const roleLabels: Record<string, string> = { admin: t('admin'), finance: t('finance'), accountancy: t('accountancy'), hr: t('hr'), employee: t('employee') };
 
   return (
     <div>
@@ -285,30 +285,30 @@ export default function ProfilePage() {
                         <>
                           <div>
                             <label className="block text-sm font-medium text-slate-700">{t('grossSalary')}</label>
-                            <p className="mt-1 text-slate-800">₹{emp.monthlySalary?.toLocaleString()}</p>
+                            <p className="mt-1 text-slate-800">₹{formatAmount(emp.monthlySalary)}</p>
                           </div>
                           {(emp.salaryBreakup?.pf ?? 0) > 0 && (
                             <div>
                               <label className="block text-sm font-medium text-slate-700">{t('pf')}</label>
-                              <p className="mt-1 text-slate-800">- ₹{(emp.salaryBreakup?.pf ?? 0).toLocaleString()}</p>
+                              <p className="mt-1 text-slate-800">- ₹{formatAmount(emp.salaryBreakup?.pf)}</p>
                             </div>
                           )}
                           {(emp.salaryBreakup?.esi ?? 0) > 0 && (
                             <div>
                               <label className="block text-sm font-medium text-slate-700">{t('esi')}</label>
-                              <p className="mt-1 text-slate-800">- ₹{(emp.salaryBreakup?.esi ?? 0).toLocaleString()}</p>
+                              <p className="mt-1 text-slate-800">- ₹{formatAmount(emp.salaryBreakup?.esi)}</p>
                             </div>
                           )}
                           {(emp.salaryBreakup?.other ?? 0) > 0 && (
                             <div>
                               <label className="block text-sm font-medium text-slate-700">{t('otherDeductions')}</label>
-                              <p className="mt-1 text-slate-800">- ₹{(emp.salaryBreakup?.other ?? 0).toLocaleString()}</p>
+                              <p className="mt-1 text-slate-800">- ₹{formatAmount(emp.salaryBreakup?.other)}</p>
                             </div>
                           )}
                           <div>
                             <label className="block text-sm font-medium text-slate-700">{t('netSalary')}</label>
                             <p className="mt-1 font-semibold text-slate-800">
-                              ₹{((emp.monthlySalary || 0) - (emp.salaryBreakup?.pf || 0) - (emp.salaryBreakup?.esi || 0) - (emp.salaryBreakup?.other || 0)).toLocaleString()}
+                              ₹{formatAmount((emp.monthlySalary || 0) - (emp.salaryBreakup?.pf || 0) - (emp.salaryBreakup?.esi || 0) - (emp.salaryBreakup?.other || 0))}
                             </p>
                           </div>
                         </>

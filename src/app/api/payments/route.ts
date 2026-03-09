@@ -7,6 +7,8 @@ import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
+import { computeVirtualDaysAttended } from '@/lib/minimumWages';
+import { roundAmount, roundDays } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -30,14 +32,14 @@ export async function GET(req: NextRequest) {
       filter.$or = [{ isAdvance: false }, { isAdvance: { $exists: false } }];
     }
     if (employeeId) {
-      if (hasRole(user, ['admin', 'finance', 'hr']) || user.employeeId === employeeId) {
+      if (hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) || user.employeeId === employeeId) {
         filter.employee = employeeId;
       } else {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
     } else if (user.employeeId) {
       filter.employee = user.employeeId;
-    } else if (!hasRole(user, ['admin', 'finance', 'hr'])) {
+    } else if (!hasRole(user, ['admin', 'finance', 'accountancy', 'hr'])) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -60,8 +62,28 @@ export async function GET(req: NextRequest) {
       Payment.countDocuments(filter),
     ]);
 
+    // For accountancy role: ensure virtualDaysAttended is set for full-time salary payments (compute if missing)
+    const isAccountancy = user.role === 'accountancy';
+    const data = isAccountancy && Array.isArray(payments)
+      ? payments.map((p) => {
+          const rec = p as unknown as { paymentType?: string; isAdvance?: boolean; virtualDaysAttended?: number; paymentAmount?: number; totalWorkingDays?: number };
+          const isFullTimeSalary = rec.paymentType === 'full_time' && !(rec.isAdvance ?? false);
+          if (isFullTimeSalary) {
+            let vda = rec.virtualDaysAttended;
+            if (vda == null) {
+              const amt = rec.paymentAmount ?? 0;
+              const dw = (rec as { daysWorked?: number }).daysWorked ?? 0;
+              const computed = computeVirtualDaysAttended(amt, dw);
+              vda = computed != null ? roundDays(computed) : undefined;
+            }
+            return { ...p, virtualDaysAttended: vda };
+          }
+          return p;
+        })
+      : payments;
+
     return NextResponse.json({
-      data: payments,
+      data,
       total,
       page,
       limit,
@@ -119,7 +141,7 @@ export async function POST(req: NextRequest) {
       const records = await WorkRecord.find({ _id: { $in: workRecordIds }, employee: employeeId }).lean();
       workRecordRefs = (records || []).map((r) => ({
         workRecord: r._id instanceof mongoose.Types.ObjectId ? r._id : new mongoose.Types.ObjectId(r._id),
-        totalAmount: r.totalAmount || 0,
+        totalAmount: roundAmount(r.totalAmount || 0),
       }));
     }
 
@@ -129,18 +151,18 @@ export async function POST(req: NextRequest) {
       employee: employeeId,
       paymentType,
       month: monthStr,
-      baseAmount: baseAmount ?? 0,
-      addDeductAmount: addDeductAmount ?? 0,
+      baseAmount: roundAmount(baseAmount ?? 0),
+      addDeductAmount: roundAmount(addDeductAmount ?? 0),
       addDeductRemarks: addDeductRemarks || '',
-      pfDeducted: pfDeducted ?? 0,
-      esiDeducted: esiDeducted ?? 0,
-      advanceDeducted: advanceDeducted ?? 0,
-      totalPayable,
-      paymentAmount,
+      pfDeducted: roundAmount(pfDeducted ?? 0),
+      esiDeducted: roundAmount(esiDeducted ?? 0),
+      advanceDeducted: roundAmount(advanceDeducted ?? 0),
+      totalPayable: roundAmount(totalPayable),
+      paymentAmount: roundAmount(paymentAmount),
       paymentMode,
       transactionRef: transactionRef || '',
-      remainingAmount: remainingAmount ?? 0,
-      carriedForward: carriedForward ?? 0,
+      remainingAmount: roundAmount(remainingAmount ?? 0),
+      carriedForward: roundAmount(carriedForward ?? 0),
       carriedForwardRemarks: carriedForwardRemarks || '',
       isAdvance: isAdvance ?? false,
       workRecordRefs,
@@ -149,8 +171,10 @@ export async function POST(req: NextRequest) {
     };
 
     if (isFullTimeSalary) {
-      paymentData.daysWorked = typeof body.daysWorked === 'number' ? body.daysWorked : Number(body.daysWorked) || 0;
-      paymentData.totalWorkingDays = typeof body.totalWorkingDays === 'number' ? body.totalWorkingDays : Number(body.totalWorkingDays) || 0;
+      paymentData.daysWorked = roundDays(typeof body.daysWorked === 'number' ? body.daysWorked : Number(body.daysWorked) || 0);
+      paymentData.totalWorkingDays = roundDays(typeof body.totalWorkingDays === 'number' ? body.totalWorkingDays : Number(body.totalWorkingDays) || 0);
+      const vda = computeVirtualDaysAttended(paymentAmount, paymentData.daysWorked as number);
+      if (vda != null) paymentData.virtualDaysAttended = roundDays(vda);
     }
 
     // Use collection.insertOne to bypass Mongoose schema caching (ensures daysWorked is saved)
@@ -159,18 +183,18 @@ export async function POST(req: NextRequest) {
       employee: new mongoose.Types.ObjectId(employeeId),
       paymentType,
       month: monthStr,
-      baseAmount: baseAmount ?? 0,
-      addDeductAmount: addDeductAmount ?? 0,
+      baseAmount: paymentData.baseAmount,
+      addDeductAmount: paymentData.addDeductAmount,
       addDeductRemarks: addDeductRemarks || '',
-      pfDeducted: pfDeducted ?? 0,
-      esiDeducted: esiDeducted ?? 0,
-      advanceDeducted: advanceDeducted ?? 0,
-      totalPayable,
-      paymentAmount,
+      pfDeducted: paymentData.pfDeducted,
+      esiDeducted: paymentData.esiDeducted,
+      advanceDeducted: paymentData.advanceDeducted,
+      totalPayable: paymentData.totalPayable,
+      paymentAmount: paymentData.paymentAmount,
       paymentMode,
       transactionRef: transactionRef || '',
-      remainingAmount: remainingAmount ?? 0,
-      carriedForward: carriedForward ?? 0,
+      remainingAmount: paymentData.remainingAmount,
+      carriedForward: paymentData.carriedForward,
       carriedForwardRemarks: carriedForwardRemarks || '',
       isAdvance: isAdvance ?? false,
       workRecordRefs,
@@ -182,6 +206,7 @@ export async function POST(req: NextRequest) {
     if (isFullTimeSalary) {
       doc.daysWorked = paymentData.daysWorked;
       doc.totalWorkingDays = paymentData.totalWorkingDays;
+      if (paymentData.virtualDaysAttended != null) doc.virtualDaysAttended = paymentData.virtualDaysAttended;
     }
     await Payment.collection.insertOne(doc);
     const payment = { _id: doc._id, ...doc };

@@ -36,7 +36,7 @@ export default function UsersPage() {
   const [filterByRole, setFilterByRole] = useState<string>('all');
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
-  const [adminForm, setAdminForm] = useState({ email: '', password: '' });
+  const [adminForm, setAdminForm] = useState({ email: '', password: '', role: 'admin' as string });
   const [editAdminForm, setEditAdminForm] = useState({ email: '', password: '', isActive: true, role: 'employee' as string });
 
   const canAccess = user?.role === 'admin';
@@ -128,7 +128,7 @@ export default function UsersPage() {
       if (!res.ok) throw new Error(data.error || t('error'));
       toast.success(t('saveSuccess'));
       setModal(null);
-      setAdminForm({ email: '', password: '' });
+      setAdminForm({ email: '', password: '', role: 'admin' });
       if (data.generatedPassword) setPasswordModal(data.generatedPassword);
       fetchUsers();
     } catch (err) {
@@ -224,12 +224,12 @@ export default function UsersPage() {
       <PageHeader title={t('users')}>
         <button
           onClick={() => {
-            setAdminForm({ email: '', password: '' });
+            setAdminForm({ email: '', password: '', role: 'admin' });
             setModal('create');
           }}
           className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
         >
-          {t('add')} {t('admin')}
+          {t('add')} {t('user')}
         </button>
       </PageHeader>
 
@@ -267,6 +267,7 @@ export default function UsersPage() {
               <option value="all">{t('all')}</option>
               <option value="admin">{t('admin')}</option>
               <option value="finance">{t('finance')}</option>
+              <option value="accountancy">{t('accountancy')}</option>
               <option value="hr">{t('hr')}</option>
               <option value="employee">{t('employee')}</option>
             </select>
@@ -381,9 +382,20 @@ export default function UsersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h2 className="text-lg font-semibold mb-4">
-              {t('add')} {t('admin')}
+              {t('add')} {t('user')}
             </h2>
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-800 mb-1">{t('role')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                <select
+                  value={adminForm.role}
+                  onChange={(e) => setAdminForm((f) => ({ ...f, role: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent"
+                >
+                  <option value="admin">{t('admin')}</option>
+                  <option value="accountancy">{t('accountancy')}</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')} <span className="text-red-500" aria-hidden="true">*</span></label>
                 <ValidatedInput
@@ -521,6 +533,7 @@ export default function UsersPage() {
                 >
                   <option value="admin">{t('admin')}</option>
                   <option value="finance">{t('finance')}</option>
+                  <option value="accountancy">{t('accountancy')}</option>
                   <option value="hr">{t('hr')}</option>
                   <option value="employee">{t('employee')}</option>
                 </select>

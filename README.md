@@ -12,7 +12,7 @@ A comprehensive Next.js application for managing URBAN FASHION FACTORY with mult
 
 ## Features
 
-- **Authentication**: Login with email/password, forgot password, role-based access (Admin, Finance, HR, Employee)
+- **Authentication**: Login with email/password, forgot password, role-based access (Admin, Finance, Accountancy, HR, Employee)
 - **Localization**: English, Kannada, Hindi
 - **Accessibility**: Adjustable font sizes (12px–24px)
 - **Branches**: CRUD for URBAN FASHION FACTORY branches (Admin only)
@@ -34,6 +34,7 @@ A comprehensive Next.js application for managing URBAN FASHION FACTORY with mult
    Edit `.env.local` and set:
    - `MONGODB_URI` – MongoDB connection string
    - `JWT_SECRET` – Secret for JWT tokens
+   - `MINIMUM_WAGES` – (Optional) Minimum wages per day in ₹ for accountancy compliance; default 500
 
 3. **Start MongoDB** (if running locally)
    ```bash
@@ -61,12 +62,14 @@ A comprehensive Next.js application for managing URBAN FASHION FACTORY with mult
 
 ## Role Permissions
 
-| Feature      | Admin | Finance | HR | Employee |
-|-------------|-------|---------|-----|----------|
-| Branches    | ✓     | ✗       | ✗   | ✗        |
-| Employees   | ✓ (any role) | ✓ (employee only) | ✓ (employee only) | ✗ |
-| Profile     | ✓     | ✓       | ✓   | ✓        |
-| Home        | ✓     | ✓       | ✓   | ✓        |
+| Feature      | Admin | Finance | Accountancy | HR | Employee |
+|-------------|-------|---------|-------------|-----|----------|
+| Branches    | ✓     | ✗       | ✗           | ✗   | ✗        |
+| Employees   | ✓ (any role) | ✓ (employee only) | ✓ (read-only) | ✓ (employee only) | ✗ |
+| Profile     | ✓     | ✓       | ✓           | ✓   | ✓        |
+| Home        | ✓     | ✓       | ✓           | ✓   | ✓        |
+
+*Accountancy: Same view as Finance but read-only; sees virtual days attended for full-time salary (compliance with minimum wages).*
 
 ## Project Structure
 

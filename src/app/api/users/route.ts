@@ -50,11 +50,13 @@ export async function POST(req: NextRequest) {
     if (!hasRole(authUser, ['admin'])) return NextResponse.json({ error: 'Forbidden. Admin only.' }, { status: 403 });
 
     const body = await req.json();
-    const { email, password } = body;
+    const { email, password, role } = body;
 
     if (!email) {
       return NextResponse.json({ error: 'Email required' }, { status: 400 });
     }
+
+    const userRole = ['admin', 'accountancy'].includes(role) ? role : 'admin';
 
     await connectDB();
 
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
     const user = await User.create({
       email,
       password: hashedPassword,
-      role: 'admin',
+      role: userRole,
       isActive: true,
     });
 
@@ -80,8 +82,8 @@ export async function POST(req: NextRequest) {
       action: 'user_create',
       entityType: 'user',
       entityId: user._id.toString(),
-      summary: `User "${email}" created (admin)`,
-      metadata: { email, role: 'admin' },
+      summary: `User "${email}" created (${userRole})`,
+      metadata: { email, role: userRole },
       req,
     }).catch(() => {});
 

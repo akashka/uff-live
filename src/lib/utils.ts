@@ -1,3 +1,18 @@
+/** Round amount to whole rupees (no paise) */
+export function roundAmount(amount: number): number {
+  return Number.isFinite(amount) ? Math.round(amount) : 0;
+}
+
+/** Round days to whole number */
+export function roundDays(days: number): number {
+  return Number.isFinite(days) ? Math.round(days) : 0;
+}
+
+/** Format amount for display (rounded to whole rupees, no decimals) */
+export function formatAmount(amount: number | undefined | null): string {
+  return roundAmount(amount ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}
+
 /** Format date as dd MMMM yyyy (e.g. 15 March 2025) */
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '';

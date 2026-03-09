@@ -17,6 +17,8 @@ import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { computeVirtualDaysAttended } from '@/lib/minimumWages';
+import { roundDays } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,8 +31,8 @@ export async function GET(req: NextRequest) {
     const months = parseInt(range, 10) || 1;
 
     const isAdmin = hasRole(user, ['admin']);
-    const isFinance = hasRole(user, ['admin', 'finance']);
-    const isHR = hasRole(user, ['admin', 'finance', 'hr']);
+    const isFinance = hasRole(user, ['admin', 'finance', 'accountancy']);
+    const isHR = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
     const isEmployee = user.employeeId;
 
     const stats: Record<string, unknown> = {};
@@ -48,25 +50,37 @@ export async function GET(req: NextRequest) {
       stats.employees = { total: totalEmployees, active: activeEmployees, contractors, fullTime };
       if (isAdmin) stats.branches = branches;
 
-      // Full-time days worked stats for current month
+      // Full-time days worked stats for current month (accountancy sees virtual days)
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const isAccountancy = user.role === 'accountancy';
       const daysWorkedPayments = await Payment.find({
         paymentType: 'full_time',
         isAdvance: false,
         month: currentMonth,
-        daysWorked: { $exists: true, $ne: null },
+        totalWorkingDays: { $exists: true, $gt: 0 },
       })
-        .select('employee daysWorked totalWorkingDays')
+        .select('employee daysWorked totalWorkingDays virtualDaysAttended paymentAmount')
         .lean();
       const daysWorkedByEmp = new Map<string, { daysWorked: number; totalWorkingDays: number }>();
       for (const p of daysWorkedPayments) {
         const empId = String(p.employee);
-        daysWorkedByEmp.set(empId, { daysWorked: p.daysWorked ?? 0, totalWorkingDays: p.totalWorkingDays ?? 0 });
+        const twd = p.totalWorkingDays ?? 0;
+        let dw: number;
+        if (isAccountancy) {
+          dw = p.virtualDaysAttended ?? 0;
+          const actualDw = p.daysWorked ?? 0;
+          if (dw === 0 && actualDw > 0 && (p.paymentAmount ?? 0) > 0) {
+            dw = computeVirtualDaysAttended(p.paymentAmount ?? 0, actualDw) ?? 0;
+          }
+        } else {
+          dw = p.daysWorked ?? 0;
+        }
+        daysWorkedByEmp.set(empId, { daysWorked: roundDays(dw), totalWorkingDays: roundDays(twd) });
       }
       const daysWorkedValues = Array.from(daysWorkedByEmp.values());
       const fullTimeWithDaysWorked = daysWorkedValues.length;
       const avgDaysWorked = fullTimeWithDaysWorked > 0
-        ? Math.round((daysWorkedValues.reduce((s, x) => s + x.daysWorked, 0) / fullTimeWithDaysWorked) * 10) / 10
+        ? roundDays(daysWorkedValues.reduce((s, x) => s + x.daysWorked, 0) / fullTimeWithDaysWorked)
         : null;
       const fullAttendanceCount = daysWorkedValues.filter((x) => x.totalWorkingDays > 0 && x.daysWorked >= x.totalWorkingDays).length;
       stats.fullTimeDaysWorked = {

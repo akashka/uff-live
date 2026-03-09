@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number };
@@ -28,7 +28,7 @@ export default function EmployeePassbookPage() {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
-  const canAccessAny = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const canAccessAny = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isOwnProfile = user?.employeeId === employeeId;
   const canView = canAccessAny || isOwnProfile;
 
@@ -185,14 +185,14 @@ export default function EmployeePassbookPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-right">
                       {row.credit > 0 ? (
-                        <span className="text-green-700 font-medium">₹{row.credit.toLocaleString()}</span>
+                        <span className="text-green-700 font-medium">₹{formatAmount(row.credit)}</span>
                       ) : (
                         <span className="text-slate-400">–</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-right">
                       {row.debit > 0 ? (
-                        <span className="text-red-700 font-medium">₹{row.debit.toLocaleString()}</span>
+                        <span className="text-red-700 font-medium">₹{formatAmount(row.debit)}</span>
                       ) : (
                         <span className="text-slate-400">–</span>
                       )}
@@ -200,8 +200,8 @@ export default function EmployeePassbookPage() {
                     <td className="px-4 py-3 text-sm text-right font-medium">
                       {((): React.ReactNode => {
                         const bal = row.balance ?? 0;
-                        if (bal > 0) return <span className="text-green-700">₹{bal.toLocaleString()}</span>;
-                        if (bal < 0) return <span className="text-red-700">₹{bal.toLocaleString()}</span>;
+                        if (bal > 0) return <span className="text-green-700">₹{formatAmount(bal)}</span>;
+                        if (bal < 0) return <span className="text-red-700">₹{formatAmount(bal)}</span>;
                         return <span className="text-slate-600">₹0</span>;
                       })()}
                     </td>
@@ -216,9 +216,9 @@ export default function EmployeePassbookPage() {
           <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
             <span className="text-sm font-semibold">
               {outstanding >= 0 ? (
-                <span className="text-slate-800">{t('outstanding')}: ₹{outstanding.toLocaleString()}</span>
+                <span className="text-slate-800">{t('outstanding')}: ₹{formatAmount(outstanding)}</span>
               ) : (
-                <span className="text-red-700">{t('outstanding')}: ₹{outstanding.toLocaleString()} <span className="text-slate-600 font-normal">({t('advance')} {t('toRecover')})</span></span>
+                <span className="text-red-700">{t('outstanding')}: ₹{formatAmount(outstanding)} <span className="text-slate-600 font-normal">({t('advance')} {t('toRecover')})</span></span>
               )}
             </span>
             {hasMore && (

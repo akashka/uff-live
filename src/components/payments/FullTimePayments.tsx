@@ -9,7 +9,7 @@ import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
-import { formatMonth } from '@/lib/utils';
+import { formatMonth, formatAmount, roundAmount, roundDays } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -33,6 +33,7 @@ interface Payment {
   baseAmount: number;
   daysWorked?: number;
   totalWorkingDays?: number;
+  virtualDaysAttended?: number;
   addDeductAmount: number;
   addDeductRemarks: string;
   pfDeducted: number;
@@ -71,7 +72,7 @@ export default function FullTimePayments() {
   const { t } = useApp();
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
-  const canView = ['admin', 'finance', 'hr'].includes(user?.role || '') || isEmployee;
+  const canView = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth());
   const [filterType, setFilterType] = useState<'all' | 'salary' | 'advance'>('all');
@@ -103,7 +104,17 @@ export default function FullTimePayments() {
   const [exportIncludeZero, setExportIncludeZero] = useState(true);
   const [exportFormat, setExportFormat] = useState<'csv' | 'excel'>('excel');
 
-  const canAdd = ['admin', 'finance'].includes(user?.role || '');
+  const canAdd = ['admin', 'finance'].includes(user?.role || ''); // accountancy is read-only
+  const isAccountancy = user?.role === 'accountancy';
+
+  const getDisplayDays = (p: Payment) => {
+    if (p.isAdvance) return null;
+    if (isAccountancy && p.virtualDaysAttended != null) {
+      return { days: roundDays(p.virtualDaysAttended), total: p.totalWorkingDays != null ? roundDays(p.totalWorkingDays) : undefined };
+    }
+    if (p.daysWorked != null) return { days: roundDays(p.daysWorked), total: p.totalWorkingDays != null ? roundDays(p.totalWorkingDays) : undefined };
+    return null;
+  };
 
   const [calc, setCalc] = useState<CalcResponse | null>(null);
   const [advanceOutstanding, setAdvanceOutstanding] = useState<number>(0);
@@ -206,13 +217,13 @@ export default function FullTimePayments() {
     if (salaryForm.employeeId && salaryForm.month) loadCalcAndAdvance(salaryForm.employeeId, salaryForm.month);
   };
 
-  const totalWorkingDays = calc?.totalWorkingDays ?? 0;
-  const baseAmount = calc?.baseAmount ?? 0;
-  const daysWorked = Math.min(Math.max(0, salaryForm.daysWorked), totalWorkingDays || 999);
-  const proratedAmount = totalWorkingDays > 0 ? (baseAmount / totalWorkingDays) * daysWorked : 0;
-  const totalPayable = proratedAmount + salaryForm.addDeductAmount - (salaryForm.advanceDeducted ?? 0);
-  const paymentAmount = Math.max(0, totalPayable);
-  const remaining = totalPayable - paymentAmount;
+  const totalWorkingDays = roundDays(calc?.totalWorkingDays ?? 0);
+  const baseAmount = roundAmount(calc?.baseAmount ?? 0);
+  const daysWorked = roundDays(Math.min(Math.max(0, salaryForm.daysWorked), totalWorkingDays || 999));
+  const proratedAmount = roundAmount(totalWorkingDays > 0 ? (baseAmount / totalWorkingDays) * daysWorked : 0);
+  const totalPayable = roundAmount(proratedAmount + salaryForm.addDeductAmount - (salaryForm.advanceDeducted ?? 0));
+  const paymentAmount = roundAmount(Math.max(0, totalPayable));
+  const remaining = roundAmount(totalPayable - paymentAmount);
 
 
   const handleSalarySubmit = async () => {
@@ -232,22 +243,22 @@ export default function FullTimePayments() {
   const doSalarySubmit = async (carryAmount?: number, carryRemarks?: string) => {
     setSaving(true);
     try {
-      const payload = {
+      const         payload = {
         employeeId: salaryForm.employeeId,
         paymentType: 'full_time',
         month: salaryForm.month,
         baseAmount: proratedAmount,
-        addDeductAmount: salaryForm.addDeductAmount,
+        addDeductAmount: roundAmount(salaryForm.addDeductAmount),
         addDeductRemarks: salaryForm.addDeductRemarks,
         pfDeducted: 0,
         esiDeducted: 0,
-        advanceDeducted: salaryForm.advanceDeducted ?? 0,
+        advanceDeducted: roundAmount(salaryForm.advanceDeducted ?? 0),
         totalPayable: totalPayable,
         paymentAmount,
         paymentMode: salaryForm.paymentMode,
         transactionRef: salaryForm.transactionRef,
         remainingAmount: remaining,
-        carriedForward: carryAmount ?? 0,
+        carriedForward: roundAmount(carryAmount ?? 0),
         carriedForwardRemarks: carryRemarks ?? '',
         isAdvance: false,
         workRecordIds: [],
@@ -366,11 +377,13 @@ export default function FullTimePayments() {
     <div>
       <PageHeader title={`${t('payments')} — ${t('fullTime')}`}>
         <div className="flex gap-2">
+          {(canAdd || isAccountancy) && (
+            <button onClick={() => setExportModal(true)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-medium">
+              {t('exportBankFormat')}
+            </button>
+          )}
           {canAdd && (
             <>
-              <button onClick={() => setExportModal(true)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-medium">
-                {t('exportBankFormat')}
-              </button>
               <button
                 onClick={() => openAdvanceModal()}
                 disabled={!Array.isArray(employees) || employees.length === 0}
@@ -457,20 +470,20 @@ export default function FullTimePayments() {
                         <td className="px-4 py-3 text-slate-800">{(p.employee as { name?: string })?.name}</td>
                         <td className="px-4 py-3 text-slate-600 text-sm">{formatMonth(p.month)}</td>
                         <td className="px-4 py-3 text-slate-700">
-                          {!p.isAdvance && p.daysWorked != null ? (
-                            <span className="font-medium">{p.daysWorked}{p.totalWorkingDays ? ` / ${p.totalWorkingDays}` : ''}</span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
+                          {(() => {
+                            const d = getDisplayDays(p);
+                            if (d) return <span className="font-medium">{d.days}{d.total != null ? ` / ${d.total}` : ''}</span>;
+                            return <span className="text-slate-400">—</span>;
+                          })()}
                         </td>
-                        <td className="px-4 py-3 text-right">₹{p.totalPayable?.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-medium">₹{p.paymentAmount?.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right">₹{formatAmount(p.totalPayable)}</td>
+                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(p.paymentAmount)}</td>
                         <td className="px-4 py-3">
                           {p.isAdvance ? (
                             <span className="text-slate-400 text-sm">—</span>
                           ) : (p.advanceDeducted ?? 0) > 0 ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-sm font-medium" title={t('advanceDeducted')}>
-                              ✓ ₹{(p.advanceDeducted ?? 0).toLocaleString()}
+                              ✓ ₹{formatAmount(p.advanceDeducted)}
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-sm" title={t('advanceNotDeducted')}>
@@ -481,7 +494,7 @@ export default function FullTimePayments() {
                         <td className="px-4 py-3 text-slate-800">{formatMode(p.paymentMode)}</td>
                         <td className="px-4 py-3">
                           {p.remainingAmount > 0 ? (
-                            <span className="text-uff-accent text-sm">₹{p.remainingAmount?.toLocaleString()} {t('due')}</span>
+                            <span className="text-uff-accent text-sm">₹{formatAmount(p.remainingAmount)} {t('due')}</span>
                           ) : p.isAdvance ? (
                             <span className="text-blue-600 text-sm">{t('advance')}</span>
                           ) : (
@@ -520,16 +533,18 @@ export default function FullTimePayments() {
               <div key={p._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(p.employee as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{formatMonth(p.month)}</p>
-                {!p.isAdvance && p.daysWorked != null && (
-                  <p className="text-sm font-medium text-slate-700 mt-1">{t('daysWorked')}: {p.daysWorked}{p.totalWorkingDays ? ` / ${p.totalWorkingDays}` : ''}</p>
-                )}
-                <p className="mt-2 font-semibold text-slate-900">₹{p.paymentAmount?.toLocaleString()}</p>
+                {(() => {
+                  const d = getDisplayDays(p);
+                  if (d) return <p className="text-sm font-medium text-slate-700 mt-1">{t('daysWorked')}: {d.days}{d.total != null ? ` / ${d.total}` : ''}{isAccountancy ? ` (${t('virtualDays')})` : ''}</p>;
+                  return null;
+                })()}
+                <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(p.paymentAmount)}</p>
                 <p className="text-sm text-slate-600">{formatMode(p.paymentMode)}</p>
                 {!p.isAdvance && (
                   <p className="mt-1 text-sm">
                     {(p.advanceDeducted ?? 0) > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-medium">
-                        ✓ {t('advanceDeducted')} ₹{(p.advanceDeducted ?? 0).toLocaleString()}
+                        ✓ {t('advanceDeducted')} ₹{formatAmount(p.advanceDeducted)}
                       </span>
                     ) : (
                       <span className="text-slate-500">{t('advanceNotDeducted')}</span>
@@ -537,7 +552,7 @@ export default function FullTimePayments() {
                   </p>
                 )}
                 {p.remainingAmount > 0 ? (
-                  <span className="inline-block mt-2 text-uff-accent text-sm">₹{p.remainingAmount?.toLocaleString()} {t('due')}</span>
+                  <span className="inline-block mt-2 text-uff-accent text-sm">₹{formatAmount(p.remainingAmount)} {t('due')}</span>
                 ) : p.isAdvance ? (
                   <span className="inline-block mt-2 text-blue-600 text-sm">{t('advance')}</span>
                 ) : (
@@ -600,11 +615,11 @@ export default function FullTimePayments() {
           {calc && (
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
               <p className="text-sm font-medium text-slate-800 mb-2">{t('baseAmount')} & {t('deducted')} ({t('salaryBreakup')})</p>
-              <p className="text-sm text-slate-800">{t('grossSalary')}: ₹{calc.grossSalary?.toLocaleString()}</p>
-              {calc.pf > 0 && <p className="text-sm text-slate-800">{t('pf')}: -₹{calc.pf?.toLocaleString()}</p>}
-              {calc.esi > 0 && <p className="text-sm text-slate-800">{t('esi')}: -₹{calc.esi?.toLocaleString()}</p>}
-              {calc.other > 0 && <p className="text-sm text-slate-800">{t('other')}: -₹{calc.other?.toLocaleString()}</p>}
-              <p className="text-sm font-medium text-slate-800 mt-1">{t('baseAmount')}: ₹{calc.baseAmount?.toLocaleString()} ({t('totalWorkingDays')}: {calc.totalWorkingDays})</p>
+              <p className="text-sm text-slate-800">{t('grossSalary')}: ₹{formatAmount(calc.grossSalary)}</p>
+              {calc.pf > 0 && <p className="text-sm text-slate-800">{t('pf')}: -₹{formatAmount(calc.pf)}</p>}
+              {calc.esi > 0 && <p className="text-sm text-slate-800">{t('esi')}: -₹{formatAmount(calc.esi)}</p>}
+              {calc.other > 0 && <p className="text-sm text-slate-800">{t('other')}: -₹{formatAmount(calc.other)}</p>}
+              <p className="text-sm font-medium text-slate-800 mt-1">{t('baseAmount')}: ₹{formatAmount(calc.baseAmount)} ({t('totalWorkingDays')}: {calc.totalWorkingDays})</p>
             </div>
           )}
 
@@ -615,7 +630,7 @@ export default function FullTimePayments() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('proratedAmount')}</label>
-              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">₹{proratedAmount.toLocaleString()}</p>
+              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">₹{formatAmount(proratedAmount)}</p>
             </div>
           </div>
 
@@ -629,14 +644,14 @@ export default function FullTimePayments() {
               <ValidatedInput type="text" value={salaryForm.addDeductRemarks} onChange={(v) => setSalaryForm((f) => ({ ...f, addDeductRemarks: v }))} fieldType="text" placeholderHint="Optional" className="w-full px-3 py-2.5" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹) {advanceOutstanding > 0 && <span className="text-slate-500 text-xs">(outstanding: ₹{advanceOutstanding.toLocaleString()})</span>}</label>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹) {advanceOutstanding > 0 && <span className="text-slate-500 text-xs">(outstanding: ₹{formatAmount(advanceOutstanding)})</span>}</label>
               <ValidatedInput type="text" inputMode="decimal" value={salaryForm.advanceDeducted != null && salaryForm.advanceDeducted !== 0 ? String(salaryForm.advanceDeducted) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} placeholderHint="0" className="w-full px-3 py-2.5" />
             </div>
           </div>
 
           <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('totalPayable')} / {t('paymentAmount')}</label>
-            <p className="text-2xl font-bold text-slate-900">₹{paymentAmount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-slate-900">₹{formatAmount(paymentAmount)}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -654,7 +669,7 @@ export default function FullTimePayments() {
             </div>
           </div>
 
-          {remaining > 0 && <p className="text-uff-accent text-sm font-medium">{t('remainingDue')}: ₹{remaining.toLocaleString()}</p>}
+          {remaining > 0 && <p className="text-uff-accent text-sm font-medium">{t('remainingDue')}: ₹{formatAmount(remaining)}</p>}
         </div>
       </Modal>
 
@@ -720,23 +735,25 @@ export default function FullTimePayments() {
             <p><span className="font-medium text-slate-700">{t('employeeName')}:</span> {(detailPayment.employee as { name?: string })?.name}</p>
             <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth(detailPayment.month)}</p>
             {detailPayment.isAdvance ? (
-              <p><span className="font-medium text-slate-700">{t('advance')}:</span> ₹{detailPayment.paymentAmount?.toLocaleString()}</p>
+              <p><span className="font-medium text-slate-700">{t('advance')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
             ) : (
               <>
-                {detailPayment.daysWorked != null && (
-                  <p><span className="font-medium text-slate-700">{t('daysWorked')}:</span> {detailPayment.daysWorked}{detailPayment.totalWorkingDays ? ` / ${detailPayment.totalWorkingDays} ${t('totalWorkingDays')}` : ''}</p>
-                )}
-                <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{detailPayment.baseAmount?.toLocaleString()}</p>
-                {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{detailPayment.addDeductAmount?.toLocaleString()} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
-                {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> -₹{(detailPayment.advanceDeducted ?? 0).toLocaleString()}</p>}
+                {(() => {
+                  const d = getDisplayDays(detailPayment);
+                  if (d) return <p><span className="font-medium text-slate-700">{t('daysWorked')}:</span> {d.days}{d.total != null ? ` / ${d.total} ${t('totalWorkingDays')}` : ''}{isAccountancy ? ` (${t('virtualDays')})` : ''}</p>;
+                  return null;
+                })()}
+                <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{formatAmount(detailPayment.baseAmount)}</p>
+                {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{formatAmount(detailPayment.addDeductAmount)} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
+                {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> -₹{formatAmount(detailPayment.advanceDeducted)}</p>}
               </>
             )}
-            <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{detailPayment.totalPayable?.toLocaleString()}</p>
-            <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{detailPayment.paymentAmount?.toLocaleString()}</p>
+            <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{formatAmount(detailPayment.totalPayable)}</p>
+            <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
             <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode(detailPayment.paymentMode)}</p>
             {detailPayment.transactionRef && <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {detailPayment.transactionRef}</p>}
-            {detailPayment.remainingAmount > 0 && <p className="text-uff-accent"><span className="font-medium">{t('remainingDue')}:</span> ₹{detailPayment.remainingAmount?.toLocaleString()}</p>}
-            {detailPayment.carriedForward > 0 && <p><span className="font-medium text-slate-700">{t('carryForward')}:</span> ₹{detailPayment.carriedForward?.toLocaleString()} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
+            {detailPayment.remainingAmount > 0 && <p className="text-uff-accent"><span className="font-medium">{t('remainingDue')}:</span> ₹{formatAmount(detailPayment.remainingAmount)}</p>}
+            {detailPayment.carriedForward > 0 && <p><span className="font-medium text-slate-700">{t('carryForward')}:</span> ₹{formatAmount(detailPayment.carriedForward)} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
             {detailPayment.isAdvance && <p className="text-blue-600">{t('advance')}</p>}
           </div>
         )}
@@ -753,7 +770,7 @@ export default function FullTimePayments() {
             </button>
             <button
               onClick={() => {
-                const amt = parseFloat((document.getElementById('carry-amount') as HTMLInputElement)?.value || '0') || 0;
+                const amt = roundAmount(parseFloat((document.getElementById('carry-amount') as HTMLInputElement)?.value || '0') || 0);
                 const remarks = (document.getElementById('carry-remarks') as HTMLInputElement)?.value || '';
                 carryModal.onConfirm(amt, remarks);
               }}
@@ -764,7 +781,7 @@ export default function FullTimePayments() {
           </div>
         }>
           <p className="text-slate-600 mb-4">
-            {t('remainingDue')}: ₹{carryModal.remaining.toLocaleString()}. {t('carryForwardQuestion')}
+            {t('remainingDue')}: ₹{formatAmount(carryModal.remaining)}. {t('carryForwardQuestion')}
           </p>
           <div className="space-y-4">
             <div>

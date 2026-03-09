@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     // Allow employees to read rates (needed for viewing work records)
-    if (!hasRole(user, ['admin', 'finance', 'hr']) && !user.employeeId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) && !user.employeeId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
