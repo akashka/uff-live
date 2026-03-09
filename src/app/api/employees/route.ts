@@ -12,30 +12,33 @@ import { logAudit } from '@/lib/audit';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string) {
+async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string) {
   await connectDB();
-  const filter = includeInactive ? {} : { isActive: true };
+  const filter: Record<string, unknown> = includeInactive ? {} : { isActive: true };
   if (search && search.trim()) {
     const q = search.trim().toLowerCase();
     const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    (filter as Record<string, unknown>).$or = [
+    filter.$or = [
       { name: regex },
       { email: regex },
       { contactNumber: { $regex: q } },
+      { employeeId: { $regex: q } },
     ];
   }
+  if (departmentId) filter.department = departmentId;
+  if (branchId) filter.branches = branchId;
   const skip = (page - 1) * limit;
   const [employees, total] = await Promise.all([
-    Employee.find(filter).populate('branches', 'name').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Employee.find(filter).populate('branches', 'name').populate('department', 'name').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Employee.countDocuments(filter),
   ]);
   return { employees, total, page, limit };
 }
 
-function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string) {
+function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string) {
   return unstable_cache(
-    () => fetchEmployees(includeInactive, page, limit, search),
-    ['employees', String(includeInactive), String(page), String(limit), search ?? ''],
+    () => fetchEmployees(includeInactive, page, limit, search, departmentId, branchId),
+    ['employees', String(includeInactive), String(page), String(limit), search ?? '', departmentId ?? '', branchId ?? ''],
     { revalidate: 60, tags: ['employees'] }
   )();
 }
@@ -52,8 +55,10 @@ export async function GET(req: NextRequest) {
     const limitParam = searchParams.get('limit');
     const limit = limitParam === '0' || limitParam === 'all' ? 10000 : Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(limitParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE));
     const search = searchParams.get('search') || undefined;
+    const departmentId = searchParams.get('departmentId') || undefined;
+    const branchId = searchParams.get('branchId') || undefined;
 
-    const result = await getCachedEmployees(includeInactive, page, limit, search);
+    const result = await getCachedEmployees(includeInactive, page, limit, search, departmentId, branchId);
     const { employees, total, page: p, limit: l } = result;
     const hasMore = limit < 10000 && p * l < total;
     return NextResponse.json({
@@ -87,6 +92,7 @@ export async function POST(req: NextRequest) {
       anniversaryDate,
       aadhaarNumber,
       pfNumber,
+      esiNumber,
       panNumber,
       bankName,
       bankBranch,
@@ -95,6 +101,7 @@ export async function POST(req: NextRequest) {
       upiId,
       employeeType,
       branches,
+      department,
       pfOpted,
       monthlyPfAmount,
       esiOpted,
@@ -118,12 +125,30 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
+    const existingByEmail = await Employee.findOne({ email });
+    if (existingByEmail) {
+      return NextResponse.json({ error: 'An employee with this email already exists' }, { status: 400 });
+    }
+    const existingByPhone = await Employee.findOne({ contactNumber });
+    if (existingByPhone) {
+      return NextResponse.json({ error: 'An employee with this phone number already exists' }, { status: 400 });
+    }
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
     }
 
+    // Generate next employeeId (REC001, REC002, ...)
+    const allWithId = await Employee.find({ employeeId: /^REC\d+$/i }).select('employeeId').lean();
+    let maxNum = 0;
+    for (const e of allWithId) {
+      const match = String(e.employeeId).match(/^REC(\d+)$/i);
+      if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    }
+    const employeeId = `REC${String(maxNum + 1).padStart(3, '0')}`;
+
     const employee = await Employee.create({
+      employeeId,
       name,
       contactNumber,
       email,
@@ -134,6 +159,7 @@ export async function POST(req: NextRequest) {
       anniversaryDate: anniversaryDate ? new Date(anniversaryDate) : undefined,
       aadhaarNumber: aadhaarNumber || '',
       pfNumber: pfNumber || '',
+      esiNumber: esiNumber || '',
       panNumber: panNumber || '',
       bankName: bankName || '',
       bankBranch: bankBranch || '',
@@ -142,6 +168,7 @@ export async function POST(req: NextRequest) {
       upiId: upiId || '',
       employeeType: employeeType || 'full_time',
       branches: branches || [],
+      department: department || undefined,
       pfOpted: pfOpted ?? false,
       monthlyPfAmount: monthlyPfAmount || 0,
       esiOpted: esiOpted ?? false,
@@ -160,7 +187,7 @@ export async function POST(req: NextRequest) {
       isActive: true,
     });
 
-    const emp = await Employee.findById(employee._id).populate('branches', 'name').lean();
+    const emp = await Employee.findById(employee._id).populate('branches', 'name').populate('department', 'name').lean();
     revalidateTag('employees', 'default');
 
     notifyAdminsIfNeeded(user, {
@@ -181,7 +208,13 @@ export async function POST(req: NextRequest) {
       req,
     }).catch(() => {});
 
-    return NextResponse.json({ employee: emp, generatedPassword: password });
+    return NextResponse.json({
+      employee: emp,
+      generatedPassword: password,
+      email,
+      contactNumber,
+      employeeId,
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

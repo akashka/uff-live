@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import Modal from '@/components/Modal';
+import SaveOverlay from '@/components/SaveOverlay';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useEmployees, usePayments } from '@/lib/hooks/useApi';
+import { useEmployees, usePayments, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount, roundAmount, roundDays } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -73,6 +74,8 @@ export default function FullTimePayments() {
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
   const canView = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth());
   const [filterType, setFilterType] = useState<'all' | 'salary' | 'advance'>('all');
@@ -89,8 +92,36 @@ export default function FullTimePayments() {
       isAdvance: filterType === 'salary' ? false : filterType === 'advance' ? true : undefined,
     }
   );
-  const { employees: allEmployees } = useEmployees(false, { limit: 0 });
+  const { employees: allEmployees } = useEmployees(false, { limit: 0, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
   const employees = (Array.isArray(allEmployees) ? allEmployees : []).filter((e: Employee) => e.employeeType === 'full_time');
+  const { branches } = useBranches(true);
+  const { departments } = useDepartments(true);
+  const [salaryForm, setSalaryForm] = useState({
+    branchId: '',
+    departmentId: '',
+    employeeId: '',
+    month: getCurrentMonth(),
+    daysWorked: 0,
+    addDeductAmount: 0,
+    addDeductRemarks: '',
+    advanceDeducted: 0,
+    paymentMode: 'cash' as string,
+    transactionRef: '',
+  });
+  const [advanceForm, setAdvanceForm] = useState({
+    branchId: '',
+    departmentId: '',
+    employeeId: '',
+    month: getCurrentMonth(),
+    amount: 0,
+    reasons: '',
+    paymentMode: 'cash' as string,
+    transactionRef: '',
+  });
+  const { employees: salaryFormEmpList } = useEmployees(false, { limit: 0, branchId: salaryForm.branchId || undefined, departmentId: salaryForm.departmentId || undefined });
+  const employeesForSalaryForm = (Array.isArray(salaryFormEmpList) ? salaryFormEmpList : []).filter((e: Employee) => e.employeeType === 'full_time');
+  const { employees: advanceFormEmpList } = useEmployees(false, { limit: 0, branchId: advanceForm.branchId || undefined, departmentId: advanceForm.departmentId || undefined });
+  const employeesForAdvanceForm = (Array.isArray(advanceFormEmpList) ? advanceFormEmpList : []).filter((e: Employee) => e.employeeType === 'full_time');
   const [salaryModal, setSalaryModal] = useState(false);
   const [advanceModal, setAdvanceModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
@@ -119,26 +150,6 @@ export default function FullTimePayments() {
   const [calc, setCalc] = useState<CalcResponse | null>(null);
   const [advanceOutstanding, setAdvanceOutstanding] = useState<number>(0);
 
-  const [salaryForm, setSalaryForm] = useState({
-    employeeId: '',
-    month: getCurrentMonth(),
-    daysWorked: 0,
-    addDeductAmount: 0,
-    addDeductRemarks: '',
-    advanceDeducted: 0,
-    paymentMode: 'cash' as string,
-    transactionRef: '',
-  });
-
-  const [advanceForm, setAdvanceForm] = useState({
-    employeeId: '',
-    month: getCurrentMonth(),
-    amount: 0,
-    reasons: '',
-    paymentMode: 'cash' as string,
-    transactionRef: '',
-  });
-
   useEffect(() => {
     if (isEmployee && user?.employeeId) setFilterEmployee(user.employeeId);
   }, [isEmployee, user?.employeeId]);
@@ -149,7 +160,7 @@ export default function FullTimePayments() {
 
   useEffect(() => {
     setPage(1);
-  }, [filterEmployee, filterMonth, filterType]);
+  }, [filterBranch, filterDepartment, filterEmployee, filterMonth, filterType]);
 
   const loadCalcAndAdvance = async (empId: string, month: string) => {
     if (!empId || !month) return;
@@ -179,6 +190,8 @@ export default function FullTimePayments() {
     setCalc(null);
     setAdvanceOutstanding(0);
     setSalaryForm({
+      branchId: filterBranch,
+      departmentId: filterDepartment,
       employeeId: empId,
       month: getCurrentMonth(),
       daysWorked: 0,
@@ -198,6 +211,8 @@ export default function FullTimePayments() {
       return;
     }
     setAdvanceForm({
+      branchId: filterBranch,
+      departmentId: filterDepartment,
       employeeId: emp?._id || '',
       month: getCurrentMonth(),
       amount: 0,
@@ -273,8 +288,8 @@ export default function FullTimePayments() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
       toast.success(t('saveSuccess'));
+      await mutatePayments();
       setSalaryModal(false);
-      mutatePayments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
@@ -317,8 +332,8 @@ export default function FullTimePayments() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
       toast.success(t('saveSuccess'));
+      await mutatePayments();
       setAdvanceModal(false);
-      mutatePayments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
@@ -406,15 +421,35 @@ export default function FullTimePayments() {
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">
           {!isEmployee && (
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-              <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                <option value="">{t('all')}</option>
-                {employees.map((e) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
+                <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
+                <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                    <option key={d._id} value={d._id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
+                <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {employees.map((e) => (
+                    <option key={e._id} value={e._id}>{e.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('month')}</label>
@@ -592,16 +627,36 @@ export default function FullTimePayments() {
         </div>
       }>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
+              <select value={salaryForm.branchId} onChange={(e) => setSalaryForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{t('selectBranch')}...</option>
+                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')}</label>
+              <select value={salaryForm.departmentId} onChange={(e) => setSalaryForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{salaryForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
+                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500">*</span></label>
               <select value={salaryForm.employeeId} onChange={(e) => onSalaryEmployeeChange(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">Select...</option>
-                {employees.map((e) => (
+                <option value="">{employeesForSalaryForm.length === 0 && salaryForm.branchId ? (salaryForm.departmentId ? t('noEmployees') : t('selectDepartment') + ' first') : 'Select...'}</option>
+                {employeesForSalaryForm.map((e) => (
                   <option key={e._id} value={e._id}>{e.name}</option>
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} <span className="text-red-500">*</span></label>
               <input type="month" value={salaryForm.month} onChange={(e) => setSalaryForm((f) => ({ ...f, month: e.target.value }))} onBlur={onSalaryMonthChange} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
@@ -685,16 +740,36 @@ export default function FullTimePayments() {
         </div>
       }>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
+              <select value={advanceForm.branchId} onChange={(e) => setAdvanceForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{t('selectBranch')}...</option>
+                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')}</label>
+              <select value={advanceForm.departmentId} onChange={(e) => setAdvanceForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{advanceForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
+                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500">*</span></label>
               <select value={advanceForm.employeeId} onChange={(e) => setAdvanceForm((f) => ({ ...f, employeeId: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">Select...</option>
-                {employees.map((e) => (
+                <option value="">{employeesForAdvanceForm.length === 0 && advanceForm.branchId ? (advanceForm.departmentId ? t('noEmployees') : t('selectDepartment') + ' first') : 'Select...'}</option>
+                {employeesForAdvanceForm.map((e) => (
                   <option key={e._id} value={e._id}>{e.name}</option>
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} <span className="text-red-500">*</span></label>
               <input type="month" value={advanceForm.month} onChange={(e) => setAdvanceForm((f) => ({ ...f, month: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
@@ -836,6 +911,8 @@ export default function FullTimePayments() {
           </label>
         </div>
       </Modal>
+
+      <SaveOverlay show={saving} label={t('saving')} />
     </div>
   );
 }

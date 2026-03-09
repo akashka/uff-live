@@ -4,6 +4,7 @@ export type EmployeeType = 'full_time' | 'contractor';
 
 export interface IEmployee extends Document {
   _id: mongoose.Types.ObjectId;
+  employeeId: string; // Unique login identifier, e.g. REC001
   name: string;
   contactNumber: string;
   email: string;
@@ -14,6 +15,7 @@ export interface IEmployee extends Document {
   anniversaryDate?: Date;
   aadhaarNumber?: string;
   pfNumber?: string;
+  esiNumber?: string;
   panNumber?: string;
   bankName?: string;
   bankBranch?: string;
@@ -24,6 +26,7 @@ export interface IEmployee extends Document {
   documents?: { type: string; name?: string; fileUrl: string; uploadedAt: Date }[];
   employeeType: EmployeeType;
   branches: mongoose.Types.ObjectId[];
+  department?: mongoose.Types.ObjectId; // Department the employee works in
   pfOpted?: boolean;
   monthlyPfAmount?: number;
   esiOpted?: boolean;
@@ -41,9 +44,10 @@ export interface IEmployee extends Document {
 
 const EmployeeSchema = new Schema<IEmployee>(
   {
+    employeeId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    contactNumber: { type: String, required: true },
-    email: { type: String, required: true },
+    contactNumber: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true },
     emergencyNumber: { type: String, required: true },
     dateOfBirth: { type: Date, required: true },
     gender: { type: String, enum: ['male', 'female', 'other'], required: true },
@@ -51,6 +55,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     anniversaryDate: { type: Date, required: false },
     aadhaarNumber: { type: String, default: '' },
     pfNumber: { type: String, default: '' },
+    esiNumber: { type: String, default: '' },
     panNumber: { type: String, default: '' },
     bankName: { type: String, default: '' },
     bankBranch: { type: String, default: '' },
@@ -66,6 +71,7 @@ const EmployeeSchema = new Schema<IEmployee>(
     }],
     employeeType: { type: String, enum: ['full_time', 'contractor'], default: 'full_time' },
     branches: [{ type: Schema.Types.ObjectId, ref: 'Branch' }],
+    department: { type: Schema.Types.ObjectId, ref: 'Department', required: false },
     pfOpted: { type: Boolean, default: false },
     monthlyPfAmount: { type: Number, default: 0 },
     esiOpted: { type: Boolean, default: false },
@@ -84,7 +90,10 @@ const EmployeeSchema = new Schema<IEmployee>(
 // Indexes for list queries and lookups at scale (100s of employees)
 EmployeeSchema.index({ isActive: 1, createdAt: -1 });
 EmployeeSchema.index({ email: 1 });
+EmployeeSchema.index({ contactNumber: 1 });
+EmployeeSchema.index({ employeeId: 1 });
 EmployeeSchema.index({ name: 1 });
 EmployeeSchema.index({ employeeType: 1, isActive: 1 });
+EmployeeSchema.index({ department: 1 });
 
 export default (mongoose.models.Employee as Model<IEmployee>) || mongoose.model<IEmployee>('Employee', EmployeeSchema);

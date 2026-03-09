@@ -9,6 +9,7 @@ import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useRates, useBranches } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
+import SaveOverlay from '@/components/SaveOverlay';
 import Modal from '@/components/Modal';
 import { toast } from '@/lib/toast';
 import ValidatedInput from '@/components/ValidatedInput';
@@ -171,8 +172,8 @@ export default function RatesPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
         toast.success(t('saveSuccess'));
+        await mutateRates();
         setModal(null);
-        mutateRates();
       } else if (editingId) {
         const res = await fetch(`/api/rates/${editingId}`, {
           method: 'PATCH',
@@ -181,8 +182,8 @@ export default function RatesPage() {
         });
         if (!res.ok) throw new Error((await res.json()).error);
         toast.success(t('saveSuccess'));
+        await mutateRates();
         setModal(null);
-        mutateRates();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
@@ -580,6 +581,8 @@ export default function RatesPage() {
           </div>
         </div>
       )}
+
+      <SaveOverlay show={saving} label={t('saving')} />
 
       {confirmModal && (
         <ConfirmModal

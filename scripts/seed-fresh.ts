@@ -132,48 +132,49 @@ async function seedFresh() {
   ]);
   console.log(`✓ Rate Master created (${rates.length} rates)`);
 
-  // 6. Create style orders with month-wise data (current month + last 2 months)
+  // 6. Create style orders (4-digit code + brand, single month each)
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const d1 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const d2 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const prevMonth1 = `${d1.getFullYear()}-${String(d1.getMonth() + 1).padStart(2, '0')}`;
-  const prevMonth2 = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, '0')}`;
 
   const styleOrders = await StyleOrder.insertMany([
     {
-      styleCode: 'STYLE-001',
+      styleCode: '0001',
+      brand: 'Montecarlo',
       details: 'Summer T-Shirt Order - stitching at Main, cutting at North',
       branches: [branchIds[0], branchIds[1]],
       rateMasterItems: [rates[0]._id, rates[1]._id, rates[2]._id],
-      monthWiseData: [
-        { month: currentMonth, totalOrderQuantity: 500, sellingPricePerQuantity: 120 },
-        { month: prevMonth1, totalOrderQuantity: 300, sellingPricePerQuantity: 115 },
-      ],
+      month: currentMonth,
+      totalOrderQuantity: 500,
+      clientCostPerPiece: 120,
+      clientCostTotalAmount: 60000,
       isActive: true,
     },
     {
-      styleCode: 'STYLE-002',
+      styleCode: '0002',
+      brand: 'Globus',
       details: 'Formal Shirt Batch',
       branches: [branchIds[0]],
       rateMasterItems: [rates[0]._id, rates[2]._id, rates[3]._id],
-      monthWiseData: [
-        { month: currentMonth, totalOrderQuantity: 800, sellingPricePerQuantity: 180 },
-      ],
+      month: currentMonth,
+      totalOrderQuantity: 800,
+      clientCostPerPiece: 180,
+      clientCostTotalAmount: 144000,
       isActive: true,
     },
     {
-      styleCode: 'STYLE-003',
+      styleCode: '0001',
+      brand: 'Puma',
       details: 'Kurti Export Order - cutting at North, finishing at South',
       branches: [branchIds[1], branchIds[2]],
       rateMasterItems: [rates[0]._id, rates[1]._id, rates[4]._id],
-      monthWiseData: [
-        { month: currentMonth, totalOrderQuantity: 1200, sellingPricePerQuantity: 95 },
-      ],
+      month: currentMonth,
+      totalOrderQuantity: 1200,
+      clientCostPerPiece: 95,
+      clientCostTotalAmount: 114000,
       isActive: true,
     },
   ]);
-  console.log(`✓ Style Orders created (${styleOrders.length}) with month-wise data for ${currentMonth}`);
+  console.log(`✓ Style Orders created (${styleOrders.length}) for ${currentMonth}`);
 
   // 7. Create work records linked to style orders (current month)
   const workRecords: {

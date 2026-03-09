@@ -12,6 +12,7 @@ export type FieldType =
   | 'aadhaar'
   | 'pan'
   | 'pfNumber'
+  | 'esiNumber'
   | 'ifsc'
   | 'accountNumber'
   | 'upi'
@@ -45,6 +46,7 @@ export function validateField(type: FieldType, value: string): boolean {
     case 'pan':
       return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.toUpperCase());
     case 'pfNumber':
+    case 'esiNumber':
       return /^[A-Za-z0-9/-]+$/.test(v) && v.length >= 5;
     case 'ifsc':
       return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.toUpperCase()) && v.length === 11;
@@ -79,6 +81,7 @@ export const FIELD_PLACEHOLDERS: Record<FieldType, string> = {
   aadhaar: 'e.g. 1234 5678 9012',
   pan: 'e.g. ABCDE1234F',
   pfNumber: 'e.g. KA/BLR/12345',
+  esiNumber: 'e.g. 12-34567-89',
   ifsc: 'e.g. SBIN0001234',
   accountNumber: 'e.g. 123456789012',
   upi: 'e.g. name@bank',

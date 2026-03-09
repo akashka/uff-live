@@ -1,20 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
+import Employee from '@/lib/models/Employee';
 import { signToken } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { loginId, password } = body;
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
+    if (!loginId || !password) {
+      return NextResponse.json({ error: 'Login ID and password required' }, { status: 400 });
     }
 
+    const id = String(loginId).trim();
+
     await connectDB();
-    const user = await User.findOne({ email, isActive: true });
+    let user = await User.findOne({ email: id, isActive: true });
+    if (!user) {
+      const empByPhone = await Employee.findOne({ contactNumber: id });
+      if (empByPhone) {
+        user = await User.findOne({ employeeId: empByPhone._id, isActive: true });
+      }
+    }
+    if (!user) {
+      const empById = await Employee.findOne({ employeeId: { $regex: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+      if (empById) {
+        user = await User.findOne({ employeeId: empById._id, isActive: true });
+      }
+    }
     if (!user) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }

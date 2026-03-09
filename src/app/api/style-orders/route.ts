@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
+import '@/lib/models/RateMaster'; // Register for populate('rateMasterItems')
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     let filter: Record<string, unknown> = {};
     if (!includeInactive) filter.isActive = true;
     if (branchId) filter.branches = branchId;
-    if (month) filter['monthWiseData.month'] = month;
+    if (month) filter.month = String(month).slice(0, 7);
 
     const list = await StyleOrder.find(filter)
       .populate('branches', 'name _id')
@@ -43,40 +44,57 @@ export async function POST(req: NextRequest) {
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { styleCode, details, branches: branchesInput, rateMasterItems, monthWiseData } = body;
+    const {
+      styleCode,
+      brand,
+      details,
+      branches: branchesInput,
+      month,
+      totalOrderQuantity,
+      clientCostPerPiece,
+      clientCostTotalAmount,
+    } = body;
 
     const branchIds = Array.isArray(branchesInput) ? branchesInput : (branchesInput ? [branchesInput] : []);
-    const rateIds = Array.isArray(rateMasterItems) ? rateMasterItems : [];
-    if (!styleCode || branchIds.length === 0) {
-      return NextResponse.json({ error: 'Style code and at least one branch required' }, { status: 400 });
+    if (!styleCode || !brand || branchIds.length === 0) {
+      return NextResponse.json({ error: 'Style code, brand and at least one branch required' }, { status: 400 });
     }
-    if (rateIds.length === 0) {
-      return NextResponse.json({ error: 'At least one rate master item is required' }, { status: 400 });
+
+    const codeStr = String(styleCode).trim();
+    if (!/^\d{4}$/.test(codeStr)) {
+      return NextResponse.json({ error: 'Style code must be a 4-digit number (e.g. 0001)' }, { status: 400 });
+    }
+
+    const brandStr = String(brand).trim();
+    if (!brandStr) {
+      return NextResponse.json({ error: 'Brand is required' }, { status: 400 });
     }
 
     await connectDB();
 
-    const existing = await StyleOrder.findOne({ styleCode });
+    const existing = await StyleOrder.findOne({ brand: brandStr, styleCode: codeStr });
     if (existing) {
-      return NextResponse.json({ error: 'Style code already exists' }, { status: 400 });
+      return NextResponse.json({ error: `Style code ${codeStr} with brand "${brandStr}" already exists` }, { status: 400 });
     }
 
-    const validMonthData = (Array.isArray(monthWiseData) ? monthWiseData : [])
-      .filter((m: { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }) =>
-        m.month && typeof m.totalOrderQuantity === 'number' && typeof m.sellingPricePerQuantity === 'number'
-      )
-      .map((m: { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }) => ({
-        month: String(m.month || '').slice(0, 7),
-        totalOrderQuantity: Math.max(0, m.totalOrderQuantity),
-        sellingPricePerQuantity: Math.max(0, m.sellingPricePerQuantity),
-      }));
+    const now = new Date();
+    const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthStr = (typeof month === 'string' && month.length >= 7) ? String(month).slice(0, 7) : defaultMonth;
+    const qty = Math.max(0, Number(totalOrderQuantity) || 0);
+    const perPiece = Math.max(0, Number(clientCostPerPiece) || 0);
+    const totalCostRaw = Math.max(0, Number(clientCostTotalAmount) || 0);
+    const totalCost = totalCostRaw > 0 ? totalCostRaw : (qty > 0 && perPiece > 0 ? qty * perPiece : 0);
 
     const doc = await StyleOrder.create({
-      styleCode: String(styleCode).trim(),
+      styleCode: codeStr,
+      brand: brandStr,
       details: details || '',
       branches: branchIds.map((id: string) => new mongoose.Types.ObjectId(id)),
-      rateMasterItems: rateIds,
-      monthWiseData: validMonthData,
+      rateMasterItems: [],
+      month: monthStr,
+      totalOrderQuantity: qty,
+      clientCostPerPiece: perPiece,
+      clientCostTotalAmount: totalCost,
       isActive: true,
     });
 
@@ -90,7 +108,7 @@ export async function POST(req: NextRequest) {
       title: 'Style order created',
       message: `${user.role} created style order "${styleCode}".`,
       link: '/style-orders',
-      metadata: { entityId: String(doc._id), entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode },
+      metadata: { entityId: String(doc._id), entityType: 'style_order', actorId: user.userId, actorRole: user.role, styleCode: codeStr, brand: brandStr },
     }).catch(() => {});
 
     logAudit({
@@ -99,7 +117,7 @@ export async function POST(req: NextRequest) {
       entityType: 'style_order',
       entityId: String(doc._id),
       summary: `Style order "${styleCode}" created`,
-      metadata: { styleCode },
+      metadata: { styleCode: codeStr, brand: brandStr },
       req,
     }).catch(() => {});
 

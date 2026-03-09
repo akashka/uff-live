@@ -7,37 +7,29 @@ import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useStyleOrders, useBranches, useRates } from '@/lib/hooks/useApi';
+import { useStyleOrders, useBranches } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
 import { toast } from '@/lib/toast';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
+import SaveOverlay from '@/components/SaveOverlay';
 
 interface Branch {
   _id: string;
   name: string;
 }
 
-interface RateMaster {
-  _id: string;
-  name: string;
-  unit: string;
-}
-
-interface MonthWiseData {
-  month: string;
-  totalOrderQuantity: number;
-  sellingPricePerQuantity: number;
-}
-
 interface StyleOrder {
   _id: string;
   styleCode: string;
+  brand: string;
   details?: string;
   branches: (Branch | string)[];
-  rateMasterItems: (RateMaster | string)[];
-  monthWiseData: MonthWiseData[];
+  month: string;
+  totalOrderQuantity: number;
+  clientCostPerPiece: number;
+  clientCostTotalAmount: number;
   isActive: boolean;
 }
 
@@ -49,7 +41,6 @@ export default function StyleOrdersPage() {
   const [filterMonth, setFilterMonth] = useState('');
   const { styleOrders, loading, mutate } = useStyleOrders(includeInactive, filterBranch || undefined, filterMonth || undefined);
   const { branches } = useBranches(true);
-  const { rates } = useRates(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -60,14 +51,17 @@ export default function StyleOrdersPage() {
 
   const [form, setForm] = useState({
     styleCode: '',
+    brand: '',
     details: '',
     branchIds: [] as string[],
-    rateMasterItems: [] as string[],
-    monthWiseData: [] as { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }[],
+    month: '',
+    totalOrderQuantity: 0,
+    clientCostPerPiece: 0,
+    clientCostTotalAmount: 0,
   });
 
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
-  const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || ''); // accountancy is read-only
+  const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
 
   useEffect(() => {
     if (Array.isArray(branches) && branches.length === 1 && !filterBranch) {
@@ -80,10 +74,13 @@ export default function StyleOrdersPage() {
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     setForm({
       styleCode: '',
+      brand: '',
       details: '',
       branchIds: filterBranch ? [filterBranch] : (Array.isArray(branches) && branches[0] ? [branches[0]._id] : []),
-      rateMasterItems: [],
-      monthWiseData: [{ month: currentMonth, totalOrderQuantity: 0, sellingPricePerQuantity: 0 }],
+      month: currentMonth,
+      totalOrderQuantity: 0,
+      clientCostPerPiece: 0,
+      clientCostTotalAmount: 0,
     });
     setModal('create');
     setEditingId(null);
@@ -93,14 +90,13 @@ export default function StyleOrdersPage() {
     const branchIds = (s.branches || []).map((b) => (typeof b === 'object' && b._id ? b._id : String(b)));
     setForm({
       styleCode: s.styleCode,
+      brand: s.brand || '',
       details: s.details || '',
       branchIds,
-      rateMasterItems: (s.rateMasterItems || []).map((r) => (typeof r === 'object' ? (r as RateMaster)._id : r)),
-      monthWiseData: (s.monthWiseData || []).map((m) => ({
-        month: m.month,
-        totalOrderQuantity: m.totalOrderQuantity ?? 0,
-        sellingPricePerQuantity: m.sellingPricePerQuantity ?? 0,
-      })),
+      month: s.month || '',
+      totalOrderQuantity: s.totalOrderQuantity ?? 0,
+      clientCostPerPiece: s.clientCostPerPiece ?? 0,
+      clientCostTotalAmount: s.clientCostTotalAmount ?? 0,
     });
     setModal('edit');
     setEditingId(s._id);
@@ -111,66 +107,51 @@ export default function StyleOrdersPage() {
     setModal('view');
   };
 
-  const addMonth = () => {
-    const lastMonth = form.monthWiseData[form.monthWiseData.length - 1]?.month || '';
-    let nextMonth = lastMonth || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-    if (lastMonth) {
-      const [y, m] = lastMonth.split('-').map(Number);
-      const d = new Date(y, m, 1);
-      d.setMonth(d.getMonth() + 1);
-      nextMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }
-    setForm((f) => ({ ...f, monthWiseData: [...f.monthWiseData, { month: nextMonth, totalOrderQuantity: 0, sellingPricePerQuantity: 0 }] }));
+  const formatCodeInput = (v: string) => {
+    return v.replace(/\D/g, '').slice(0, 4);
   };
 
-  const updateMonthData = (monthIdx: number, field: 'month' | 'totalOrderQuantity' | 'sellingPricePerQuantity', value: string | number) => {
-    setForm((f) => {
-      const m = [...f.monthWiseData];
-      if (!m[monthIdx]) return f;
-      m[monthIdx] = { ...m[monthIdx], [field]: value };
-      return { ...f, monthWiseData: m };
-    });
+  const getCodeForSave = () => {
+    const digits = formatCodeInput(form.styleCode);
+    return digits.length >= 1 && digits.length <= 4 ? digits.padStart(4, '0') : null;
   };
 
-  const updateMonthCostFromPerPiece = (monthIdx: number, perPiece: number) => {
-    setForm((f) => {
-      const m = [...f.monthWiseData];
-      if (!m[monthIdx]) return f;
-      m[monthIdx] = { ...m[monthIdx], sellingPricePerQuantity: perPiece };
-      return { ...f, monthWiseData: m };
-    });
+  const updateCostFromPerPiece = () => {
+    const qty = form.totalOrderQuantity || 0;
+    const perPiece = form.clientCostPerPiece || 0;
+    setForm((f) => ({ ...f, clientCostTotalAmount: qty > 0 ? qty * perPiece : 0 }));
   };
 
-  const updateMonthCostFromTotal = (monthIdx: number, total: number) => {
-    setForm((f) => {
-      const m = [...f.monthWiseData];
-      if (!m[monthIdx]) return f;
-      const qty = m[monthIdx].totalOrderQuantity || 0;
-      const perPiece = qty > 0 ? total / qty : 0;
-      m[monthIdx] = { ...m[monthIdx], sellingPricePerQuantity: perPiece };
-      return { ...f, monthWiseData: m };
-    });
+  const updateCostFromTotal = () => {
+    const qty = form.totalOrderQuantity || 0;
+    const total = form.clientCostTotalAmount || 0;
+    setForm((f) => ({ ...f, clientCostPerPiece: qty > 0 ? total / qty : 0 }));
   };
 
-  const removeMonth = (monthIdx: number) => {
-    setForm((f) => ({ ...f, monthWiseData: f.monthWiseData.filter((_, i) => i !== monthIdx) }));
-  };
+  const toNum = (v: unknown) => Math.max(0, Number(v) || 0);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const codeStr = getCodeForSave();
+      if (!codeStr) {
+        toast.error(t('styleCodeMustBe4Digits'));
+        setSaving(false);
+        return;
+      }
+
+      const now = new Date();
+      const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthVal = form.month && String(form.month).length >= 7 ? String(form.month).slice(0, 7) : defaultMonth;
       const payload = {
-        styleCode: form.styleCode.trim(),
-        details: form.details,
+        styleCode: codeStr,
+        brand: String(form.brand || '').trim(),
+        details: form.details || '',
         branches: form.branchIds,
-        rateMasterItems: form.rateMasterItems,
-        monthWiseData: form.monthWiseData
-          .filter((m) => m.month && (m.totalOrderQuantity > 0 || m.sellingPricePerQuantity > 0))
-          .map((m) => ({
-            month: m.month.slice(0, 7),
-            totalOrderQuantity: Math.max(0, m.totalOrderQuantity),
-            sellingPricePerQuantity: Math.max(0, m.sellingPricePerQuantity),
-          })),
+        month: monthVal,
+        totalOrderQuantity: toNum(form.totalOrderQuantity),
+        clientCostPerPiece: toNum(form.clientCostPerPiece),
+        clientCostTotalAmount: toNum(form.clientCostTotalAmount),
       };
 
       if (modal === 'create') {
@@ -182,19 +163,20 @@ export default function StyleOrdersPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
         toast.success(t('saveSuccess'));
+        await mutate();
         setModal(null);
-        mutate();
       } else if (editingId) {
+        const { month: _m, ...editPayload } = payload;
         const res = await fetch(`/api/style-orders/${editingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(editPayload),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
         toast.success(t('saveSuccess'));
+        await mutate();
         setModal(null);
-        mutate();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
@@ -216,7 +198,7 @@ export default function StyleOrdersPage() {
         });
         if (!res.ok) throw new Error();
         toast.success(t('saveSuccess'));
-        mutate();
+        await mutate();
       },
     });
   };
@@ -226,20 +208,28 @@ export default function StyleOrdersPage() {
     return brs.map((b) => (typeof b === 'object' && b.name ? b.name : '')).filter(Boolean).join(', ') || '-';
   };
 
-  const getRateName = (id: string) => (Array.isArray(rates) ? rates.find((r) => r._id === id) : null)?.name || id;
-
   const filtered = (Array.isArray(styleOrders) ? styleOrders : []).filter((s) => {
     const q = search.toLowerCase();
     if (!q) return true;
     const branchNames = getBranchNames(s);
-    return s.styleCode.toLowerCase().includes(q) || (s.details || '').toLowerCase().includes(q) || branchNames.toLowerCase().includes(q);
+    return (
+      s.styleCode.toLowerCase().includes(q) ||
+      (s.brand || '').toLowerCase().includes(q) ||
+      (s.details || '').toLowerCase().includes(q) ||
+      branchNames.toLowerCase().includes(q)
+    );
   });
-  const sorted = [...filtered].sort((a, b) =>
-    sortBy === 'code-desc' ? b.styleCode.localeCompare(a.styleCode) : a.styleCode.localeCompare(b.styleCode)
-  );
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'code-desc') return b.styleCode.localeCompare(a.styleCode);
+    if (sortBy === 'brand-desc') return (b.brand || '').localeCompare(a.brand || '');
+    if (sortBy === 'brand-asc') return (a.brand || '').localeCompare(b.brand || '');
+    return a.styleCode.localeCompare(b.styleCode);
+  });
   const SORT_OPTIONS = [
     { value: 'code-asc', label: `${t('styleOrderCode')} (A-Z)` },
     { value: 'code-desc', label: `${t('styleOrderCode')} (Z-A)` },
+    { value: 'brand-asc', label: `${t('brand')} (A-Z)` },
+    { value: 'brand-desc', label: `${t('brand')} (Z-A)` },
   ];
 
   if (!canAccess) {
@@ -297,9 +287,9 @@ export default function StyleOrdersPage() {
               <thead className="bg-uff-surface">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrderCode')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('brand')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('details')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rateMaster')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                 </tr>
@@ -313,13 +303,9 @@ export default function StyleOrdersPage() {
                   sorted.map((s) => (
                     <tr key={s._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
+                      <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
                       <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{s.details || '–'}</td>
                       <td className="px-4 py-3 text-slate-700">{getBranchNames(s)}</td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {(s.rateMasterItems || [])
-                          .map((r: RateMaster | string) => (typeof r === 'object' ? (r as RateMaster).name : getRateName(r)))
-                          .join(', ') || '–'}
-                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                           {s.isActive ? t('active') : t('inactive')}
@@ -350,12 +336,9 @@ export default function StyleOrdersPage() {
           ) : (
             sorted.map((s) => (
               <div key={s._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
-                <h3 className="font-semibold text-slate-900">{s.styleCode}</h3>
+                <h3 className="font-semibold text-slate-900">{s.styleCode} {s.brand ? `— ${s.brand}` : ''}</h3>
                 <p className="text-sm text-slate-600 mt-1 line-clamp-2">{s.details || '–'}</p>
                 <p className="text-sm text-slate-700 mt-1">{getBranchNames(s)}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {(s.rateMasterItems || []).map((r: RateMaster | string) => (typeof r === 'object' ? (r as RateMaster).name : getRateName(r))).join(', ') || '–'}
-                </p>
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                   {s.isActive ? t('active') : t('inactive')}
                 </span>
@@ -384,7 +367,17 @@ export default function StyleOrdersPage() {
         footer={
           <div className="flex gap-3 justify-end">
             {modal !== 'view' && (
-              <button onClick={handleSave} disabled={saving || !form.styleCode.trim() || form.branchIds.length === 0 || form.rateMasterItems.length === 0} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
+              <button
+                onClick={handleSave}
+                disabled={
+                  saving ||
+                  !form.styleCode.trim() ||
+                  !form.brand.trim() ||
+                  form.branchIds.length === 0 ||
+                  !getCodeForSave()
+                }
+                className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition"
+              >
                 {saving ? '...' : t('save')}
               </button>
             )}
@@ -399,131 +392,126 @@ export default function StyleOrdersPage() {
           </div>
         }
       >
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('styleOrderCode')} <span className="text-red-500">*</span></label>
-                  <ValidatedInput
-                    type="text"
-                    value={form.styleCode}
-                    onChange={(v) => setForm((f) => ({ ...f, styleCode: v }))}
-                    fieldType="name"
-                    readOnly={modal === 'view'}
-                    className="w-full px-3 py-2"
-                  />
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-slate-600 mb-2">Select branches where this style is produced (e.g. stitching at one, cutting at another)</p>
-                <MultiselectDropdown
-                  options={Array.isArray(branches) ? branches : []}
-                  selectedIds={form.branchIds}
-                  onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
-                  placeholder={t('selectBranches')}
-                  label={t('branches')}
-                  required
-                  disabled={modal === 'view'}
-                  selectAllLabel={t('selectAll')}
-                  searchPlaceholder={t('search')}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('details')}</label>
-                <textarea
-                  value={form.details}
-                  onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))}
-                  readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50' : ''}`}
-                  rows={2}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-slate-600 mb-2">Select rate masters associated with this style (required)</p>
-                <MultiselectDropdown
-                  options={Array.isArray(rates) ? rates : []}
-                  selectedIds={form.rateMasterItems}
-                  onChange={(ids) => setForm((f) => ({ ...f, rateMasterItems: ids }))}
-                  placeholder={`${t('rateMaster')} ${t('items')}`}
-                  label={`${t('rateMaster')} ${t('items')}`}
-                  required
-                  disabled={modal === 'view'}
-                  showUnit
-                  selectAllLabel={t('selectAll')}
-                  searchPlaceholder={t('search')}
-                />
-              </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('styleOrderCode')} <span className="text-red-500">*</span></label>
+              <ValidatedInput
+                type="text"
+                value={form.styleCode}
+                onChange={(v) => setForm((f) => ({ ...f, styleCode: formatCodeInput(v) || '' }))}
+                validate={(v) => v === '' || /^\d{1,4}$/.test(v)}
+                readOnly={modal === 'view'}
+                className="w-full px-3 py-2"
+                placeholderHint="0001"
+                maxLength={4}
+                inputMode="numeric"
+              />
+              <p className="text-xs text-slate-500 mt-0.5">{t('styleCode4DigitHint')}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('brand')} <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={form.brand}
+                onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                readOnly={modal === 'view'}
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50' : ''}`}
+                placeholder="e.g. Montecarlo, Puma"
+              />
+            </div>
+          </div>
 
-              <div className="border-t border-slate-200 pt-4">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-slate-800">{t('monthWiseData')}</label>
-                  {modal !== 'view' && (
-                    <button type="button" onClick={addMonth} className="text-sm text-uff-accent hover:text-uff-accent-hover font-medium">
-                      + {t('add')} {t('month')}
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-slate-600 mb-2">{t('orderQuantityAndCost')}</p>
-                <div className="space-y-4">
-                  {form.monthWiseData.map((m, monthIdx) => {
-                    const qty = m.totalOrderQuantity || 0;
-                    const perPiece = m.sellingPricePerQuantity ?? 0;
-                    const totalCost = qty > 0 ? perPiece * qty : 0;
-                    return (
-                    <div key={monthIdx} className="p-3 bg-uff-surface rounded-lg flex flex-wrap gap-3 items-center">
-                      <input
-                        type="month"
-                        value={m.month}
-                        onChange={(e) => updateMonthData(monthIdx, 'month', e.target.value)}
-                        readOnly={modal === 'view'}
-                        className="px-2 py-1 border border-slate-300 rounded text-sm"
-                      />
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-slate-600">{t('quantityShort')}:</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={m.totalOrderQuantity || ''}
-                          onChange={(e) => updateMonthData(monthIdx, 'totalOrderQuantity', parseFloat(e.target.value) || 0)}
-                          readOnly={modal === 'view'}
-                          className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-slate-600">{t('perPiece')} ₹:</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={perPiece > 0 ? perPiece : ''}
-                          onChange={(e) => updateMonthCostFromPerPiece(monthIdx, parseFloat(e.target.value) || 0)}
-                          readOnly={modal === 'view'}
-                          className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-slate-600">{t('totalAmount')} ₹:</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={totalCost > 0 ? totalCost : ''}
-                          onChange={(e) => updateMonthCostFromTotal(monthIdx, parseFloat(e.target.value) || 0)}
-                          readOnly={modal === 'view'}
-                          className="w-28 px-2 py-1 border border-slate-300 rounded text-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      {modal !== 'view' && (
-                        <button type="button" onClick={() => removeMonth(monthIdx)} className="text-red-600 text-sm">×</button>
-                      )}
-                    </div>
-                  );})}
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('month')}</label>
+            <input
+              type="month"
+              value={form.month}
+              onChange={(e) => modal === 'create' && setForm((f) => ({ ...f, month: e.target.value }))}
+              readOnly={modal === 'view' || modal === 'edit'}
+              disabled={modal === 'edit'}
+              className={`px-3 py-2 border border-slate-300 rounded-lg text-sm ${modal === 'view' || modal === 'edit' ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+            />
+            {modal === 'edit' && <p className="text-xs text-slate-500 mt-0.5">{t('monthNotEditable')}</p>}
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-600 mb-2">Select branches where this style is produced (e.g. stitching at one, cutting at another)</p>
+            <MultiselectDropdown
+              options={Array.isArray(branches) ? branches : []}
+              selectedIds={form.branchIds}
+              onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
+              placeholder={t('selectBranches')}
+              label={t('branches')}
+              required
+              disabled={modal === 'view'}
+              selectAllLabel={t('selectAll')}
+              searchPlaceholder={t('search')}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('details')}</label>
+            <textarea
+              value={form.details}
+              onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))}
+              readOnly={modal === 'view'}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50' : ''}`}
+              rows={2}
+            />
+          </div>
+
+          <div className="border-t border-slate-200 pt-4">
+            <label className="block text-sm font-medium text-slate-800 mb-3">{t('orderQuantityAndCost')}</label>
+            <p className="text-xs text-slate-600 mb-2">{t('clientCostOptionalHint')}</p>
+            <div className="p-3 bg-uff-surface rounded-lg flex flex-wrap gap-4 items-end">
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">{t('totalPieces')}</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.totalOrderQuantity || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, totalOrderQuantity: parseFloat(e.target.value) || 0 }))}
+                  onBlur={updateCostFromPerPiece}
+                  readOnly={modal === 'view'}
+                  className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">{t('clientCostPerPiece')}</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.clientCostPerPiece > 0 ? form.clientCostPerPiece : ''}
+                  onChange={(e) => setForm((f) => ({ ...f, clientCostPerPiece: parseFloat(e.target.value) || 0 }))}
+                  onBlur={updateCostFromPerPiece}
+                  readOnly={modal === 'view'}
+                  className="w-28 px-2 py-1 border border-slate-300 rounded text-sm"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">{t('clientCostTotalAmount')}</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.clientCostTotalAmount > 0 ? form.clientCostTotalAmount : ''}
+                  onChange={(e) => setForm((f) => ({ ...f, clientCostTotalAmount: parseFloat(e.target.value) || 0 }))}
+                  onBlur={updateCostFromTotal}
+                  readOnly={modal === 'view'}
+                  className="w-28 px-2 py-1 border border-slate-300 rounded text-sm"
+                  placeholder="0"
+                />
               </div>
             </div>
+          </div>
+        </div>
       </Modal>
+
+      <SaveOverlay show={saving} label={t('saving')} />
 
       {confirmModal && (
         <ConfirmModal

@@ -15,6 +15,9 @@ import Employee from '@/lib/models/Employee';
 import Branch from '@/lib/models/Branch';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
+import Vendor from '@/lib/models/Vendor';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
+import VendorPayment from '@/lib/models/VendorPayment';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { computeVirtualDaysAttended } from '@/lib/minimumWages';
@@ -49,6 +52,12 @@ export async function GET(req: NextRequest) {
 
       stats.employees = { total: totalEmployees, active: activeEmployees, contractors, fullTime };
       if (isAdmin) stats.branches = branches;
+
+      const [vendorTotal, vendorActive] = await Promise.all([
+        Vendor.countDocuments(),
+        Vendor.countDocuments({ isActive: true }),
+      ]);
+      stats.vendors = { total: vendorTotal, active: vendorActive };
 
       // Full-time days worked stats for current month (accountancy sees virtual days)
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -94,6 +103,13 @@ export async function GET(req: NextRequest) {
 
     if (isFinance || isAdmin) {
       const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+      const vendorPayments = await VendorPayment.aggregate([
+        { $match: { paidAt: { $gte: startDate } } },
+        { $group: { _id: null, totalPaid: { $sum: '$paymentAmount' }, count: { $sum: 1 } } },
+      ]);
+      const vp = vendorPayments[0];
+      stats.vendorPayments = { totalPaid: vp?.totalPaid ?? 0, count: vp?.count ?? 0 };
 
       const [totals, byModeArr, weeklyTrend] = await Promise.all([
         Payment.aggregate([
@@ -171,7 +187,7 @@ export async function GET(req: NextRequest) {
       const now = new Date();
       const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
-      const [workTotals, workWeeklyTrend] = await Promise.all([
+      const [workTotals, workWeeklyTrend, vendorWorkTotals] = await Promise.all([
         WorkRecord.aggregate([
           { $match: { createdAt: { $gte: startDate } } },
           {
@@ -193,11 +209,17 @@ export async function GET(req: NextRequest) {
           },
           { $sort: { '_id.year': 1, '_id.week': 1 } },
         ]),
+        VendorWorkOrder.aggregate([
+          { $match: { createdAt: { $gte: startDate } } },
+          { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+        ]),
       ]);
 
       const wt = workTotals[0];
       const workTotal = wt?.total ?? 0;
       const workCount = wt?.count ?? 0;
+      const vwt = vendorWorkTotals[0];
+      stats.vendorWork = { total: vwt?.total ?? 0, count: vwt?.count ?? 0 };
       const workWeeklyMap = new Map(
         (workWeeklyTrend || []).map((w: { _id: { year: number; week: number }; amount: number; count: number }) => [
           `${w._id?.year}-${w._id?.week}`,
@@ -234,17 +256,14 @@ export async function GET(req: NextRequest) {
       ]);
 
       // Style-wise stats for current month (aggregated by style)
-      const styles = await StyleOrder.find({ isActive: true })
+      const styles = await StyleOrder.find({ isActive: true, month: currentMonth })
         .populate('branches', 'name _id')
-        .select('styleCode branches monthWiseData')
+        .select('styleCode brand branches month totalOrderQuantity')
         .lean();
 
       const byStyle: { styleCode: string; branchName: string; totalOrderQty: number; totalProduced: number; mfgCost: number; completionPct: number }[] = [];
       for (const s of styles) {
-        const monthData = (s.monthWiseData as { month: string; totalOrderQuantity: number }[])?.find((m) => m.month === currentMonth);
-        if (!monthData) continue;
-
-        const totalOrderQty = monthData.totalOrderQuantity ?? 0;
+        const totalOrderQty = (s as { totalOrderQuantity?: number }).totalOrderQuantity ?? 0;
 
         const produced = await WorkRecord.aggregate([
           { $match: { styleOrder: s._id, month: currentMonth } },

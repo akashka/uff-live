@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!canAccessAny && !isOwnProfile) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     await connectDB();
-    const employee = await Employee.findById(id).populate('branches', 'name').lean();
+    const employee = await Employee.findById(id).populate('branches', 'name').populate('department', 'name').lean();
     if (!employee) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(employee);
   } catch (e) {
@@ -39,8 +39,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const employee = await Employee.findById(id);
     if (!employee) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+    // Email, contactNumber, employeeId are immutable - ignore if sent (never update)
+    // Only reject when values are actually being changed
+    if (body.email !== undefined && String(body.email).trim() !== String(employee.email).trim()) {
+      return NextResponse.json({ error: 'Email cannot be changed' }, { status: 400 });
+    }
+    if (body.contactNumber !== undefined && String(body.contactNumber).trim() !== String(employee.contactNumber).trim()) {
+      return NextResponse.json({ error: 'Phone number cannot be changed' }, { status: 400 });
+    }
+    if (body.employeeId !== undefined && String(body.employeeId).trim() !== String(employee.employeeId).trim()) {
+      return NextResponse.json({ error: 'Employee ID cannot be changed' }, { status: 400 });
+    }
+
     if (body.name !== undefined) employee.name = body.name;
-    if (body.contactNumber !== undefined) employee.contactNumber = body.contactNumber;
     if (body.emergencyNumber !== undefined) employee.emergencyNumber = body.emergencyNumber;
     if (body.dateOfBirth !== undefined) employee.dateOfBirth = body.dateOfBirth;
     if (body.gender !== undefined) employee.gender = body.gender;
@@ -48,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.anniversaryDate !== undefined) employee.anniversaryDate = body.anniversaryDate ? new Date(body.anniversaryDate) : undefined;
     if (body.aadhaarNumber !== undefined) employee.aadhaarNumber = body.aadhaarNumber;
     if (body.pfNumber !== undefined) employee.pfNumber = body.pfNumber;
+    if (body.esiNumber !== undefined) employee.esiNumber = body.esiNumber;
     if (body.panNumber !== undefined) employee.panNumber = body.panNumber;
     if (body.bankName !== undefined) employee.bankName = body.bankName;
     if (body.bankBranch !== undefined) employee.bankBranch = body.bankBranch;
@@ -57,6 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.photo !== undefined) employee.photo = body.photo;
     if (body.employeeType !== undefined) employee.employeeType = body.employeeType;
     if (body.branches !== undefined) employee.branches = body.branches;
+    if (body.department !== undefined) employee.department = body.department || undefined;
     if (body.pfOpted !== undefined) employee.pfOpted = body.pfOpted;
     if (body.monthlyPfAmount !== undefined) employee.monthlyPfAmount = body.monthlyPfAmount;
     if (body.esiOpted !== undefined) employee.esiOpted = body.esiOpted;
@@ -64,12 +77,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.monthlySalary !== undefined) employee.monthlySalary = body.monthlySalary;
     if (body.salaryBreakup !== undefined) employee.salaryBreakup = body.salaryBreakup;
     if (body.isActive !== undefined) employee.isActive = body.isActive;
-
-    // Email can be updated but requires user sync
-    if (body.email !== undefined) {
-      employee.email = body.email;
-      await User.findOneAndUpdate({ employeeId: id }, { email: body.email });
-    }
 
     // Role update - admin only
     if (body.role !== undefined && user.role === 'admin') {
@@ -86,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await employee.save();
     revalidateTag('employees', 'default');
-    const updated = await Employee.findById(id).populate('branches', 'name').lean();
+    const updated = await Employee.findById(id).populate('branches', 'name').populate('department', 'name').lean();
 
     notifyAdminsIfNeeded(user, {
       type: 'employee_updated',

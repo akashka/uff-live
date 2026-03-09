@@ -11,6 +11,17 @@ function FormSection({ title, children }: { title: string; children: React.React
     </section>
   );
 }
+
+function FormField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <label className="block text-sm font-medium text-slate-800 mb-1.5">
+        {label}{required && <span className="text-red-500" aria-hidden="true"> *</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
@@ -20,8 +31,9 @@ import ActionButtons from '@/components/ActionButtons';
 import ValidatedInput from '@/components/ValidatedInput';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useEmployees, useBranches } from '@/lib/hooks/useApi';
+import { useEmployees, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
+import SaveOverlay from '@/components/SaveOverlay';
 import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 import { toast } from '@/lib/toast';
 import { formatAmount } from '@/lib/utils';
@@ -31,8 +43,14 @@ interface Branch {
   name: string;
 }
 
+interface Department {
+  _id: string;
+  name: string;
+}
+
 interface Employee {
   _id: string;
+  employeeId?: string;
   name: string;
   contactNumber: string;
   email: string;
@@ -44,6 +62,7 @@ interface Employee {
   photo?: string;
   aadhaarNumber?: string;
   pfNumber?: string;
+  esiNumber?: string;
   panNumber?: string;
   bankName?: string;
   bankBranch?: string;
@@ -52,6 +71,7 @@ interface Employee {
   upiId?: string;
   employeeType: string;
   branches: Branch[];
+  department?: Department | { _id: string; name: string };
   monthlySalary?: number;
   salaryBreakup?: { pf?: number; esi?: number; other?: number };
   pfOpted?: boolean;
@@ -67,13 +87,15 @@ export default function EmployeesPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [filterDepartment, setFilterDepartment] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
-  const { employees, total, limit, hasMore, loading, mutate: mutateEmployees } = useEmployees(includeInactive, { page, limit: PAGE_SIZE, search: search.trim() || undefined });
+  const { employees, total, limit, hasMore, loading, mutate: mutateEmployees } = useEmployees(includeInactive, { page, limit: PAGE_SIZE, search: search.trim() || undefined, departmentId: filterDepartment || undefined });
   const { branches } = useBranches(true);
+  const { departments } = useDepartments(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
-  const [passwordModal, setPasswordModal] = useState<string | null>(null);
+  const [passwordModal, setPasswordModal] = useState<{ email: string; contactNumber: string; employeeId: string; password: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -84,6 +106,7 @@ export default function EmployeesPage() {
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || ''); // accountancy is read-only
 
   const [form, setForm] = useState({
+    employeeId: '' as string,
     name: '',
     contactNumber: '',
     email: '',
@@ -92,9 +115,9 @@ export default function EmployeesPage() {
     dateOfBirth: '',
     gender: 'male' as 'male' | 'female' | 'other',
     maritalStatus: '' as '' | 'single' | 'married' | 'other',
-    anniversaryDate: '',
     aadhaarNumber: '',
     pfNumber: '',
+    esiNumber: '',
     panNumber: '',
     bankName: '',
     bankBranch: '',
@@ -103,11 +126,12 @@ export default function EmployeesPage() {
     upiId: '',
     employeeType: 'full_time' as 'full_time' | 'contractor',
     branches: [] as string[],
+    department: '' as string,
     monthlySalary: 0,
     salaryBreakup: { pf: 0, esi: 0, other: 0 },
-    pfOpted: false,
+    pfOpted: true,
     monthlyPfAmount: 0,
-    esiOpted: false,
+    esiOpted: true,
     monthlyEsiAmount: 0,
     role: 'employee' as string,
     documents: [] as { type: string; name?: string; fileUrl: string; uploadedAt: string }[],
@@ -116,7 +140,7 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, includeInactive]);
+  }, [search, includeInactive, filterDepartment]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -137,6 +161,7 @@ export default function EmployeesPage() {
   const openCreate = () => {
     setPhotoFile(null);
     setForm({
+      employeeId: '',
       name: '',
       contactNumber: '',
       email: '',
@@ -145,9 +170,9 @@ export default function EmployeesPage() {
       dateOfBirth: '',
       gender: 'male',
       maritalStatus: '',
-      anniversaryDate: '',
       aadhaarNumber: '',
       pfNumber: '',
+      esiNumber: '',
       panNumber: '',
       bankName: '',
       bankBranch: '',
@@ -156,11 +181,12 @@ export default function EmployeesPage() {
       upiId: '',
       employeeType: 'full_time',
       branches: [],
+      department: '',
       monthlySalary: 0,
       salaryBreakup: { pf: 0, esi: 0, other: 0 },
-      pfOpted: false,
+      pfOpted: true,
       monthlyPfAmount: 0,
-      esiOpted: false,
+      esiOpted: true,
       monthlyEsiAmount: 0,
       role: 'employee',
       documents: [],
@@ -177,6 +203,7 @@ export default function EmployeesPage() {
   const openEdit = (e: Employee) => {
     setPhotoFile(null);
     setForm({
+      employeeId: e.employeeId || '',
       name: e.name,
       contactNumber: e.contactNumber,
       email: e.email,
@@ -185,9 +212,9 @@ export default function EmployeesPage() {
       dateOfBirth: e.dateOfBirth ? e.dateOfBirth.slice(0, 10) : '',
       gender: e.gender as 'male' | 'female' | 'other',
       maritalStatus: (e.maritalStatus || '') as '' | 'single' | 'married' | 'other',
-      anniversaryDate: e.anniversaryDate ? String(e.anniversaryDate).slice(0, 10) : '',
       aadhaarNumber: e.aadhaarNumber || '',
       pfNumber: e.pfNumber || '',
+      esiNumber: e.esiNumber || '',
       panNumber: e.panNumber || '',
       bankName: e.bankName || '',
       bankBranch: e.bankBranch || '',
@@ -196,6 +223,7 @@ export default function EmployeesPage() {
       upiId: e.upiId || '',
       employeeType: e.employeeType as 'full_time' | 'contractor',
       branches: (e.branches ?? []).map((b): string => (typeof b === 'object' && b && '_id' in b ? (b as Branch)._id : String(b))),
+      department: (e.department && typeof e.department === 'object' && '_id' in e.department ? (e.department as Department)._id : e.department) || '',
       monthlySalary: e.monthlySalary || 0,
       salaryBreakup: {
         pf: e.salaryBreakup?.pf ?? 0,
@@ -206,9 +234,9 @@ export default function EmployeesPage() {
         ...d,
         uploadedAt: typeof d.uploadedAt === 'string' ? d.uploadedAt : (d.uploadedAt as Date)?.toISOString?.() ?? '',
       })),
-      pfOpted: e.pfOpted ?? false,
+      pfOpted: e.pfOpted ?? true,
       monthlyPfAmount: e.monthlyPfAmount || 0,
-      esiOpted: e.esiOpted ?? false,
+      esiOpted: e.esiOpted ?? true,
       monthlyEsiAmount: e.monthlyEsiAmount || 0,
       role: 'employee',
     });
@@ -246,9 +274,30 @@ export default function EmployeesPage() {
           await uploadPhoto(empId, photoFile);
         }
         toast.success(t('saveSuccess'));
-        setModal(null);
-        if (data.generatedPassword) setPasswordModal(data.generatedPassword);
-        mutateEmployees();
+        await mutateEmployees();
+        if (empId && data.employee) {
+          const emp = data.employee as Employee;
+          setEditingId(empId);
+          setForm((f) => ({
+            ...f,
+            employeeId: emp.employeeId || f.employeeId,
+            documents: (emp.documents ?? []).map((d) => ({
+              ...d,
+              uploadedAt: typeof d.uploadedAt === 'string' ? d.uploadedAt : (d.uploadedAt as Date)?.toISOString?.() ?? '',
+            })),
+          }));
+          setModal('edit');
+        } else {
+          setModal(null);
+        }
+        if (data.generatedPassword && data.email && data.contactNumber && data.employeeId) {
+          setPasswordModal({
+            email: data.email,
+            contactNumber: data.contactNumber,
+            employeeId: data.employeeId,
+            password: data.generatedPassword,
+          });
+        }
       } else if (editingId) {
         if (photoFile) {
           await uploadPhoto(editingId, photoFile);
@@ -257,8 +306,12 @@ export default function EmployeesPage() {
           ...form,
           dateOfBirth: form.dateOfBirth || undefined,
         };
-        // Don't overwrite photo: it's managed by the upload API. Including form.photo would overwrite the freshly uploaded image.
+        // Don't overwrite photo: it's managed by the upload API.
         delete payload.photo;
+        // Email, contactNumber, employeeId are immutable - exclude from update
+        delete payload.email;
+        delete payload.contactNumber;
+        delete payload.employeeId;
         const res = await fetch(`/api/employees/${editingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -266,8 +319,8 @@ export default function EmployeesPage() {
         });
         if (!res.ok) throw new Error((await res.json()).error);
         toast.success(t('saveSuccess'));
+        await mutateEmployees();
         setModal(null);
-        mutateEmployees();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
@@ -294,8 +347,8 @@ export default function EmployeesPage() {
     });
   };
 
-  const copyPassword = (pwd: string) => {
-    navigator.clipboard.writeText(pwd);
+  const copyCredentials = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
 
   const filteredEmployees = Array.isArray(employees) ? employees : [];
@@ -356,7 +409,7 @@ export default function EmployeesPage() {
             {modal !== 'view' && (
               <button
                 onClick={handleSave}
-                disabled={saving || !form.name || !form.contactNumber || !form.email || !form.emergencyNumber || !form.dateOfBirth || (form.employeeType === 'contractor' && form.pfOpted && (!form.monthlyPfAmount || !form.pfNumber)) || (form.employeeType === 'contractor' && form.esiOpted && !form.monthlyEsiAmount)}
+                disabled={saving || !form.name || !form.contactNumber || !form.email || !form.emergencyNumber || !form.dateOfBirth || form.branches.length === 0 || !form.department || (form.pfOpted && !form.pfNumber?.trim()) || (form.esiOpted && !form.esiNumber?.trim()) || (form.employeeType === 'contractor' && form.pfOpted && !form.monthlyPfAmount) || (form.employeeType === 'contractor' && form.esiOpted && !form.monthlyEsiAmount) || (form.employeeType === 'full_time' && form.pfOpted && (form.salaryBreakup?.pf ?? 0) <= 0) || (form.employeeType === 'full_time' && form.esiOpted && (form.salaryBreakup?.esi ?? 0) <= 0)}
                 className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
               >
                 {saving ? '...' : t('save')}
@@ -401,10 +454,47 @@ export default function EmployeesPage() {
               </div>
             </FormSection>
 
+            <FormSection title={t('selectBranches') + ' & ' + t('department')}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <FormField label={t('selectBranches')} required>
+                  {branches.length === 0 && (
+                    <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
+                  )}
+                  <MultiselectDropdown
+                    options={Array.isArray(branches) ? branches : []}
+                    selectedIds={form.branches}
+                    onChange={(ids) => setForm((f) => ({ ...f, branches: ids }))}
+                    placeholder={t('selectBranches')}
+                    label={undefined}
+                    disabled={modal === 'view'}
+                    selectAllLabel={t('selectAll')}
+                    searchPlaceholder={t('search')}
+                  />
+                </FormField>
+                <FormField label={t('selectDepartment')} required>
+                  <select
+                    value={form.department}
+                    onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+                    disabled={modal === 'view'}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                  >
+                    <option value="">—</option>
+                    {(Array.isArray(departments) ? departments : []).map((d: Department) => (
+                      <option key={d._id} value={d._id}>{d.name}</option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+            </FormSection>
+
             <FormSection title={t('employeeName') + ' & ' + t('contactNumber')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <FormField label={t('employeeId')}>
+                  <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono font-semibold text-slate-800 cursor-not-allowed">
+                    {form.employeeId || '—'}
+                  </div>
+                </FormField>
+                <FormField label={t('employeeName')} required>
                   <ValidatedInput
                     type="text"
                     value={form.name}
@@ -412,19 +502,17 @@ export default function EmployeesPage() {
                     fieldType="name"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('contactNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('contactNumber')} required>
                   <ValidatedInput
                     type="tel"
                     value={form.contactNumber}
                     onChange={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
                     fieldType="phone"
-                    readOnly={modal === 'view'}
+                    readOnly={modal === 'edit' || modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('email')} required>
                   <ValidatedInput
                     type="email"
                     value={form.email}
@@ -432,9 +520,8 @@ export default function EmployeesPage() {
                     fieldType="email"
                     readOnly={modal === 'edit' || modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('emergencyNumber')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('emergencyNumber')} required>
                   <ValidatedInput
                     type="tel"
                     value={form.emergencyNumber}
@@ -442,9 +529,8 @@ export default function EmployeesPage() {
                     fieldType="phone"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('dateOfBirth')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('dateOfBirth')} required>
                   <ValidatedInput
                     type="date"
                     value={form.dateOfBirth}
@@ -452,9 +538,8 @@ export default function EmployeesPage() {
                     fieldType="date"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('gender')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('gender')} required>
                   <select
                     value={form.gender}
                     onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value as 'male' | 'female' | 'other' }))}
@@ -465,9 +550,8 @@ export default function EmployeesPage() {
                     <option value="female">{t('female')}</option>
                     <option value="other">{t('other')}</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('maritalStatus')}</label>
+                </FormField>
+                <FormField label={t('maritalStatus')}>
                   <select
                     value={form.maritalStatus}
                     onChange={(e) => setForm((f) => ({ ...f, maritalStatus: e.target.value as '' | 'single' | 'married' | 'other' }))}
@@ -479,19 +563,8 @@ export default function EmployeesPage() {
                     <option value="married">{t('married')}</option>
                     <option value="other">{t('other')}</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('anniversaryDate')}</label>
-                  <ValidatedInput
-                    type="date"
-                    value={form.anniversaryDate}
-                    onChange={(v) => setForm((f) => ({ ...f, anniversaryDate: v }))}
-                    fieldType="date"
-                    readOnly={modal === 'view'}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('employeeType')} <span className="text-red-500" aria-hidden="true">*</span></label>
+                </FormField>
+                <FormField label={t('employeeType')} required>
                   <select
                     value={form.employeeType}
                     onChange={(e) => setForm((f) => ({ ...f, employeeType: e.target.value as 'full_time' | 'contractor' }))}
@@ -501,10 +574,9 @@ export default function EmployeesPage() {
                     <option value="full_time">{t('fullTime')}</option>
                     <option value="contractor">{t('contractor')}</option>
                   </select>
-                </div>
+                </FormField>
                 {modal === 'create' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('role')}</label>
+                  <FormField label={t('role')}>
                     <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent">
                       <option value="employee">{t('employee')}</option>
                       {user?.role === 'admin' && (
@@ -516,61 +588,62 @@ export default function EmployeesPage() {
                         </>
                       )}
                     </select>
-                  </div>
+                  </FormField>
                 )}
               </div>
             </FormSection>
 
             {form.employeeType === 'contractor' && (
               <FormSection title={t('pfDeduction') + ' & ' + t('esiDeduction')}>
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                    <span className="text-sm font-medium text-slate-800">{t('pfOpted')}</span>
-                  </label>
-                  {form.pfOpted && (
-                    <div className="max-w-xs">
-                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyPfAmount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
-                      <ValidatedInput
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={String(form.monthlyPfAmount ?? '')}
-                        onChange={(v) => setForm((f) => ({ ...f, monthlyPfAmount: parseFloat(v) || 0 }))}
-                        fieldType="number"
-                        placeholderHint="e.g. 500"
-                        readOnly={modal === 'view'}
-                      />
-                    </div>
-                  )}
-                  <label className="flex items-center gap-2 mt-4">
-                    <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                    <span className="text-sm font-medium text-slate-800">{t('esiOpted')}</span>
-                  </label>
-                  {form.esiOpted && (
-                    <div className="max-w-xs mt-2">
-                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlyEsiAmount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
-                      <ValidatedInput
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={String(form.monthlyEsiAmount ?? '')}
-                        onChange={(v) => setForm((f) => ({ ...f, monthlyEsiAmount: parseFloat(v) || 0 }))}
-                        fieldType="number"
-                        placeholderHint="e.g. 200"
-                        readOnly={modal === 'view'}
-                      />
-                    </div>
-                  )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="min-w-0 space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
+                      <span className="text-sm font-medium text-slate-800">{t('pfOpted')}</span>
+                    </label>
+                    {form.pfOpted && (
+                      <FormField label={`${t('monthlyPfAmount')} (₹)`} required>
+                        <ValidatedInput
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={String(form.monthlyPfAmount ?? '')}
+                          onChange={(v) => setForm((f) => ({ ...f, monthlyPfAmount: parseFloat(v) || 0 }))}
+                          fieldType="number"
+                          placeholderHint="e.g. 500"
+                          readOnly={modal === 'view'}
+                        />
+                      </FormField>
+                    )}
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
+                      <span className="text-sm font-medium text-slate-800">{t('esiOpted')}</span>
+                    </label>
+                    {form.esiOpted && (
+                      <FormField label={`${t('monthlyEsiAmount')} (₹)`} required>
+                        <ValidatedInput
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={String(form.monthlyEsiAmount ?? '')}
+                          onChange={(v) => setForm((f) => ({ ...f, monthlyEsiAmount: parseFloat(v) || 0 }))}
+                          fieldType="number"
+                          placeholderHint="e.g. 200"
+                          readOnly={modal === 'view'}
+                        />
+                      </FormField>
+                    )}
+                  </div>
                 </div>
               </FormSection>
             )}
 
             {form.employeeType === 'full_time' && (
-              <FormSection title={t('salaryBreakup')}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('monthlySalary')} (₹)</label>
+              <FormSection title={t('pfDeduction') + ' & ' + t('esiDeduction') + ' & ' + t('salaryBreakup')}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <FormField label={`${t('monthlySalary')} (₹)`}>
                     <ValidatedInput
                       type="number"
                       min={0}
@@ -581,35 +654,8 @@ export default function EmployeesPage() {
                       placeholderHint="e.g. 35000"
                       readOnly={modal === 'view'}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('pf')} (₹)</label>
-                    <ValidatedInput
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={String(form.salaryBreakup?.pf ?? '')}
-                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }))}
-                      fieldType="number"
-                      placeholderHint="e.g. 2100"
-                      readOnly={modal === 'view'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('esi')} (₹)</label>
-                    <ValidatedInput
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={String(form.salaryBreakup?.esi ?? '')}
-                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }))}
-                      fieldType="number"
-                      placeholderHint="e.g. 525"
-                      readOnly={modal === 'view'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('otherDeductions')} (₹)</label>
+                  </FormField>
+                  <FormField label={`${t('otherDeductions')} (₹)`}>
                     <ValidatedInput
                       type="number"
                       min={0}
@@ -620,20 +666,61 @@ export default function EmployeesPage() {
                       placeholderHint="e.g. 0"
                       readOnly={modal === 'view'}
                     />
+                  </FormField>
+                  <div className="min-w-0 space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
+                      <span className="text-sm font-medium text-slate-800">{t('pfOpted')}</span>
+                    </label>
+                    {form.pfOpted && (
+                      <FormField label={`${t('pf')} (₹)`} required>
+                        <ValidatedInput
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={String(form.salaryBreakup?.pf ?? '')}
+                          onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }))}
+                          fieldType="number"
+                          placeholderHint="e.g. 2100"
+                          readOnly={modal === 'view'}
+                        />
+                      </FormField>
+                    )}
                   </div>
+                  <div className="min-w-0 space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
+                      <span className="text-sm font-medium text-slate-800">{t('esiOpted')}</span>
+                    </label>
+                    {form.esiOpted && (
+                      <FormField label={`${t('esi')} (₹)`} required>
+                        <ValidatedInput
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={String(form.salaryBreakup?.esi ?? '')}
+                          onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }))}
+                          fieldType="number"
+                          placeholderHint="e.g. 525"
+                          readOnly={modal === 'view'}
+                        />
+                      </FormField>
+                    )}
+                  </div>
+                  {(form.monthlySalary || 0) > 0 && (
+                    <div className="sm:col-span-2 lg:col-span-3 flex items-center">
+                      <p className="text-sm text-slate-600">
+                        {t('netSalary')}: ₹{formatAmount((form.monthlySalary || 0) - (form.pfOpted ? (form.salaryBreakup?.pf || 0) : 0) - (form.esiOpted ? (form.salaryBreakup?.esi || 0) : 0) - (form.salaryBreakup?.other || 0))}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                {(form.monthlySalary || 0) > 0 && (
-                  <p className="text-sm text-slate-600 mt-2">
-                    {t('netSalary')}: ₹{formatAmount((form.monthlySalary || 0) - (form.salaryBreakup?.pf || 0) - (form.salaryBreakup?.esi || 0) - (form.salaryBreakup?.other || 0))}
-                  </p>
-                )}
               </FormSection>
             )}
 
-            <FormSection title={t('aadhaarNumber') + ' / ' + t('pfNumber') + ' / ' + t('panNumber')}>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('aadhaarNumber')}</label>
+            <FormSection title={t('aadhaarNumber') + ' / ' + t('pfNumber') + ' / ' + t('esiNumber') + ' / ' + t('panNumber')}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <FormField label={t('aadhaarNumber')}>
                   <ValidatedInput
                     type="text"
                     value={form.aadhaarNumber || ''}
@@ -641,9 +728,8 @@ export default function EmployeesPage() {
                     fieldType="aadhaar"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('pfNumber')}{form.pfOpted && <span className="text-red-500" aria-hidden="true"> *</span>}</label>
+                </FormField>
+                <FormField label={t('pfNumber')} required={form.pfOpted}>
                   <ValidatedInput
                     type="text"
                     value={form.pfNumber || ''}
@@ -651,9 +737,17 @@ export default function EmployeesPage() {
                     fieldType="pfNumber"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('panNumber')}</label>
+                </FormField>
+                <FormField label={t('esiNumber')} required={form.esiOpted}>
+                  <ValidatedInput
+                    type="text"
+                    value={form.esiNumber || ''}
+                    onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))}
+                    fieldType="esiNumber"
+                    readOnly={modal === 'view'}
+                  />
+                </FormField>
+                <FormField label={t('panNumber')}>
                   <ValidatedInput
                     type="text"
                     value={form.panNumber || ''}
@@ -661,14 +755,13 @@ export default function EmployeesPage() {
                     fieldType="pan"
                     readOnly={modal === 'view'}
                   />
-                </div>
+                </FormField>
               </div>
             </FormSection>
 
             <FormSection title={t('bankingDetails')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('bankName')}</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <FormField label={t('bankName')}>
                   <ValidatedInput
                     type="text"
                     value={form.bankName || ''}
@@ -677,9 +770,8 @@ export default function EmployeesPage() {
                     placeholderHint="e.g. State Bank of India"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('bankBranch')}</label>
+                </FormField>
+                <FormField label={t('bankBranch')}>
                   <ValidatedInput
                     type="text"
                     value={form.bankBranch || ''}
@@ -688,9 +780,8 @@ export default function EmployeesPage() {
                     placeholderHint="e.g. Main Branch, Bangalore"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('ifscCode')}</label>
+                </FormField>
+                <FormField label={t('ifscCode')}>
                   <ValidatedInput
                     type="text"
                     value={form.ifscCode || ''}
@@ -699,9 +790,8 @@ export default function EmployeesPage() {
                     maxLength={11}
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('accountNumber')}</label>
+                </FormField>
+                <FormField label={t('accountNumber')}>
                   <ValidatedInput
                     type="text"
                     value={form.accountNumber || ''}
@@ -709,9 +799,8 @@ export default function EmployeesPage() {
                     fieldType="accountNumber"
                     readOnly={modal === 'view'}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">{t('upiId')}</label>
+                </FormField>
+                <FormField label={t('upiId')}>
                   <ValidatedInput
                     type="text"
                     value={form.upiId || ''}
@@ -719,7 +808,7 @@ export default function EmployeesPage() {
                     fieldType="upi"
                     readOnly={modal === 'view'}
                   />
-                </div>
+                </FormField>
               </div>
             </FormSection>
 
@@ -739,32 +828,43 @@ export default function EmployeesPage() {
               </FormSection>
             )}
 
-            <FormSection title={t('selectBranches')}>
-              {branches.length === 0 && (
-                <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
-              )}
-              <MultiselectDropdown
-                options={Array.isArray(branches) ? branches : []}
-                selectedIds={form.branches}
-                onChange={(ids) => setForm((f) => ({ ...f, branches: ids }))}
-                placeholder={t('selectBranches')}
-                label={undefined}
-                disabled={modal === 'view'}
-                selectAllLabel={t('selectAll')}
-                searchPlaceholder={t('search')}
-              />
-            </FormSection>
           </div>
         </div>
 
         {passwordModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-              <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('generatedPassword')}</h2>
-              <p className="text-slate-600 text-sm mb-4">Save this password securely. It will not be shown again.</p>
-              <div className="flex items-center gap-2 p-4 bg-slate-100 rounded-lg font-mono text-lg break-all">
-                {passwordModal}
-                <button onClick={() => copyPassword(passwordModal)} className="ml-auto px-3 py-1 rounded bg-uff-accent text-uff-primary text-sm">{t('copyPassword')}</button>
+              <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('loginCredentials')}</h2>
+              <p className="text-slate-600 text-sm mb-4">Save these credentials securely. The password will not be shown again.</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 uppercase">{t('email')}</span>
+                    <p className="font-mono text-sm break-all">{passwordModal.email}</p>
+                  </div>
+                  <button onClick={() => copyCredentials(passwordModal.email)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 uppercase">{t('contactNumber')}</span>
+                    <p className="font-mono text-sm">{passwordModal.contactNumber}</p>
+                  </div>
+                  <button onClick={() => copyCredentials(passwordModal.contactNumber)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 uppercase">{t('employeeId')}</span>
+                    <p className="font-mono text-sm font-semibold">{passwordModal.employeeId}</p>
+                  </div>
+                  <button onClick={() => copyCredentials(passwordModal.employeeId)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div>
+                    <span className="text-xs font-medium text-amber-700 uppercase">{t('password')}</span>
+                    <p className="font-mono text-sm break-all">{passwordModal.password}</p>
+                  </div>
+                  <button onClick={() => copyCredentials(passwordModal.password)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copyPassword')}</button>
+                </div>
               </div>
               <button onClick={() => setPasswordModal(null)} className="mt-4 w-full py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white">{t('close')}</button>
             </div>
@@ -799,6 +899,19 @@ export default function EmployeesPage() {
         onViewModeChange={setViewMode}
         searchPlaceholder={t('search')}
       >
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByDepartment')}</label>
+          <select
+            value={filterDepartment}
+            onChange={(e) => setFilterDepartment(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
+          >
+            <option value="">{t('all')}</option>
+            {(Array.isArray(departments) ? departments : []).map((d: Department) => (
+              <option key={d._id} value={d._id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
@@ -816,8 +929,10 @@ export default function EmployeesPage() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeId')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeType')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
@@ -826,13 +941,14 @@ export default function EmployeesPage() {
               <tbody className="divide-y divide-slate-200">
                 {sortedEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-600">
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">
                       {t('noData')}
                     </td>
                   </tr>
                 ) : (
                   sortedEmployees.map((e) => (
                     <tr key={e._id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono font-medium text-slate-700">{e.employeeId || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <UserAvatar photo={e.photo} name={e.name} size="sm" className="w-8 h-8 shrink-0" />
@@ -840,6 +956,9 @@ export default function EmployeesPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{e.contactNumber}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {e.department && typeof e.department === 'object' && 'name' in e.department ? (e.department as Department).name : '—'}
+                      </td>
                       <td className="px-4 py-3 text-slate-700">
                         {e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}
                       </td>
@@ -893,6 +1012,11 @@ export default function EmployeesPage() {
                       <span className="text-xs text-slate-500">
                         {e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}
                       </span>
+                      {e.department && typeof e.department === 'object' && 'name' in e.department && (
+                        <span className="text-xs text-slate-500">
+                          • {(e.department as Department).name}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -934,28 +1058,44 @@ export default function EmployeesPage() {
       {passwordModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('generatedPassword')}</h2>
-            <p className="text-slate-600 text-sm mb-4">
-              Save this password securely. It will not be shown again.
-            </p>
-            <div className="flex items-center gap-2 p-4 bg-slate-100 rounded-lg font-mono text-lg break-all">
-              {passwordModal}
-              <button
-                onClick={() => copyPassword(passwordModal)}
-                className="ml-auto px-3 py-1 rounded bg-uff-accent text-uff-primary text-sm"
-              >
-                {t('copyPassword')}
-              </button>
+            <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('loginCredentials')}</h2>
+            <p className="text-slate-600 text-sm mb-4">Save these credentials securely. The password will not be shown again.</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('email')}</span>
+                  <p className="font-mono text-sm break-all">{passwordModal.email}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.email)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('contactNumber')}</span>
+                  <p className="font-mono text-sm">{passwordModal.contactNumber}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.contactNumber)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('employeeId')}</span>
+                  <p className="font-mono text-sm font-semibold">{passwordModal.employeeId}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.employeeId)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <div>
+                  <span className="text-xs font-medium text-amber-700 uppercase">{t('password')}</span>
+                  <p className="font-mono text-sm break-all">{passwordModal.password}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.password)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copyPassword')}</button>
+              </div>
             </div>
-            <button
-              onClick={() => setPasswordModal(null)}
-              className="mt-4 w-full py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white"
-            >
-              {t('close')}
-            </button>
+            <button onClick={() => setPasswordModal(null)} className="mt-4 w-full py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white">{t('close')}</button>
           </div>
         </div>
       )}
+
+      <SaveOverlay show={saving} label={t('saving')} />
 
       {confirmModal && (
         <ConfirmModal

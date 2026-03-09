@@ -36,6 +36,7 @@ async function seed() {
   // Import models after connect (they need mongoose)
   const User = (await import('../src/lib/models/User')).default;
   const Branch = (await import('../src/lib/models/Branch')).default;
+  const Department = (await import('../src/lib/models/Department')).default;
   const Employee = (await import('../src/lib/models/Employee')).default;
   const RateMaster = (await import('../src/lib/models/RateMaster')).default;
   const WorkRecord = (await import('../src/lib/models/WorkRecord')).default;
@@ -71,11 +72,26 @@ async function seed() {
 
   const branchIds = branches.map((b) => b._id);
 
+  // 2b. Departments
+  let departments = await Department.find().lean();
+  if (departments.length === 0) {
+    departments = await Department.insertMany([
+      { name: 'Production', description: 'Manufacturing and production' },
+      { name: 'Quality Control', description: 'QC and inspection' },
+      { name: 'Admin', description: 'Administrative and support' },
+    ]);
+    console.log('✓ Departments created (3)');
+  } else {
+    console.log('✓ Departments already exist');
+  }
+  const deptIds = departments.map((d) => d._id);
+
   // 3. Employees (contractors + full-time)
   let employees = await Employee.find().lean();
   if (employees.length === 0) {
     employees = await Employee.insertMany([
       {
+        employeeId: 'REC001',
         name: 'Ramesh Kumar',
         contactNumber: '+91 9000111111',
         email: 'ramesh@uff.com',
@@ -84,6 +100,7 @@ async function seed() {
         gender: 'male',
         employeeType: 'contractor',
         branches: [branchIds[0], branchIds[1]],
+        department: deptIds[0],
         pfOpted: true,
         monthlyPfAmount: 500,
         esiOpted: true,
@@ -93,6 +110,7 @@ async function seed() {
         ifscCode: 'SBIN0001234',
       },
       {
+        employeeId: 'REC002',
         name: 'Priya Sharma',
         contactNumber: '+91 9000222222',
         email: 'priya@uff.com',
@@ -101,6 +119,7 @@ async function seed() {
         gender: 'female',
         employeeType: 'contractor',
         branches: [branchIds[0]],
+        department: deptIds[1],
         pfOpted: false,
         esiOpted: false,
         bankName: 'HDFC',
@@ -108,6 +127,7 @@ async function seed() {
         ifscCode: 'HDFC0001234',
       },
       {
+        employeeId: 'REC003',
         name: 'Suresh Reddy',
         contactNumber: '+91 9000333333',
         email: 'suresh@uff.com',
@@ -116,10 +136,12 @@ async function seed() {
         gender: 'male',
         employeeType: 'full_time',
         branches: [branchIds[0]],
+        department: deptIds[0],
         monthlySalary: 35000,
         salaryBreakup: { pf: 2100, esi: 525, other: 0 },
       },
       {
+        employeeId: 'REC004',
         name: 'Lakshmi Nair',
         contactNumber: '+91 9000444444',
         email: 'lakshmi@uff.com',
@@ -128,6 +150,7 @@ async function seed() {
         gender: 'female',
         employeeType: 'full_time',
         branches: [branchIds[1]],
+        department: deptIds[2],
         monthlySalary: 28000,
         salaryBreakup: { pf: 1680, esi: 420, other: 0 },
       },

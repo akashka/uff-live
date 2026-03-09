@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import WorkRecord from '@/lib/models/WorkRecord';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
 import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const employeeId = searchParams.get('employeeId');
     const branchId = searchParams.get('branchId');
+    const departmentId = searchParams.get('departmentId');
     const month = searchParams.get('month');
 
     let filter: Record<string, unknown> = {};
@@ -42,15 +44,21 @@ export async function GET(req: NextRequest) {
     if (branchId) filter = { ...filter, branch: branchId };
     if (month) filter = { ...filter, month: String(month).slice(0, 7) };
 
+    if (departmentId && hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) && !employeeId && !user.employeeId) {
+      const employeesInDept = await Employee.find({ department: departmentId }).select('_id').lean();
+      const empIds = employeesInDept.map((e) => e._id);
+      filter = { ...filter, employee: { $in: empIds } };
+    }
+
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
     const skip = (page - 1) * limit;
 
     const [records, total] = await Promise.all([
       WorkRecord.find(filter)
-        .populate('employee', 'name _id')
+        .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode _id')
+        .populate('styleOrder', 'styleCode brand _id')
         .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -82,10 +90,8 @@ async function getAvailableQuantity(
   if (!styleOrder) return 0;
 
   const monthStr = String(month).slice(0, 7);
-  const monthData = (styleOrder.monthWiseData as { month: string; totalOrderQuantity: number }[])?.find(
-    (m) => m.month === monthStr
-  );
-  const totalOrderQty = monthData?.totalOrderQuantity ?? 0;
+  const so = styleOrder as { month?: string; totalOrderQuantity?: number };
+  const totalOrderQty = so.month === monthStr ? (so.totalOrderQuantity ?? 0) : 0;
 
   const producedFilter: Record<string, unknown> = {
     styleOrder: styleOrderId,
@@ -94,13 +100,27 @@ async function getAvailableQuantity(
   };
   if (excludeWorkRecordId) producedFilter._id = { $ne: excludeWorkRecordId };
 
-  const produced = await WorkRecord.aggregate([
-    { $match: producedFilter },
-    { $unwind: '$workItems' },
-    { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
-    { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+  const [producedFromWorkRecords, producedFromVendorOrders] = await Promise.all([
+    WorkRecord.aggregate([
+      { $match: producedFilter },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
+    VendorWorkOrder.aggregate([
+      {
+        $match: {
+          styleOrder: new mongoose.Types.ObjectId(styleOrderId),
+          branch: new mongoose.Types.ObjectId(branchId),
+          month: monthStr,
+        },
+      },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
   ]);
-  const producedQty = produced[0]?.total ?? 0;
+  const producedQty = (producedFromWorkRecords[0]?.total ?? 0) + (producedFromVendorOrders[0]?.total ?? 0);
   return Math.max(0, totalOrderQty - producedQty);
 }
 
@@ -146,19 +166,10 @@ export async function POST(req: NextRequest) {
         (br: { branch: { toString?: () => string }; amount: number }) =>
           (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchId
       );
-      const ratePerUnit = branchRate?.amount ?? 0;
-      const quantity = Number(item.quantity) || 0;
+      const defaultRate = branchRate?.amount ?? 0;
+      const ratePerUnit = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
+      const quantity = Math.max(1, Number(item.quantity) || 1);
       const multiplier = Number(item.multiplier) || 1;
-
-      if (styleOrderId && quantity > 0) {
-        const available = await getAvailableQuantity(styleOrderId, branchId, monthStr, item.rateMasterId);
-        if (quantity > available) {
-          return NextResponse.json(
-            { error: `Quantity ${quantity} exceeds available ${available} for this rate. Reduce and try again.` },
-            { status: 400 }
-          );
-        }
-      }
 
       const amount = roundAmount(quantity * multiplier * ratePerUnit);
       workItemsWithAmounts.push({
@@ -185,7 +196,7 @@ export async function POST(req: NextRequest) {
       employee: employeeId,
       branch: branchId,
       month: monthStr,
-      styleOrder: styleOrderId || undefined,
+      styleOrder: styleOrderId,
       workItems: workItemsWithAmounts,
       otHours: Number(otHours) || 0,
       otAmount: otAmt,
@@ -194,7 +205,7 @@ export async function POST(req: NextRequest) {
     });
 
     const populated = await WorkRecord.findById(record._id)
-      .populate('employee', 'name _id')
+      .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode _id')
       .lean();

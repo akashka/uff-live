@@ -21,10 +21,8 @@ async function getAvailableQuantity(
   if (!styleOrder) return 0;
 
   const monthStr = String(month).slice(0, 7);
-  const monthData = (styleOrder.monthWiseData as { month: string; totalOrderQuantity: number }[])?.find(
-    (m) => m.month === monthStr
-  );
-  const totalOrderQty = monthData?.totalOrderQuantity ?? 0;
+  const so = styleOrder as { month?: string; totalOrderQuantity?: number };
+  const totalOrderQty = so.month === monthStr ? (so.totalOrderQuantity ?? 0) : 0;
 
   const producedFilter: Record<string, unknown> = {
     styleOrder: styleOrderId,
@@ -53,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const record = await WorkRecord.findById(id)
       .populate('employee', 'name _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode _id')
+      .populate('styleOrder', 'styleCode brand _id')
       .lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -124,19 +122,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           (br: { branch: { toString?: () => string }; amount: number }) =>
             (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branch
         );
-        const ratePerUnit = branchRate?.amount ?? 0;
-        const quantity = Number(item.quantity) || 0;
+        const defaultRate = branchRate?.amount ?? 0;
+        const ratePerUnit = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
+        const quantity = Math.max(1, Number(item.quantity) || 1);
         const multiplier = Number(item.multiplier) || 1;
-
-        if (styleId && quantity > 0) {
-          const available = await getAvailableQuantity(styleId, String(branch), monthStr, item.rateMasterId, id);
-          if (quantity > available) {
-            return NextResponse.json(
-              { error: `Quantity ${quantity} exceeds available ${available} for this rate. Reduce and try again.` },
-              { status: 400 }
-            );
-          }
-        }
 
         const amount = roundAmount(quantity * multiplier * ratePerUnit);
         workItemsWithAmounts.push({
@@ -164,7 +153,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await WorkRecord.findById(id)
       .populate('employee', 'name')
       .populate('branch', 'name')
-      .populate('styleOrder', 'styleCode _id')
+      .populate('styleOrder', 'styleCode brand _id')
       .lean();
 
     const empId = String(record.employee);

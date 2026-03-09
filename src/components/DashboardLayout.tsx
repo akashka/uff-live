@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
@@ -100,6 +100,14 @@ function StyleOrderIcon() {
   );
 }
 
+function VendorsIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+  );
+}
+
 function AnalyticsIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,6 +141,14 @@ function ReportsIcon() {
   );
 }
 
+function MasterIcon() {
+  return (
+    <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+    </svg>
+  );
+}
+
 function LogoutIcon() {
   return (
     <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -145,6 +161,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { t, locale, setLocale, increaseFont, decreaseFont } = useApp();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const unreadCount = useUnreadNotificationCount();
 
@@ -155,6 +172,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessRates = user?.role === 'admin';
   const canAccessStyleOrders = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAccessWorkRecords = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
+  const canAccessVendors = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAccessPayments = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAccessAnalytics = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAccessReports = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
@@ -163,6 +181,33 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const hasPayments = canAccessPayments || isEmployee;
 
+  const canAccessMaster = canAccessBranches || canAccessRates;
+  const masterNavItem = canAccessMaster
+    ? {
+        label: t('master'),
+        icon: <MasterIcon />,
+        children: [
+          ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
+          ...(canAccessBranches ? [{ href: '/branches?tab=departments', label: t('department') }] : []),
+          ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
+        ].filter((c) => c.href && c.label) as { href: string; label: string }[],
+      }
+    : null;
+
+  const workRecordsNavItem =
+    canAccessWorkRecords || canAccessVendors
+      ? {
+          label: t('workRecords'),
+          icon: <WorkRecordsIcon />,
+          children: [
+            ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('employees') }] : []),
+            ...(canAccessVendors ? [{ href: '/vendor-work-orders', label: t('vendor') }] : []),
+          ].filter((c) => c.href && c.label) as { href: string; label: string }[],
+        }
+      : isContractorEmployee
+        ? { href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }
+        : null;
+
   const paymentsNavItem = canAccessPayments
     ? {
         label: t('payments'),
@@ -170,6 +215,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         children: [
           { href: '/payments/contractors', label: t('contractors') },
           { href: '/payments/full-time', label: t('fullTime') },
+          { href: '/payments/vendors', label: t('vendors') },
         ],
       }
     : isEmployee
@@ -184,13 +230,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     { href: '/', label: t('home'), icon: <HomeIcon /> },
     { href: '/notifications', label: t('notifications'), icon: <NotificationsIcon />, badge: unreadCount },
     { href: '/profile', label: t('profile'), icon: <ProfileIcon /> },
-    ...(canAccessBranches ? [{ href: '/branches', label: t('branches'), icon: <BranchesIcon /> }] : []),
+    ...(masterNavItem && masterNavItem.children && masterNavItem.children.length > 0 ? [masterNavItem] : []),
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
     ...(canAccessUsers ? [{ href: '/users', label: t('users'), icon: <UsersIcon /> }] : []),
-    ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster'), icon: <RatesIcon /> }] : []),
+    ...(canAccessVendors ? [{ href: '/vendors', label: t('vendors'), icon: <VendorsIcon /> }] : []),
     ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders'), icon: <StyleOrderIcon /> }] : []),
-    ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
-    ...(isContractorEmployee ? [{ href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }] : []),
+    ...(workRecordsNavItem ? [workRecordsNavItem] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),
     ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),
@@ -200,15 +245,21 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const navContent = (
     <>
       {navItems.map((item, idx) => {
-        if (item.children) {
+        if (item.children && item.children.length > 0) {
           return (
-            <div key={`payments-${idx}`} className="space-y-0.5">
+            <div key={`${item.label}-${idx}`} className="space-y-0.5">
               <div className="flex items-center gap-3 px-4 py-2.5 text-slate-300 text-sm font-medium">
                 {item.icon}
                 <span>{item.label}</span>
               </div>
               {item.children.map((child) => {
-                const isActive = pathname === child.href;
+                const [childPath, childQueryStr] = child.href.split('?');
+                const childQuery = childQueryStr ? Object.fromEntries(new URLSearchParams(childQueryStr)) : {};
+                const isActive =
+                  pathname === childPath &&
+                  (Object.keys(childQuery).length === 0
+                    ? !searchParams?.get('tab') || searchParams.get('tab') !== 'departments'
+                    : searchParams && Object.entries(childQuery).every(([k, v]) => searchParams.get(k) === v));
                 return (
                   <Link
                     key={child.href}

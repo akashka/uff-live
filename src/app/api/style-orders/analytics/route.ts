@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
 import RateMaster from '@/lib/models/RateMaster';
 import WorkRecord from '@/lib/models/WorkRecord';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const XLSX = require('xlsx');
@@ -25,11 +26,10 @@ export async function GET(req: NextRequest) {
 
     let filter: Record<string, unknown> = { isActive: true };
     if (branchId) filter.branches = branchId;
-    if (month) filter['monthWiseData.month'] = month;
+    if (month) filter.month = String(month).slice(0, 7);
 
     const styles = await StyleOrder.find(filter)
       .populate('branches', 'name _id')
-      .populate('rateMasterItems', 'name unit _id')
       .lean();
 
     const monthStr = month ? String(month).slice(0, 7) : null;
@@ -48,46 +48,72 @@ export async function GET(req: NextRequest) {
       profitLoss: number;
     }[] = [];
 
+    // All rate masters (no style-rate mapping)
+    const allRates = await RateMaster.find({ isActive: true }).select('_id').lean();
+    const allRateIds = (allRates || []).map((r: { _id: mongoose.Types.ObjectId }) => r._id);
+
     for (const s of styles) {
       const branchesList = (s.branches || []) as { _id: unknown; name?: string }[];
-      const monthDataList = (s.monthWiseData as { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }[]) || [];
-      const monthsToProcess = monthStr ? monthDataList.filter((m) => m.month === monthStr) : monthDataList;
-      const rateMasterIds = (s.rateMasterItems || []).map((r) =>
-        r && typeof r === 'object' && '_id' in r ? (r as { _id: mongoose.Types.ObjectId })._id : r
-      );
+      const styleMonth = (s as { month?: string }).month;
+      const totalOrderQty = (s as { totalOrderQuantity?: number }).totalOrderQuantity ?? 0;
+      const sellingPricePerQty = (s as { clientCostPerPiece?: number }).clientCostPerPiece ?? 0;
+      const rateMasterIds = allRateIds;
 
-      for (const md of monthsToProcess) {
-        const totalOrderQty = md.totalOrderQuantity ?? 0;
-        const sellingPricePerQty = md.sellingPricePerQuantity ?? 0;
+      // Each style has single month - skip if filter doesn't match (filter already applied in find)
+      if (monthStr && styleMonth !== monthStr) continue;
+
+      {
+        const md = { month: styleMonth || monthStr || '', totalOrderQuantity: totalOrderQty, sellingPricePerQuantity: sellingPricePerQty };
 
         for (let bi = 0; bi < branchesList.length; bi++) {
           const b = branchesList[bi];
           const branchIdForMatch = b._id && typeof b._id === 'object' ? (b._id as mongoose.Types.ObjectId) : b;
           const branchName = b?.name || '';
+          const monthForMatch = md.month || monthStr || '';
 
           for (const rateId of rateMasterIds) {
             const rateIdStr = String(rateId);
-            const produced = await WorkRecord.aggregate([
-              {
-                $match: {
-                  styleOrder: s._id,
-                  branch: branchIdForMatch,
-                  month: md.month,
+            const [producedFromWorkRecords, producedFromVendorOrders] = await Promise.all([
+              WorkRecord.aggregate([
+                {
+                  $match: {
+                    styleOrder: s._id,
+                    branch: branchIdForMatch,
+                    month: monthForMatch,
+                  },
                 },
-              },
-              { $unwind: '$workItems' },
-              { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateIdStr) } } },
-              {
-                $group: {
-                  _id: null,
-                  totalQty: { $sum: '$workItems.quantity' },
-                  totalMfgCost: { $sum: '$workItems.amount' },
+                { $unwind: '$workItems' },
+                { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateIdStr) } } },
+                {
+                  $group: {
+                    _id: null,
+                    totalQty: { $sum: '$workItems.quantity' },
+                    totalMfgCost: { $sum: '$workItems.amount' },
+                  },
                 },
-              },
+              ]),
+              VendorWorkOrder.aggregate([
+                {
+                  $match: {
+                    styleOrder: s._id,
+                    branch: branchIdForMatch,
+                    month: monthForMatch,
+                  },
+                },
+                { $unwind: '$workItems' },
+                { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateIdStr) } } },
+                {
+                  $group: {
+                    _id: null,
+                    totalQty: { $sum: '$workItems.quantity' },
+                    totalMfgCost: { $sum: '$workItems.amount' },
+                  },
+                },
+              ]),
             ]);
 
-            const producedQty = produced[0]?.totalQty ?? 0;
-            const mfgCost = produced[0]?.totalMfgCost ?? 0;
+            const producedQty = (producedFromWorkRecords[0]?.totalQty ?? 0) + (producedFromVendorOrders[0]?.totalQty ?? 0);
+            const mfgCost = (producedFromWorkRecords[0]?.totalMfgCost ?? 0) + (producedFromVendorOrders[0]?.totalMfgCost ?? 0);
             const totalSellingPrice = producedQty * sellingPricePerQty;
             const profitLoss = totalSellingPrice - mfgCost;
 
@@ -95,10 +121,10 @@ export async function GET(req: NextRequest) {
             const rateName = (rateMaster as { name?: string })?.name || rateIdStr;
 
             results.push({
-              _id: `${s._id}_${md.month}_${rateIdStr}_${String(branchIdForMatch)}`,
+              _id: `${s._id}_${monthForMatch}_${rateIdStr}_${String(branchIdForMatch)}`,
               styleCode: s.styleCode as string,
               branch: { name: branchName },
-              month: md.month,
+              month: monthForMatch,
               rateMasterId: rateIdStr,
               rateName,
               totalOrderQuantity: totalOrderQty,

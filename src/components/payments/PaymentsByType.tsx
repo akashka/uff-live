@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import Modal from '@/components/Modal';
+import SaveOverlay from '@/components/SaveOverlay';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useEmployees, usePayments } from '@/lib/hooks/useApi';
+import { useEmployees, usePayments, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -75,6 +76,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
   const canView = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
   const [filterEmployee, setFilterEmployee] = useState(isEmployee && user?.employeeId ? user.employeeId : '');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonth());
   const [filterType, setFilterType] = useState<'all' | 'salary' | 'advance'>('all');
@@ -91,8 +94,46 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       isAdvance: filterType === 'salary' ? false : filterType === 'advance' ? true : undefined,
     }
   );
-  const { employees: allEmployees } = useEmployees(false, { limit: 0 });
+  const { employees: allEmployees } = useEmployees(false, { limit: 0, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
   const employees = (Array.isArray(allEmployees) ? allEmployees : []).filter((e: Employee) => e.employeeType === paymentType);
+  const { branches } = useBranches(true);
+  const { departments } = useDepartments(true);
+  const [form, setForm] = useState({
+    branchId: '',
+    departmentId: '',
+    employeeId: '',
+    paymentType: paymentType as 'contractor' | 'full_time',
+    month: getCurrentMonth(),
+    baseAmount: 0,
+    addDeductAmount: 0,
+    addDeductRemarks: '',
+    pfDeducted: 0,
+    esiDeducted: 0,
+    advanceDeducted: 0,
+    totalPayable: 0,
+    paymentAmount: 0,
+    paymentMode: 'cash' as string,
+    transactionRef: '',
+    remainingAmount: 0,
+    carriedForward: 0,
+    carriedForwardRemarks: '',
+    isAdvance: false,
+    workRecordIds: [] as string[],
+  });
+  const [advanceForm, setAdvanceForm] = useState({
+    branchId: '',
+    departmentId: '',
+    employeeId: '',
+    month: getCurrentMonth(),
+    amount: 0,
+    reasons: '',
+    paymentMode: 'cash' as string,
+    transactionRef: '',
+  });
+  const { employees: formEmpList } = useEmployees(false, { limit: 0, branchId: form.branchId || undefined, departmentId: form.departmentId || undefined });
+  const employeesForForm = (Array.isArray(formEmpList) ? formEmpList : []).filter((e: Employee) => e.employeeType === paymentType);
+  const { employees: advanceFormEmpList } = useEmployees(false, { limit: 0, branchId: advanceForm.branchId || undefined, departmentId: advanceForm.departmentId || undefined });
+  const employeesForAdvanceForm = (Array.isArray(advanceFormEmpList) ? advanceFormEmpList : []).filter((e: Employee) => e.employeeType === paymentType);
   const [modal, setModal] = useState(false);
   const [advanceModal, setAdvanceModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
@@ -121,37 +162,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
 
   useEffect(() => {
     setPage(1);
-  }, [filterEmployee, filterMonth, filterType]);
-
-  const [form, setForm] = useState({
-    employeeId: '',
-    paymentType: paymentType as 'contractor' | 'full_time',
-    month: getCurrentMonth(),
-    baseAmount: 0,
-    addDeductAmount: 0,
-    addDeductRemarks: '',
-    pfDeducted: 0,
-    esiDeducted: 0,
-    advanceDeducted: 0,
-    totalPayable: 0,
-    paymentAmount: 0,
-    paymentMode: 'cash' as string,
-    transactionRef: '',
-    remainingAmount: 0,
-    carriedForward: 0,
-    carriedForwardRemarks: '',
-    isAdvance: false,
-    workRecordIds: [] as string[],
-  });
-
-  const [advanceForm, setAdvanceForm] = useState({
-    employeeId: '',
-    month: getCurrentMonth(),
-    amount: 0,
-    reasons: '',
-    paymentMode: 'cash' as string,
-    transactionRef: '',
-  });
+  }, [filterBranch, filterDepartment, filterEmployee, filterMonth, filterType]);
 
   const openAdvanceModal = (emp?: Employee) => {
     const noEmployees = paymentType === 'contractor' ? t('noContractors') : t('noEmployees');
@@ -160,6 +171,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       return;
     }
     setAdvanceForm({
+      branchId: filterBranch,
+      departmentId: filterDepartment,
       employeeId: emp?._id || '',
       month: getCurrentMonth(),
       amount: 0,
@@ -205,8 +218,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
       toast.success(t('saveSuccess'));
+      await mutatePayments();
       setAdvanceModal(false);
-      mutatePayments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
@@ -222,6 +235,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
     }
     const empId = emp?._id || '';
     setForm({
+      branchId: filterBranch,
+      departmentId: filterDepartment,
       employeeId: empId,
       paymentType,
       month: getCurrentMonth(),
@@ -290,10 +305,10 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   };
 
   useEffect(() => {
-    if (modal && employees.length === 1 && !form.employeeId) {
-      onEmployeeChange(employees[0]._id);
+    if (modal && employeesForForm.length === 1 && !form.employeeId) {
+      onEmployeeChange(employeesForForm[0]._id);
     }
-  }, [modal, employees, form.employeeId]);
+  }, [modal, employeesForForm, form.employeeId]);
 
   const totalPayable = form.baseAmount + form.addDeductAmount - form.pfDeducted - form.esiDeducted - (form.advanceDeducted ?? 0);
   const remaining = totalPayable - form.paymentAmount;
@@ -332,8 +347,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('error'));
       toast.success(t('saveSuccess'));
+      await mutatePayments();
       setModal(false);
-      mutatePayments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
@@ -423,15 +438,35 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">
           {!isEmployee && (
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-              <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                <option value="">{t('all')}</option>
-                {employees.map((e) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
+                <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
+                <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                    <option key={d._id} value={d._id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
+                <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+                  <option value="">{t('all')}</option>
+                  {employees.map((e) => (
+                    <option key={e._id} value={e._id}>{e.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('month')}</label>
@@ -594,16 +629,36 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
         </div>
       }>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
+              <select value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{t('selectBranch')}...</option>
+                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')}</label>
+              <select value={form.departmentId} onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{form.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
+                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
               <select value={form.employeeId} onChange={(e) => onEmployeeChange(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">{employees.length === 0 ? noEmployeesMsg : 'Select...'}</option>
-                {employees.map((e) => (
+                <option value="">{employeesForForm.length === 0 && form.branchId ? (form.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}</option>
+                {employeesForForm.map((e) => (
                   <option key={e._id} value={e._id}>{e.name}</option>
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} <span className="text-red-500" aria-hidden="true">*</span></label>
               <input type="month" value={form.month} onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))} onBlur={onMonthChange} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
@@ -681,16 +736,36 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
         </div>
       }>
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')} <span className="text-red-500">*</span></label>
+              <select value={advanceForm.branchId} onChange={(e) => setAdvanceForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{t('selectBranch')}...</option>
+                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')} <span className="text-red-500">*</span></label>
+              <select value={advanceForm.departmentId} onChange={(e) => setAdvanceForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
+                <option value="">{advanceForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
+                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
+                  <option key={d._id} value={d._id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500">*</span></label>
               <select value={advanceForm.employeeId} onChange={(e) => setAdvanceForm((f) => ({ ...f, employeeId: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">Select...</option>
-                {employees.map((e) => (
+                <option value="">{employeesForAdvanceForm.length === 0 && advanceForm.branchId ? (advanceForm.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}</option>
+                {employeesForAdvanceForm.map((e) => (
                   <option key={e._id} value={e._id}>{e.name}</option>
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} <span className="text-red-500">*</span></label>
               <input type="month" value={advanceForm.month} onChange={(e) => setAdvanceForm((f) => ({ ...f, month: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
@@ -823,6 +898,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           </label>
         </div>
       </Modal>
+
+      <SaveOverlay show={saving} label={t('saving')} />
     </div>
   );
 }

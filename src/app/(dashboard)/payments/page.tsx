@@ -10,6 +10,8 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (user?.employeeType === 'full_time') {
       router.replace('/payments/full-time');
+    } else if (user?.employeeType === 'contractor') {
+      router.replace('/payments/contractors');
     } else {
       router.replace('/payments/contractors');
     }

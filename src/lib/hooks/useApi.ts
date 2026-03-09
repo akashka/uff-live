@@ -10,12 +10,14 @@ export function revalidate(key: string) {
 }
 
 /** Employees list - cached 60s, deduped. Use limit=0 for all (e.g. dropdowns). */
-export function useEmployees(includeInactive = false, options?: { page?: number; limit?: number; search?: string }) {
+export function useEmployees(includeInactive = false, options?: { page?: number; limit?: number; search?: string; departmentId?: string; branchId?: string }) {
   const params = new URLSearchParams();
   params.set('includeInactive', String(includeInactive));
   if (options?.page) params.set('page', String(options.page));
   if (options?.limit !== undefined) params.set('limit', String(options.limit));
   if (options?.search) params.set('search', options.search);
+  if (options?.departmentId) params.set('departmentId', options.departmentId);
+  if (options?.branchId) params.set('branchId', options.branchId);
   const key = `/api/employees?${params.toString()}`;
   const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
@@ -44,6 +46,21 @@ export function useBranches(includeInactive = false) {
   });
   return {
     branches: Array.isArray(data) ? data : [],
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Departments list - cached 60s */
+export function useDepartments(includeInactive = false) {
+  const key = `/api/departments?includeInactive=${includeInactive}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  return {
+    departments: Array.isArray(data) ? data : [],
     error,
     loading: isLoading,
     mutate,
@@ -150,11 +167,89 @@ export function usePayments(employeeId?: string, enabled = true, options?: { pag
   };
 }
 
+/** Vendors list - cached 60s */
+export function useVendors(includeInactive = false, options?: { page?: number; limit?: number; search?: string }) {
+  const params = new URLSearchParams();
+  params.set('includeInactive', String(includeInactive));
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit !== undefined) params.set('limit', String(options.limit));
+  if (options?.search) params.set('search', options.search);
+  const key = `/api/vendors?${params.toString()}`;
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  const vendors = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+  return {
+    vendors,
+    total: data?.total ?? vendors.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Vendor work orders - paginated */
+export function useVendorWorkOrders(params?: { vendorId?: string; branchId?: string; month?: string; page?: number; limit?: number }, enabled = true) {
+  const search = new URLSearchParams();
+  if (params?.vendorId) search.set('vendorId', params.vendorId);
+  if (params?.branchId) search.set('branchId', params.branchId);
+  if (params?.month) search.set('month', params.month);
+  if (params?.page) search.set('page', String(params.page));
+  if (params?.limit) search.set('limit', String(params.limit));
+  const key = `/api/vendor-work-orders?${search.toString() || 'all'}`;
+  const { data, error, isLoading, mutate } = useSWR(enabled ? key : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  });
+  const records = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+  return {
+    records,
+    total: data?.total ?? records.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Vendor payments - paginated */
+export function useVendorPayments(vendorId?: string, enabled = true, options?: { page?: number; limit?: number; month?: string; paymentType?: 'advance' | 'monthly' }) {
+  const params = new URLSearchParams();
+  if (vendorId) params.set('vendorId', vendorId);
+  if (options?.month) params.set('month', options.month);
+  if (options?.paymentType) params.set('paymentType', options.paymentType);
+  if (options?.page) params.set('page', String(options.page));
+  if (options?.limit) params.set('limit', String(options.limit));
+  const key = `/api/vendor-payments${params.toString() ? `?${params}` : ''}`;
+  const { data, error, isLoading, mutate } = useSWR(enabled ? key : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  });
+  const payments = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+  return {
+    payments,
+    total: data?.total ?? payments.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
 /** Work records - paginated */
-export function useWorkRecords(params?: { employeeId?: string; branchId?: string; month?: string; page?: number; limit?: number }, enabled = true) {
+export function useWorkRecords(params?: { employeeId?: string; branchId?: string; departmentId?: string; month?: string; page?: number; limit?: number }, enabled = true) {
   const search = new URLSearchParams();
   if (params?.employeeId) search.set('employeeId', params.employeeId);
   if (params?.branchId) search.set('branchId', params.branchId);
+  if (params?.departmentId) search.set('departmentId', params.departmentId);
   if (params?.month) search.set('month', params.month);
   if (params?.page) search.set('page', String(params.page));
   if (params?.limit) search.set('limit', String(params.limit));

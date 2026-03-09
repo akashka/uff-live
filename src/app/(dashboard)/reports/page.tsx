@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
-import { useEmployees, useBranches } from '@/lib/hooks/useApi';
+import { useEmployees, useVendors, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatMonth, formatAmount } from '@/lib/utils';
@@ -16,7 +16,7 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-type TabId = 'pdf' | 'analytics' | 'branch' | 'productivity' | 'yoy';
+type TabId = 'pdf' | 'analytics' | 'branch' | 'productivity' | 'vendorProd' | 'yoy';
 
 interface AnalyticsSummary {
   totalOrderQuantity: number;
@@ -44,6 +44,7 @@ const TABS: { id: TabId; label: string; icon: string; color: string }[] = [
   { id: 'analytics', label: 'Style Analytics', icon: '📊', color: 'from-emerald-500 to-teal-600' },
   { id: 'branch', label: 'Branch Comparison', icon: '🏢', color: 'from-blue-500 to-indigo-600' },
   { id: 'productivity', label: 'Employee Productivity', icon: '👥', color: 'from-violet-500 to-purple-600' },
+  { id: 'vendorProd', label: 'Vendor Productivity', icon: '🏭', color: 'from-cyan-500 to-blue-600' },
   { id: 'yoy', label: 'Year-over-Year', icon: '📈', color: 'from-rose-500 to-pink-600' },
 ];
 
@@ -56,6 +57,8 @@ export default function ReportsPage() {
 
   const [pdfMonth, setPdfMonth] = useState(getCurrentMonth());
   const [payslipEmployeeId, setPayslipEmployeeId] = useState('');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
 
   const [analyticsBranchId, setAnalyticsBranchId] = useState('');
   const [analyticsMonth, setAnalyticsMonth] = useState(getCurrentMonth());
@@ -71,10 +74,22 @@ export default function ReportsPage() {
 
   const [prodEmployeeId, setProdEmployeeId] = useState('');
   const [prodBranchId, setProdBranchId] = useState('');
-  const [prodMonthFrom, setProdMonthFrom] = useState('');
-  const [prodMonthTo, setProdMonthTo] = useState('');
+  const now = new Date();
+  const defaultMonthFrom = `${now.getFullYear()}-01`;
+  const defaultMonthTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [prodMonthFrom, setProdMonthFrom] = useState(defaultMonthFrom);
+  const [prodMonthTo, setProdMonthTo] = useState(defaultMonthTo);
   const [prodData, setProdData] = useState<{ data: { employeeName: string; total: number; months: { month: string; amount: number }[] }[] } | null>(null);
   const [prodLoading, setProdLoading] = useState(false);
+
+  const [vendorProdVendorId, setVendorProdVendorId] = useState('');
+  const [vendorProdBranchId, setVendorProdBranchId] = useState('');
+  const vendorDefaultFrom = `${now.getFullYear()}-01`;
+  const vendorDefaultTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [vendorProdMonthFrom, setVendorProdMonthFrom] = useState(vendorDefaultFrom);
+  const [vendorProdMonthTo, setVendorProdMonthTo] = useState(vendorDefaultTo);
+  const [vendorProdData, setVendorProdData] = useState<{ data: { vendorName: string; vendorId?: string; serviceType?: string; total: number; months: { month: string; amount: number }[] }[] } | null>(null);
+  const [vendorProdLoading, setVendorProdLoading] = useState(false);
 
   const [yoyYear, setYoyYear] = useState(new Date().getFullYear());
   const [yoyData, setYoyData] = useState<{
@@ -85,8 +100,10 @@ export default function ReportsPage() {
 
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isAdmin = user?.role === 'admin';
-  const { employees } = useEmployees(false, { limit: 10000 });
+  const { employees } = useEmployees(false, { limit: 10000, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
+  const { vendors } = useVendors(true, { limit: 1000 });
   const { branches } = useBranches(true);
+  const { departments } = useDepartments(true);
 
   useEffect(() => {
     if (tabParam && TABS.some((tab) => tab.id === tabParam)) setActiveTab(tabParam);
@@ -134,6 +151,21 @@ export default function ReportsPage() {
       .catch(() => toast.error(t('error')))
       .finally(() => setProdLoading(false));
   }, [canAccess, prodEmployeeId, prodBranchId, prodMonthFrom, prodMonthTo]);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    setVendorProdLoading(true);
+    const params = new URLSearchParams();
+    if (vendorProdVendorId) params.set('vendorId', vendorProdVendorId);
+    if (vendorProdBranchId) params.set('branchId', vendorProdBranchId);
+    if (vendorProdMonthFrom) params.set('monthFrom', vendorProdMonthFrom);
+    if (vendorProdMonthTo) params.set('monthTo', vendorProdMonthTo);
+    fetch(`/api/reports/vendor-productivity?${params}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.error) throw new Error(d.error); setVendorProdData(d); })
+      .catch(() => toast.error(t('error')))
+      .finally(() => setVendorProdLoading(false));
+  }, [canAccess, vendorProdVendorId, vendorProdBranchId, vendorProdMonthFrom, vendorProdMonthTo]);
 
   useEffect(() => {
     if (!canAccess) return;
@@ -215,6 +247,20 @@ export default function ReportsPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectMonth')}</label>
                   <input type="month" value={pdfMonth} onChange={(e) => setPdfMonth(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
+                  <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setPayslipEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500">
+                    <option value="">{t('all')}</option>
+                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
+                  <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setPayslipEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500">
+                    <option value="">{t('all')}</option>
+                    {(departments || []).map((d: { _id: string; name: string }) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectEmployee')} ({t('payslip')})</label>
@@ -374,7 +420,10 @@ export default function ReportsPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectYear')}</label>
                   <select value={branchCompYear} onChange={(e) => setBranchCompYear(parseInt(e.target.value, 10))} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500">
-                    {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((y) => <option key={y} value={y}>{y}</option>)}
+                    {[0, 1, 2, 3, 4].map((i) => {
+                      const y = new Date().getFullYear() - i;
+                      return <option key={y} value={y}>{y}</option>;
+                    })}
                   </select>
                 </div>
               </div>
@@ -447,6 +496,20 @@ export default function ReportsPage() {
             <div className="p-6">
               <div className="flex flex-wrap gap-4 items-end mb-6">
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
+                  <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setProdEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
+                    <option value="">{t('all')}</option>
+                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
+                  <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setProdEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
+                    <option value="">{t('all')}</option>
+                    {(departments || []).map((d: { _id: string; name: string }) => <option key={d._id} value={d._id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectEmployee')}</label>
                   <select value={prodEmployeeId} onChange={(e) => setProdEmployeeId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
                     <option value="">{t('all')}</option>
@@ -454,7 +517,7 @@ export default function ReportsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
                   <select value={prodBranchId} onChange={(e) => setProdBranchId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
                     <option value="">{t('all')}</option>
                     {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
@@ -477,8 +540,8 @@ export default function ReportsPage() {
                     <thead className="bg-violet-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('workAmount')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -486,8 +549,79 @@ export default function ReportsPage() {
                         row.months.map((m) => (
                           <tr key={`${row.employeeName}-${m.month}`} className="hover:bg-slate-50">
                             <td className="px-4 py-2 text-slate-800 font-medium">{row.employeeName}</td>
+                            <td className="px-4 py-2 text-slate-600">{formatMonth(m.month)}</td>
                             <td className="px-4 py-2 text-right">₹{formatAmount(m.amount)}</td>
-                            <td className="px-4 py-2 text-slate-600">{m.month}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-slate-600 py-8 text-center">{t('noData')}</p>
+              )}
+            </div>
+          </motion.section>
+        )}
+
+        {activeTab === 'vendorProd' && (
+          <motion.section
+            key="vendorProd"
+            initial={{ opacity: 0, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="rounded-2xl bg-white shadow-lg border border-slate-200 overflow-hidden"
+          >
+            <div className="bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-4">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <span>🏭</span> {t('vendor')} {t('productivity')}
+              </h2>
+              <p className="text-cyan-100 text-sm mt-0.5">Work order output per vendor over time</p>
+            </div>
+            <div className="p-6">
+              <div className="flex flex-wrap gap-4 items-end mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('vendor')}</label>
+                  <select value={vendorProdVendorId} onChange={(e) => setVendorProdVendorId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500">
+                    <option value="">{t('all')}</option>
+                    {(vendors || []).map((v: { _id: string; name: string }) => <option key={v._id} value={v._id}>{v.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
+                  <select value={vendorProdBranchId} onChange={(e) => setVendorProdBranchId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500">
+                    <option value="">{t('all')}</option>
+                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('fromMonth')}</label>
+                  <input type="month" value={vendorProdMonthFrom} onChange={(e) => setVendorProdMonthFrom(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('toMonth')}</label>
+                  <input type="month" value={vendorProdMonthTo} onChange={(e) => setVendorProdMonthTo(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500" />
+                </div>
+              </div>
+              {vendorProdLoading ? (
+                <div className="h-48 animate-pulse bg-slate-100 rounded-xl" />
+              ) : vendorProdData?.data?.length ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-cyan-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendor')}</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('workAmount')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {vendorProdData.data.flatMap((row) =>
+                        row.months.map((m) => (
+                          <tr key={`${row.vendorName}-${m.month}`} className="hover:bg-slate-50">
+                            <td className="px-4 py-2 text-slate-800 font-medium">{row.vendorName}</td>
+                            <td className="px-4 py-2 text-slate-600">{formatMonth(m.month)}</td>
+                            <td className="px-4 py-2 text-right">₹{formatAmount(m.amount)}</td>
                           </tr>
                         ))
                       )}
@@ -520,7 +654,10 @@ export default function ReportsPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectYear')}</label>
                   <select value={yoyYear} onChange={(e) => setYoyYear(parseInt(e.target.value, 10))} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500">
-                    {[new Date().getFullYear(), new Date().getFullYear() - 1].map((y) => <option key={y} value={y}>{y}</option>)}
+                    {[0, 1, 2, 3, 4].map((i) => {
+                      const y = new Date().getFullYear() - i;
+                      return <option key={y} value={y}>{y}</option>;
+                    })}
                   </select>
                 </div>
               </div>

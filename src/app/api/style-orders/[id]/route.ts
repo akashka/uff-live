@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
+import '@/lib/models/RateMaster'; // Register for populate('rateMasterItems')
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
@@ -39,32 +40,48 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const doc = await StyleOrder.findById(id);
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { styleCode, details, branches: branchesInput, rateMasterItems, monthWiseData, isActive } = body;
+    const { styleCode, brand, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
 
-    if (styleCode !== undefined) doc.styleCode = String(styleCode).trim();
+    const newCode = styleCode !== undefined ? String(styleCode).trim() : doc.styleCode;
+    const newBrand = brand !== undefined ? String(brand).trim() : doc.brand;
+
+    if (styleCode !== undefined) {
+      if (!/^\d{4}$/.test(newCode)) {
+        return NextResponse.json({ error: 'Style code must be a 4-digit number (e.g. 0001)' }, { status: 400 });
+      }
+      doc.styleCode = newCode;
+    }
+    if (brand !== undefined) {
+      doc.brand = newBrand;
+      doc.markModified('brand');
+    }
+
+    // Check unique brand+code when either changed
+    if (styleCode !== undefined || brand !== undefined) {
+      const existing = await StyleOrder.findOne({ brand: newBrand, styleCode: newCode, _id: { $ne: id } });
+      if (existing) {
+        return NextResponse.json({ error: `Style code ${newCode} with brand "${newBrand}" already exists` }, { status: 400 });
+      }
+    }
     if (details !== undefined) doc.details = details;
     if (Array.isArray(branchesInput) && branchesInput.length > 0) {
       doc.branches = branchesInput.map((b: string) => new mongoose.Types.ObjectId(b));
     }
-    if (Array.isArray(rateMasterItems)) {
-      if (rateMasterItems.length === 0) {
-        return NextResponse.json({ error: 'At least one rate master item is required' }, { status: 400 });
-      }
-      doc.rateMasterItems = rateMasterItems;
-    }
+    doc.rateMasterItems = [];
     if (isActive !== undefined) doc.isActive = isActive;
 
-    if (Array.isArray(monthWiseData)) {
-      const validMonthData = monthWiseData
-        .filter((m: { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }) =>
-          m.month && typeof m.totalOrderQuantity === 'number' && typeof m.sellingPricePerQuantity === 'number'
-        )
-        .map((m: { month: string; totalOrderQuantity: number; sellingPricePerQuantity: number }) => ({
-          month: String(m.month || '').slice(0, 7),
-          totalOrderQuantity: Math.max(0, m.totalOrderQuantity),
-          sellingPricePerQuantity: Math.max(0, m.sellingPricePerQuantity),
-        }));
-      doc.monthWiseData = validMonthData as typeof doc.monthWiseData;
+    // Month is never editable - always disabled in UI for edit
+    if (totalOrderQuantity !== undefined && totalOrderQuantity !== null) {
+      doc.totalOrderQuantity = Math.max(0, Number(totalOrderQuantity) || 0);
+      doc.markModified('totalOrderQuantity');
+    }
+    if (clientCostPerPiece !== undefined && clientCostPerPiece !== null) {
+      doc.clientCostPerPiece = Math.max(0, Number(clientCostPerPiece) || 0);
+      doc.markModified('clientCostPerPiece');
+    }
+    if (clientCostTotalAmount !== undefined && clientCostTotalAmount !== null) {
+      doc.clientCostTotalAmount = Math.max(0, Number(clientCostTotalAmount) || 0);
+      doc.markModified('clientCostTotalAmount');
     }
 
     await doc.save();
