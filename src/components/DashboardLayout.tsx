@@ -181,13 +181,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const hasPayments = canAccessPayments || isEmployee;
 
-  const canAccessMaster = canAccessBranches || canAccessRates || canAccessStyleOrders || canAccessVendors;
+  const canAccessMaster = canAccessBranches || canAccessEmployees || canAccessRates || canAccessStyleOrders || canAccessVendors;
   const masterNavItem = canAccessMaster
     ? {
         label: t('master'),
         icon: <MasterIcon />,
         children: [
           ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
+          ...(canAccessEmployees ? [{ href: '/employees', label: t('employees') }] : []),
           ...(canAccessVendors ? [{ href: '/vendors', label: t('jobworkVendors') }] : []),
           ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
           ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders') }] : []),
@@ -241,7 +242,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     { href: '/notifications', label: t('notifications'), icon: <NotificationsIcon />, badge: unreadCount },
     profileNavItem,
     ...(masterNavItem && masterNavItem.children && masterNavItem.children.length > 0 ? [masterNavItem] : []),
-    ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
     ...(workRecordsNavItem ? [workRecordsNavItem] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),
