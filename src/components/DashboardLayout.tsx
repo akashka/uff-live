@@ -373,7 +373,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 <option value="hi">HI</option>
               </select>
               <span className="px-2 py-1 rounded bg-slate-200 text-slate-800 text-xs font-medium hidden sm:inline">
-                {user?.role}
+                {user?.role ? t(user.role as 'admin' | 'finance' | 'accountancy' | 'hr' | 'employee') : ''}
               </span>
               <Link
                 href="/profile"
