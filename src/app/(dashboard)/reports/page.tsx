@@ -88,7 +88,7 @@ export default function ReportsPage() {
   const vendorDefaultTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [vendorProdMonthFrom, setVendorProdMonthFrom] = useState(vendorDefaultFrom);
   const [vendorProdMonthTo, setVendorProdMonthTo] = useState(vendorDefaultTo);
-  const [vendorProdData, setVendorProdData] = useState<{ data: { vendorName: string; vendorId?: string; serviceType?: string; total: number; months: { month: string; amount: number }[] }[] } | null>(null);
+  const [vendorProdData, setVendorProdData] = useState<{ data: { vendorName: string; vendorId?: string; total: number; months: { month: string; amount: number }[] }[] } | null>(null);
   const [vendorProdLoading, setVendorProdLoading] = useState(false);
 
   const [yoyYear, setYoyYear] = useState(new Date().getFullYear());

@@ -429,7 +429,7 @@ export default function HomePage() {
               value={stats.myStats.employeeType === 'contractor' ? stats.myStats.workRecords : 1}
               subtitle={stats.myStats.employeeType === 'contractor' ? `₹${formatAmount(stats.myStats.workTotal)} total` : t('fixedMonthly')}
               icon={<UsersIcon />}
-              href="/work-records"
+              href="/work-orders"
               gradient="from-violet-500 to-purple-600"
             /></AnimatedItem>
             <AnimatedItem><StatCard
@@ -519,7 +519,7 @@ export default function HomePage() {
                 value={stats.workRecords.count}
                 subtitle={`₹${formatAmount(stats.workRecords.total)} work`}
                 icon={<WorkIcon />}
-                href="/work-records"
+                href="/work-orders"
                 gradient="from-teal-500 to-cyan-600"
               /></AnimatedItem>
             ) : null}

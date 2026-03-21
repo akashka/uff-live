@@ -74,6 +74,10 @@ interface CalcResponse {
   totalDeductions: number;
   totalWorkingDays: number;
   overtimeCostPerHour?: number;
+  daysWorked?: number;
+  otHours?: number;
+  otAmount?: number;
+  fullTimeWorkRecords?: unknown[];
 }
 
 export default function FullTimePayments() {
@@ -180,10 +184,12 @@ export default function FullTimePayments() {
     setAdvanceOutstanding(outstanding);
     if (!calcRes.error) {
       setCalc(calcRes);
-      const twd = calcRes.totalWorkingDays ?? 0;
+      const daysFromWorkRecords = roundDays(calcRes.daysWorked ?? 0);
+      const otFromWorkRecords = roundAmount(calcRes.otHours ?? 0);
       setSalaryForm((f) => ({
         ...f,
-        daysWorked: twd > 0 ? Math.min(f.daysWorked || twd, twd) : 0,
+        daysWorked: daysFromWorkRecords,
+        otHours: otFromWorkRecords,
         advanceDeducted: outstanding,
       }));
     }
@@ -249,9 +255,9 @@ export default function FullTimePayments() {
   const esi = roundAmount(calc?.esi ?? 0);
   const other = roundAmount(calc?.other ?? 0);
   const otCostPerHour = roundAmount(calc?.overtimeCostPerHour ?? 0);
-  const daysWorked = roundDays(Math.min(Math.max(0, salaryForm.daysWorked), totalWorkingDays || 999));
-  const otHours = roundAmount(Math.max(0, salaryForm.otHours ?? 0));
-  const otAmount = roundAmount(otHours * otCostPerHour);
+  const daysWorked = roundDays(Math.min(Math.max(0, salaryForm.daysWorked ?? calc?.daysWorked ?? 0), totalWorkingDays || 999));
+  const otHours = roundAmount(Math.max(0, salaryForm.otHours ?? calc?.otHours ?? 0));
+  const otAmount = roundAmount(calc?.otAmount ?? (otHours * otCostPerHour));
 
   let proratedAmount: number;
   let pfDeducted: number;
@@ -701,7 +707,7 @@ export default function FullTimePayments() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} <span className="text-red-500">*</span></label>
-              <input type="month" value={salaryForm.month} onChange={(e) => setSalaryForm((f) => ({ ...f, month: e.target.value }))} onBlur={onSalaryMonthChange} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
+              <input type="month" value={salaryForm.month} onChange={(e) => { const m = e.target.value; setSalaryForm((f) => ({ ...f, month: m })); if (salaryForm.employeeId) loadCalcAndAdvance(salaryForm.employeeId, m); }} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" />
             </div>
           </div>
           <button type="button" onClick={() => salaryForm.employeeId && onSalaryMonthChange()} className="text-sm font-medium text-uff-accent hover:text-uff-accent-hover">
@@ -724,11 +730,13 @@ export default function FullTimePayments() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('daysWorked')} <span className="text-red-500">*</span> (max {totalWorkingDays})</label>
-              <ValidatedInput type="number" inputMode="numeric" value={salaryForm.daysWorked ? String(salaryForm.daysWorked) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), totalWorkingDays || 999) }))} placeholderHint={String(totalWorkingDays)} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseInt(v, 10))} className="w-full px-3 py-2.5" />
+              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">{daysWorked}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{t('daysFromWorkOrders') || 'From work orders – add entries in Work Orders'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('otHours')} {otCostPerHour > 0 && <span className="text-slate-500 text-xs">(× ₹{formatAmount(otCostPerHour)}/hr)</span>}</label>
-              <ValidatedInput type="number" inputMode="decimal" min={0} value={salaryForm.otHours ? String(salaryForm.otHours) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, otHours: Math.max(0, parseFloat(v) || 0) }))} placeholderHint="0" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">{otHours}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{t('otFromWorkOrders') || 'From work orders'}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('proratedAmount')}</label>

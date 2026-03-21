@@ -41,20 +41,19 @@ export async function GET(req: NextRequest) {
     ]);
 
     const vendorIds = [...new Set((byVendorMonth || []).map((x) => String(x._id.vendor)))];
-    const vendors = vendorIds.length > 0 ? await Vendor.find({ _id: { $in: vendorIds } }).select('name vendorId serviceType').lean() : [];
+    const vendors = vendorIds.length > 0 ? await Vendor.find({ _id: { $in: vendorIds } }).select('name vendorId').lean() : [];
 
-    const vendorMap = new Map<string, { name: string; vendorId?: string; serviceType?: string }>();
+    const vendorMap = new Map<string, { name: string; vendorId?: string }>();
     for (const v of vendors || []) {
       vendorMap.set(String((v as { _id?: unknown })._id), {
         name: (v as { name?: string }).name || '',
         vendorId: (v as { vendorId?: string }).vendorId,
-        serviceType: (v as { serviceType?: string }).serviceType,
       });
     }
 
     const byVendor: Record<
       string,
-      { vendorName: string; vendorId?: string; serviceType?: string; months: { month: string; amount: number; count: number }[]; total: number }
+      { vendorName: string; vendorId?: string; months: { month: string; amount: number; count: number }[]; total: number }
     > = {};
 
     for (const row of byVendorMonth || []) {
@@ -68,7 +67,6 @@ export async function GET(req: NextRequest) {
         byVendor[vid] = {
           vendorName: vend?.name || vid,
           vendorId: vend?.vendorId,
-          serviceType: vend?.serviceType,
           months: [],
           total: 0,
         };

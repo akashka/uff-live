@@ -35,15 +35,14 @@ export async function POST(req: NextRequest) {
       const name = String(row[1] ?? '').trim();
       const contactNumber = String(row[2] ?? '').trim();
       const email = String(row[3] ?? '').trim();
-      const serviceType = String(row[4] ?? '').trim();
-      const address = String(row[5] ?? '').trim();
-      const bankName = String(row[6] ?? '').trim();
-      const accountNumber = String(row[7] ?? '').trim();
-      const ifscCode = String(row[8] ?? '').trim();
-      const notes = String(row[9] ?? '').trim();
+      const address = String(row[4] ?? '').trim();
+      const bankName = String(row[5] ?? '').trim();
+      const accountNumber = String(row[6] ?? '').trim();
+      const ifscCode = String(row[7] ?? '').trim();
+      const notes = String(row[8] ?? '').trim();
 
-      if (!vendorId || !name || !contactNumber || !serviceType) {
-        errors.push(`Row ${i + 1}: Vendor ID, Name, Contact Number and Service Type are required`);
+      if (!vendorId || !name || !contactNumber) {
+        errors.push(`Row ${i + 1}: Vendor ID, Name and Contact Number are required`);
         continue;
       }
 
@@ -58,7 +57,6 @@ export async function POST(req: NextRequest) {
           name,
           contactNumber,
           email: email || '',
-          serviceType,
           address: address || '',
           bankName: bankName || '',
           accountNumber: accountNumber || '',

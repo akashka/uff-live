@@ -261,7 +261,45 @@ export function useVendorPayments(vendorId?: string, enabled = true, options?: {
   };
 }
 
-/** Work records - paginated */
+/** Unified work orders - contractor, full_time, vendor */
+export function useWorkOrders(params?: {
+  type?: 'contractor' | 'full_time' | 'vendor';
+  employeeId?: string;
+  vendorId?: string;
+  branchId?: string;
+  departmentId?: string;
+  month?: string;
+  page?: number;
+  limit?: number;
+}, enabled = true) {
+  const search = new URLSearchParams();
+  if (params?.type) search.set('type', params.type);
+  if (params?.employeeId) search.set('employeeId', params.employeeId);
+  if (params?.vendorId) search.set('vendorId', params.vendorId);
+  if (params?.branchId) search.set('branchId', params.branchId);
+  if (params?.departmentId) search.set('departmentId', params.departmentId);
+  if (params?.month) search.set('month', params.month || '');
+  if (params?.page) search.set('page', String(params.page || 1));
+  if (params?.limit) search.set('limit', String(params.limit || 50));
+  const key = `/api/work-orders?${search.toString()}`;
+  const { data, error, isLoading, mutate } = useSWR(enabled ? key : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  });
+  const records = Array.isArray(data?.data) ? data.data : [];
+  return {
+    records,
+    total: data?.total ?? records.length,
+    page: data?.page ?? 1,
+    limit: data?.limit ?? 50,
+    hasMore: data?.hasMore ?? false,
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Work records - paginated (legacy, use useWorkOrders for unified) */
 export function useWorkRecords(params?: { employeeId?: string; branchId?: string; departmentId?: string; month?: string; page?: number; limit?: number }, enabled = true) {
   const search = new URLSearchParams();
   if (params?.employeeId) search.set('employeeId', params.employeeId);
@@ -307,12 +345,12 @@ export function useStyleOrders(includeInactive = false, branchId?: string, month
   };
 }
 
-/** Style orders by branch+month (with available quantities) */
+/** Style orders by branch+month (with available quantities). branchId optional - when omitted returns all styles for month (e.g. for vendor) */
 export function useStyleOrdersByBranchMonth(branchId?: string, month?: string, enabled = true) {
   const params = new URLSearchParams();
   if (branchId) params.set('branchId', branchId);
   if (month) params.set('month', month);
-  const key = branchId && month ? `/api/style-orders/by-branch-month?${params.toString()}` : null;
+  const key = month ? `/api/style-orders/by-branch-month?${params.toString()}` : null;
   const { data, error, isLoading, mutate } = useSWR(enabled && key ? key : null, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,

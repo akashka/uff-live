@@ -17,19 +17,18 @@ export async function GET(req: NextRequest) {
     const branchId = searchParams.get('branchId');
     const month = searchParams.get('month');
 
-    if (!branchId || !month) {
-      return NextResponse.json({ error: 'branchId and month required' }, { status: 400 });
+    if (!month) {
+      return NextResponse.json({ error: 'month required' }, { status: 400 });
     }
 
     const monthStr = String(month).slice(0, 7); // YYYY-MM
 
     await connectDB();
 
-    const styles = await StyleOrder.find({
-      branches: branchId,
-      isActive: true,
-      month: monthStr,
-    })
+    const styleFilter: Record<string, unknown> = { isActive: true, month: monthStr };
+    if (branchId) styleFilter.branches = branchId;
+
+    const styles = await StyleOrder.find(styleFilter)
       .populate('branches', 'name _id')
       .lean();
 
@@ -41,21 +40,15 @@ export async function GET(req: NextRequest) {
 
     const producedByStyleRate = new Map<string, number>(); // key: styleId_rateMasterId
     if (styleIds.length > 0) {
+      const wrFilter: Record<string, unknown> = { month: monthStr, styleOrder: { $in: styleIds } };
+      const vwoFilter: Record<string, unknown> = { month: monthStr, styleOrder: { $in: styleIds } };
+      if (branchId) {
+        wrFilter.branch = branchId;
+        vwoFilter.branch = branchId;
+      }
       const [workRecords, vendorWorkOrders] = await Promise.all([
-        WorkRecord.find({
-          branch: branchId,
-          month: monthStr,
-          styleOrder: { $in: styleIds },
-        })
-          .select('styleOrder workItems')
-          .lean(),
-        VendorWorkOrder.find({
-          branch: branchId,
-          month: monthStr,
-          styleOrder: { $in: styleIds },
-        })
-          .select('styleOrder workItems')
-          .lean(),
+        WorkRecord.find(wrFilter).select('styleOrder workItems').lean(),
+        VendorWorkOrder.find(vwoFilter).select('styleOrder workItems').lean(),
       ]);
 
       for (const wr of workRecords) {
@@ -93,12 +86,14 @@ export async function GET(req: NextRequest) {
       const totalOrderQty = (s as { totalOrderQuantity?: number }).totalOrderQuantity ?? 0;
       const sellingPricePerQty = (s as { clientCostPerPiece?: number }).clientCostPerPiece ?? 0;
 
-      const rateItems = (allRates || []).map((r: { _id: unknown }) => {
+      const rateItems = (allRates || []).map((r: { _id: unknown; name?: string; unit?: string }) => {
         const rateId = String(r._id);
         const produced = producedByStyleRate.get(`${styleId}_${rateId}`) || 0;
         const available = Math.max(0, totalOrderQty - produced);
         return {
           rateMasterId: rateId,
+          rateName: r.name || '',
+          unit: r.unit || 'per piece',
           totalOrderQuantity: totalOrderQty,
           sellingPricePerQuantity: sellingPricePerQty,
           producedQuantity: produced,

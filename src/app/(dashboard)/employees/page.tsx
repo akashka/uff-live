@@ -466,8 +466,7 @@ export default function EmployeesPage() {
   const canSave = !saving && !!form.name && !!form.contactNumber && !!form.email && !!form.emergencyNumber && !!form.dateOfBirth && form.branches.length > 0 && !!form.department && salaryValid && otValid && pfValid && esiValid;
 
   /* Full-screen add/edit form */
-  if (modal) {
-    return (
+  if (modal) return (
       <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
         {/* Sticky block: breadcrumb + form header — sticks below dashboard header (h-14) */}
         <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm -mx-4 -mt-6 px-4 pt-6 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-8 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
@@ -990,7 +989,6 @@ export default function EmployeesPage() {
         )}
       </div>
     );
-  }
 
   return (
     <div>

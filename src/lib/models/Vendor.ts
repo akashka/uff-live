@@ -6,8 +6,6 @@ export interface IVendor extends Document {
   name: string;
   contactNumber: string;
   email?: string;
-  /** Service type / task outsourced, e.g. stitching, finishing */
-  serviceType: string;
   address?: string;
   /** Banking details for payments */
   bankName?: string;
@@ -47,6 +45,5 @@ const VendorSchema = new Schema<IVendor>(
 VendorSchema.index({ isActive: 1, createdAt: -1 });
 VendorSchema.index({ vendorId: 1 });
 VendorSchema.index({ name: 1 });
-VendorSchema.index({ serviceType: 1 });
 
 export default (mongoose.models.Vendor as Model<IVendor>) || mongoose.model<IVendor>('Vendor', VendorSchema);

@@ -19,7 +19,7 @@ export default function VendorDetailPage() {
   const vendorId = params?.id as string | undefined;
 
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
-  const [vendor, setVendor] = useState<{ _id: string; name: string; vendorId?: string; serviceType?: string } | null>(null);
+  const [vendor, setVendor] = useState<{ _id: string; name: string; vendorId?: string } | null>(null);
   const [entries, setEntries] = useState<PassbookEntry[]>([]);
   const [outstanding, setOutstanding] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -139,7 +139,6 @@ export default function VendorDetailPage() {
             <h2 className="text-lg font-semibold text-slate-900">{vendor.name}</h2>
             <p className="text-sm text-slate-600">
               {vendor.vendorId && <span className="font-mono">{vendor.vendorId}</span>}
-              {vendor.serviceType && <span className="ml-2">• {vendor.serviceType}</span>}
             </p>
           </div>
           <p className="mt-4 text-sm text-slate-600 bg-slate-100/80 rounded-lg px-4 py-2.5 border border-slate-200">

@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
       type: 'work_record_created',
       title: 'Work record created',
       message: `A work record has been created for you for ${monthStr}${branchName ? ` (${branchName})` : ''}. Total: ₹${finalTotal.toLocaleString()}`,
-      link: '/work-records',
+      link: '/work-orders',
       metadata: { entityId: String(record._id), entityType: 'work_record', employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
     }).catch(() => {});
 
@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       type: 'work_record_created',
       title: 'Work record created',
       message: `${user.role} created a work record for ${empName} for ${monthStr}. Amount: ₹${finalTotal.toLocaleString()}`,
-      link: `/work-records`,
+      link: `/work-orders`,
       metadata: { entityId: String(record._id), entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: finalTotal },
     }).catch(() => {});
 

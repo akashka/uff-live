@@ -16,7 +16,7 @@ export interface IVendorWorkItem {
 export interface IVendorWorkOrder extends Document {
   _id: mongoose.Types.ObjectId;
   vendor: mongoose.Types.ObjectId;
-  branch: mongoose.Types.ObjectId;
+  branch?: mongoose.Types.ObjectId | null; // Optional for vendor - removed per requirements
   month: string; // YYYY-MM
   styleOrder?: mongoose.Types.ObjectId;
   colour?: string; // Optional - from style order colours when selected
@@ -46,7 +46,7 @@ const VendorWorkItemSchema = new Schema<IVendorWorkItem>(
 const VendorWorkOrderSchema = new Schema<IVendorWorkOrder>(
   {
     vendor: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true },
-    branch: { type: Schema.Types.ObjectId, ref: 'Branch', required: true },
+    branch: { type: Schema.Types.ObjectId, ref: 'Branch', required: false, default: null },
     month: { type: String, required: true },
     styleOrder: { type: Schema.Types.ObjectId, ref: 'StyleOrder', default: null },
     colour: { type: String, default: '' },

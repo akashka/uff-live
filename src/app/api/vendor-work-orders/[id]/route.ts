@@ -63,7 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     await connectDB();
     const record = await VendorWorkOrder.findById(id)
-      .populate('vendor', 'name vendorId serviceType _id')
+      .populate('vendor', 'name vendorId _id')
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
@@ -175,7 +175,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
       { new: true }
     )
-      .populate('vendor', 'name vendorId serviceType _id')
+      .populate('vendor', 'name vendorId _id')
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode brand colour _id')
       .lean();

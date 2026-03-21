@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
     const [payments, total] = await Promise.all([
       VendorPayment.find(filter)
-        .populate('vendor', 'name vendorId serviceType _id')
+        .populate('vendor', 'name vendorId _id')
         .sort({ paidAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
     });
 
     const populated = await VendorPayment.findById(payment._id)
-      .populate('vendor', 'name vendorId serviceType _id')
+      .populate('vendor', 'name vendorId _id')
       .lean();
 
     logAudit({

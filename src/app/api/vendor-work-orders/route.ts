@@ -13,9 +13,9 @@ import { VENDOR_WORK_ITEMS } from '@/app/api/vendor-work-items/route';
 
 async function getAvailableQuantity(
   styleOrderId: string,
-  branchId: string,
   month: string,
   rateMasterId: string,
+  branchId?: string | null,
   excludeVendorWorkOrderId?: string
 ): Promise<number> {
   const styleOrder = await StyleOrder.findById(styleOrderId).lean();
@@ -25,32 +25,35 @@ async function getAvailableQuantity(
   const so = styleOrder as { month?: string; totalOrderQuantity?: number };
   const totalOrderQty = so.month === monthStr ? (so.totalOrderQuantity ?? 0) : 0;
 
-  const producedFromWorkRecords = await WorkRecord.aggregate([
-    {
-      $match: {
-        styleOrder: new mongoose.Types.ObjectId(styleOrderId),
-        branch: new mongoose.Types.ObjectId(branchId),
-        month: monthStr,
-      },
-    },
-    { $unwind: '$workItems' },
-    { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
-    { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+  const wrFilter: Record<string, unknown> = { styleOrder: new mongoose.Types.ObjectId(styleOrderId), month: monthStr };
+  const vwoFilter: Record<string, unknown> = {
+    styleOrder: new mongoose.Types.ObjectId(styleOrderId),
+    month: monthStr,
+    ...(excludeVendorWorkOrderId ? { _id: { $ne: new mongoose.Types.ObjectId(excludeVendorWorkOrderId) } } : {}),
+  };
+  if (branchId) {
+    wrFilter.branch = new mongoose.Types.ObjectId(branchId);
+    vwoFilter.branch = new mongoose.Types.ObjectId(branchId);
+  } else {
+    vwoFilter.$or = [{ branch: null }, { branch: { $exists: false } }];
+  }
+  // When no branchId: count all work records for this style (across branches), and vendor orders with no branch
+
+  const [wrAgg, vwoAgg] = await Promise.all([
+    WorkRecord.aggregate([
+      { $match: wrFilter },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
+    VendorWorkOrder.aggregate([
+      { $match: vwoFilter },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
   ]);
-  const producedFromVendorOrders = await VendorWorkOrder.aggregate([
-    {
-      $match: {
-        styleOrder: new mongoose.Types.ObjectId(styleOrderId),
-        branch: new mongoose.Types.ObjectId(branchId),
-        month: monthStr,
-        ...(excludeVendorWorkOrderId ? { _id: { $ne: new mongoose.Types.ObjectId(excludeVendorWorkOrderId) } } : {}),
-      },
-    },
-    { $unwind: '$workItems' },
-    { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
-    { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
-  ]);
-  const producedQty = (producedFromWorkRecords[0]?.total ?? 0) + (producedFromVendorOrders[0]?.total ?? 0);
+  const producedQty = (wrAgg[0]?.total ?? 0) + (vwoAgg[0]?.total ?? 0);
   return Math.max(0, totalOrderQty - producedQty);
 }
 
@@ -77,7 +80,7 @@ export async function GET(req: NextRequest) {
 
     const [records, total] = await Promise.all([
       VendorWorkOrder.find(filter)
-        .populate('vendor', 'name vendorId serviceType _id')
+        .populate('vendor', 'name vendorId _id')
         .populate('branch', 'name _id')
         .populate('styleOrder', 'styleCode brand colour _id')
         .sort({ month: -1, createdAt: -1 })
@@ -109,8 +112,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { vendorId, branchId, month, styleOrderId, colour, workItems, extraAmount, reasons } = body;
 
-    if (!vendorId || !branchId || !month || !styleOrderId || !Array.isArray(workItems)) {
-      return NextResponse.json({ error: 'Vendor, branch, month, style/order and work items required' }, { status: 400 });
+    if (!vendorId || !month || !styleOrderId || !Array.isArray(workItems)) {
+      return NextResponse.json({ error: 'Vendor, month, style/order and work items required' }, { status: 400 });
     }
 
     const monthStr = String(month).slice(0, 7);
@@ -161,15 +164,17 @@ export async function POST(req: NextRequest) {
         const rateMaster = rateMasters.find((r: { _id: { toString: () => string } }) => r._id.toString() === rateMasterId);
         if (!rateMaster) continue;
 
-        const branchRate = (rateMaster as { branchRates: { branch: { toString?: () => string }; amount: number }[] }).branchRates?.find(
-          (br: { branch: { toString?: () => string }; amount: number }) =>
-            (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchId
-        );
+        const branchRate = branchId
+          ? (rateMaster as { branchRates: { branch: { toString?: () => string }; amount: number }[] }).branchRates?.find(
+              (br: { branch: { toString?: () => string }; amount: number }) =>
+                (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchId
+            )
+          : null;
         const defaultRate = branchRate?.amount ?? 0;
         const effectiveRate = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
 
         if (styleOrderId && quantity > 0) {
-          const available = await getAvailableQuantity(styleOrderId, branchId, monthStr, rateMasterId);
+          const available = await getAvailableQuantity(styleOrderId, monthStr, rateMasterId, branchId || null);
           if (quantity > available) {
             return NextResponse.json(
               { error: `Quantity ${quantity} exceeds available ${available} for this rate. Reduce and try again.` },
@@ -202,7 +207,7 @@ export async function POST(req: NextRequest) {
 
     const record = await VendorWorkOrder.create({
       vendor: vendorId,
-      branch: branchId,
+      branch: branchId || null,
       month: monthStr,
       styleOrder: styleOrderId,
       workItems: workItemsWithAmounts,
@@ -212,7 +217,7 @@ export async function POST(req: NextRequest) {
     });
 
     const populated = await VendorWorkOrder.findById(record._id)
-      .populate('vendor', 'name vendorId serviceType _id')
+      .populate('vendor', 'name vendorId _id')
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode brand colour _id')
       .lean();

@@ -200,14 +200,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       type: 'work_record_updated',
       title: 'Work record updated',
       message: `Your work record for ${record.month} has been updated. New total: ₹${record.totalAmount.toLocaleString()}`,
-      link: '/work-records',
+      link: '/work-orders',
       metadata: { entityId: id, entityType: 'work_record', employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
     }).catch(() => {});
     notifyAdminsIfNeeded(user, {
       type: 'work_record_updated',
       title: 'Work record updated',
       message: `${user.role} updated work record for ${empName} (${record.month}). Amount: ₹${record.totalAmount.toLocaleString()}`,
-      link: '/work-records',
+      link: '/work-orders',
       metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
     }).catch(() => {});
 
@@ -247,14 +247,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       type: 'work_record_deleted',
       title: 'Work record deleted',
       message: `Your work record for ${record.month} has been deleted.`,
-      link: '/work-records',
+      link: '/work-orders',
       metadata: { entityId: id, entityType: 'work_record', employeeId: empId, employeeName: empName, month: record.month },
     }).catch(() => {});
     notifyAdminsIfNeeded(user, {
       type: 'work_record_deleted',
       title: 'Work record deleted',
       message: `${user.role} deleted work record for ${empName} (${record.month}).`,
-      link: '/work-records',
+      link: '/work-orders',
       metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month },
     }).catch(() => {});
 

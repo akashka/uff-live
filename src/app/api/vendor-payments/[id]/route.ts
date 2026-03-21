@@ -18,7 +18,7 @@ export async function GET(
     await connectDB();
 
     const payment = await VendorPayment.findById(id)
-      .populate('vendor', 'name vendorId serviceType')
+      .populate('vendor', 'name vendorId')
       .populate({
         path: 'vendorWorkOrderRefs.vendorWorkOrder',
         populate: [

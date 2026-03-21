@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import WorkRecord from '@/lib/models/WorkRecord';
+import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Payment from '@/lib/models/Payment';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
@@ -81,21 +82,31 @@ export async function GET(req: NextRequest) {
       const esi = roundAmount(emp.salaryBreakup?.esi || 0);
       const other = otherTotal;
       const totalDeductions = roundAmount(pf + esi + other);
+      const overtimeCostPerHour = roundAmount(emp.overtimeCostPerHour || 0);
+
+      // Aggregate from FullTimeWorkRecord - days and OT from work orders
+      const ftRecords = await FullTimeWorkRecord.find({ employee: employeeId, month: monthStr }).lean();
+      const totalDaysWorked = roundDays(ftRecords.reduce((s: number, r: { daysWorked?: number }) => s + (r.daysWorked ?? 0), 0));
+      const totalOtHours = roundAmount(ftRecords.reduce((s: number, r: { otHours?: number }) => s + (r.otHours ?? 0), 0));
+      const totalOtAmount = roundAmount(ftRecords.reduce((s: number, r: { otAmount?: number }) => s + (r.otAmount ?? 0), 0));
 
       let gross = 0;
       let baseAmount = 0;
-      if (salaryBasis === 'monthly') {
-        gross = monthlySalary;
-        baseAmount = roundAmount(gross - totalDeductions);
-      } else {
-        gross = roundAmount(dailySalary * twd);
+      if (totalDaysWorked > 0) {
+        if (salaryBasis === 'monthly') {
+          gross = roundAmount((monthlySalary / twd) * totalDaysWorked);
+        } else {
+          gross = roundAmount(dailySalary * totalDaysWorked);
+        }
         baseAmount = roundAmount(gross - totalDeductions);
       }
+      const finalBaseAmount = baseAmount;
+      const finalTotalPayable = roundAmount(finalBaseAmount + totalOtAmount + (0)); // addDeduct handled in payment form
 
       return NextResponse.json({
         type: 'full_time',
         salaryBasis,
-        baseAmount,
+        baseAmount: finalBaseAmount,
         grossSalary: gross,
         monthlySalary,
         dailySalary,
@@ -104,7 +115,11 @@ export async function GET(req: NextRequest) {
         other,
         totalDeductions,
         totalWorkingDays: twd,
-        overtimeCostPerHour: roundAmount(emp.overtimeCostPerHour || 0),
+        daysWorked: totalDaysWorked,
+        otHours: totalOtHours,
+        otAmount: totalOtAmount,
+        overtimeCostPerHour,
+        fullTimeWorkRecords: ftRecords,
       });
     }
 

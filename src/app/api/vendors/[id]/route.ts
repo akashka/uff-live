@@ -39,7 +39,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.name !== undefined) vendor.name = body.name;
     if (body.contactNumber !== undefined) vendor.contactNumber = body.contactNumber;
     if (body.email !== undefined) vendor.email = body.email;
-    if (body.serviceType !== undefined) vendor.serviceType = body.serviceType;
     if (body.address !== undefined) vendor.address = body.address;
     if (body.bankName !== undefined) vendor.bankName = body.bankName;
     if (body.bankBranch !== undefined) vendor.bankBranch = body.bankBranch;

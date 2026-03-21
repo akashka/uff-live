@@ -196,19 +196,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       }
     : null;
 
-  const workRecordsNavItem =
-    canAccessWorkRecords || canAccessVendors
-      ? {
-          label: t('workRecords'),
-          icon: <WorkRecordsIcon />,
-          children: [
-            ...(canAccessWorkRecords ? [{ href: '/work-records', label: t('employees') }] : []),
-            ...(canAccessVendors ? [{ href: '/vendor-work-orders', label: t('vendor') }] : []),
-          ].filter((c) => c.href && c.label) as { href: string; label: string }[],
-        }
-      : isContractorEmployee
-        ? { href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }
-        : null;
+  const workOrdersNavItem =
+    canAccessWorkRecords || canAccessVendors || isContractorEmployee
+      ? { href: '/work-orders', label: t('workOrders') || 'Work Orders', icon: <WorkRecordsIcon /> }
+      : null;
 
   const paymentsNavItem = (canAccessPayments || isEmployee)
     ? {
@@ -232,7 +223,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     { href: '/notifications', label: t('notifications'), icon: <NotificationsIcon />, badge: unreadCount },
     profileNavItem,
     ...(masterNavItem && masterNavItem.children && masterNavItem.children.length > 0 ? [masterNavItem] : []),
-    ...(workRecordsNavItem ? [workRecordsNavItem] : []),
+    ...(workOrdersNavItem ? [workOrdersNavItem] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),
     ...(isEmployee && user?.employeeId ? [{ href: `/employees/${user.employeeId}/passbook`, label: t('passbook'), icon: <PassbookIcon /> }] : []),

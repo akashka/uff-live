@@ -22,7 +22,6 @@ interface Vendor {
   name: string;
   contactNumber: string;
   email?: string;
-  serviceType: string;
   address?: string;
   bankName?: string;
   accountNumber?: string;
@@ -53,7 +52,6 @@ export default function VendorsPage() {
     name: '',
     contactNumber: '',
     email: '',
-    serviceType: '',
     address: '',
     bankName: '',
     bankBranch: '',
@@ -90,7 +88,6 @@ export default function VendorsPage() {
       name: v.name,
       contactNumber: v.contactNumber,
       email: (v as { email?: string }).email || '',
-      serviceType: v.serviceType,
       address: (v as { address?: string }).address || '',
       bankName: (v as { bankName?: string }).bankName || '',
       bankBranch: '',
@@ -214,8 +211,7 @@ export default function VendorsPage() {
     return (
       v.name.toLowerCase().includes(q) ||
       v.vendorId?.toLowerCase().includes(q) ||
-      v.contactNumber?.includes(q) ||
-      v.serviceType?.toLowerCase().includes(q)
+      v.contactNumber?.includes(q)
     );
   });
   const sorted = [...filtered].sort((a, b) =>
@@ -279,7 +275,6 @@ export default function VendorsPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendorId')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendor')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('serviceType')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
@@ -288,7 +283,7 @@ export default function VendorsPage() {
               <tbody className="divide-y divide-slate-200">
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-600">
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-600">
                       {t('noData')}
                     </td>
                   </tr>
@@ -297,7 +292,6 @@ export default function VendorsPage() {
                     <tr key={v._id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-700 font-mono text-sm">{v.vendorId || '-'}</td>
                       <td className="px-4 py-3 text-slate-800 font-medium">{v.name}</td>
-                      <td className="px-4 py-3 text-slate-700">{v.serviceType}</td>
                       <td className="px-4 py-3 text-slate-700">{v.contactNumber}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>
@@ -338,8 +332,7 @@ export default function VendorsPage() {
               <div key={v._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{v.name}</h3>
                 <p className="text-sm text-slate-600 font-mono">{v.vendorId}</p>
-                <p className="text-sm text-slate-700 mt-1">{v.serviceType}</p>
-                <p className="text-sm text-slate-600">{v.contactNumber}</p>
+                <p className="text-sm text-slate-600 mt-1">{v.contactNumber}</p>
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>
                   {v.isActive ? t('active') : t('inactive')}
                 </span>
@@ -372,7 +365,7 @@ export default function VendorsPage() {
         footer={
           <div className="flex gap-3 justify-end">
             {modal !== 'view' && (
-              <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.contactNumber.trim() || !form.serviceType.trim()} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
+              <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.contactNumber.trim()} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
                 {saving ? '...' : t('save')}
               </button>
             )}
@@ -409,17 +402,6 @@ export default function VendorsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1">{t('serviceType')} *</label>
-              <ValidatedInput
-                value={form.serviceType}
-                onChange={(v) => setForm((f) => ({ ...f, serviceType: v }))}
-                fieldType="text"
-                placeholderHint="e.g. Stitching, Finishing"
-                readOnly={modal === 'view'}
-                className="w-full px-3 py-2.5"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-slate-800 mb-1">{t('email')}</label>
               <ValidatedInput
                 value={form.email}
@@ -454,7 +436,7 @@ export default function VendorsPage() {
         title={`${t('importFromExcel')} - ${t('vendors')}`}
         onDownloadTemplate={handleDownloadTemplate}
         downloadLabel={t('downloadTemplate')}
-        instructions={<p>Columns: Vendor ID, Name, Contact, Email, Service Type (dropdown), Address, Bank details, Notes. Service Type uses dropdown validation.</p>}
+        instructions={<p>Columns: Vendor ID, Name, Contact, Email, Address, Bank details, Notes.</p>}
         file={importFile}
         onFileChange={setImportFile}
         onImport={handleImport}
