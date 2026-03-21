@@ -53,6 +53,8 @@ export default function RatesPage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
@@ -265,10 +267,40 @@ export default function RatesPage() {
     return '-';
   };
 
+  const formatBranchDepartment = (r: RateMaster) => {
+    const bdr = r.branchDepartmentRates || [];
+    const br = r.branchRates || [];
+    if (bdr.length > 0) {
+      return bdr.map((e) => {
+        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
+        const deptName = typeof e.department === 'object' ? (e.department as { name: string }).name : '-';
+        return `${branchName} / ${deptName}`;
+      }).join(', ');
+    }
+    if (br.length > 0) {
+      return br.map((e) => {
+        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
+        return branchName;
+      }).join(', ');
+    }
+    return '-';
+  };
+
   const filtered = (Array.isArray(rates) ? rates : []).filter((r) => {
     const q = search.toLowerCase();
-    if (!q) return true;
-    return r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q);
+    if (q && !r.name.toLowerCase().includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
+    if (filterBranch) {
+      const bdr = r.branchDepartmentRates || [];
+      const br = r.branchRates || [];
+      const branchIds = [...bdr.map((e) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch), ...br.map((e) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch)];
+      if (!branchIds.includes(filterBranch)) return false;
+    }
+    if (filterDepartment) {
+      const bdr = r.branchDepartmentRates || [];
+      const deptIds = bdr.map((e) => typeof e.department === 'object' ? (e.department as { _id: string })._id : e.department);
+      if (!deptIds.includes(filterDepartment)) return false;
+    }
+    return true;
   });
   const sorted = [...filtered].sort((a, b) =>
     sortBy === 'name-desc' ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
@@ -311,6 +343,24 @@ export default function RatesPage() {
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('branches')}</label>
+          <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+            <option value="">{t('all')}</option>
+            {(Array.isArray(branches) ? branches : []).map((b) => (
+              <option key={b._id} value={b._id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('department')}</label>
+          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
+            <option value="">{t('all')}</option>
+            {(Array.isArray(departments) ? departments : []).map((d) => (
+              <option key={d._id} value={d._id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} className="rounded border-slate-400" />
           <span className="text-sm text-slate-800">{t('inactive')}</span>
@@ -324,7 +374,7 @@ export default function RatesPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rateName')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800 hidden md:table-cell">{t('description')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800 hidden md:table-cell">{t('branches')} / {t('department')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('unit')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rate')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
@@ -340,7 +390,7 @@ export default function RatesPage() {
                   sorted.map((r) => (
                     <tr key={r._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 text-slate-800">{r.name}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm hidden md:table-cell max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm hidden md:table-cell max-w-[200px]" title={formatBranchDepartment(r)}>{formatBranchDepartment(r)}</td>
                       <td className="px-4 py-3 text-slate-700">{r.unit}</td>
                       <td className="px-4 py-3 text-slate-700 text-sm">{formatRate(r)}</td>
                       <td className="px-4 py-3">
@@ -366,7 +416,7 @@ export default function RatesPage() {
             sorted.map((r) => (
               <div key={r._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{r.name}</h3>
-                <p className="text-sm text-slate-600 mt-1 line-clamp-2">{r.description || '-'}</p>
+                <p className="text-sm text-slate-600 mt-1">{t('branches')} / {t('department')}: {formatBranchDepartment(r)}</p>
                 <p className="text-sm text-slate-700 mt-1">{r.unit} • {formatRate(r)}</p>
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${r.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>{r.isActive ? t('active') : t('inactive')}</span>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">

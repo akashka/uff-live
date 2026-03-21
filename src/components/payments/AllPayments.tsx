@@ -208,6 +208,7 @@ export default function AllPayments() {
     addDeductRemarks: '',
     pfDeducted: 0,
     esiDeducted: 0,
+    otherDeducted: 0,
     advanceDeducted: 0,
     totalPayable: 0,
     paymentAmount: 0,
@@ -364,6 +365,7 @@ export default function AllPayments() {
       pfDeducted: 0,
       esiDeducted: 0,
       advanceDeducted: 0,
+      otherDeducted: 0,
       totalPayable: 0,
       paymentAmount: 0,
       paymentMode: 'cash',
@@ -431,12 +433,14 @@ export default function AllPayments() {
         const base = calcRes.baseAmount ?? 0;
         const pf = calcRes.pfToDeduct ?? 0;
         const esi = calcRes.esiToDeduct ?? 0;
+        const other = calcRes.otherToDeduct ?? 0;
         setEmpForm((f) => ({
           ...f,
           baseAmount: base,
           pfDeducted: pf,
           esiDeducted: esi,
-          totalPayable: base - pf - esi + f.addDeductAmount - (f.advanceDeducted ?? 0),
+          otherDeducted: other,
+          totalPayable: base - pf - esi - other + f.addDeductAmount - (f.advanceDeducted ?? 0),
           workRecordIds: (calcRes.workRecords || []).map((r: WorkRecordCalc) => r._id),
         }));
       }
@@ -511,7 +515,7 @@ export default function AllPayments() {
             ? (calc?.baseAmount ?? 0) / (calc?.totalWorkingDays ?? 1) * Math.min(empForm.daysWorked, calc?.totalWorkingDays ?? 999) + empForm.addDeductAmount - (empForm.advanceDeducted ?? 0)
             : 0
         )
-      : empForm.baseAmount + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.advanceDeducted ?? 0);
+      : empForm.baseAmount + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0);
   const remainingEmp = totalPayableEmp - empForm.paymentAmount;
 
   const handleEmpJobOrderSubmit = async () => {
@@ -528,7 +532,7 @@ export default function AllPayments() {
       const twd = roundDays(calc?.totalWorkingDays ?? 0);
       const dw = roundDays(Math.min(Math.max(0, empForm.daysWorked), twd || 999));
       const prorated = modalRecipientType === 'full_time' && twd > 0 ? roundAmount(((calc?.baseAmount ?? 0) / twd) * dw) : empForm.baseAmount;
-      const total = roundAmount(prorated + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.advanceDeducted ?? 0));
+      const total = roundAmount(prorated + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0));
       const payload: Record<string, unknown> = {
         employeeId: empForm.employeeId,
         paymentType: empForm.paymentType,
@@ -538,6 +542,7 @@ export default function AllPayments() {
         addDeductRemarks: empForm.addDeductRemarks,
         pfDeducted: empForm.pfDeducted,
         esiDeducted: empForm.esiDeducted,
+        otherDeducted: empForm.otherDeducted ?? 0,
         advanceDeducted: empForm.advanceDeducted ?? 0,
         totalPayable: total,
         paymentAmount: empForm.paymentAmount,
@@ -1065,7 +1070,7 @@ export default function AllPayments() {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('amount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceAmount ? String(empForm.advanceAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceAmount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+                        <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceAmount ? String(empForm.advanceAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceAmount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('reasons')}</label>
@@ -1077,7 +1082,7 @@ export default function AllPayments() {
                       {modalRecipientType === 'full_time' && calc && (
                         <div className="p-4 bg-slate-50 rounded-xl">
                           <p className="text-sm">{t('baseAmount')}: ₹{formatAmount(calc.baseAmount ?? 0)}</p>
-                          <p className="text-sm">{t('daysWorked')}: <ValidatedInput type="number" value={empForm.daysWorked ? String(empForm.daysWorked) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), calc?.totalWorkingDays ?? 999) }))} className="w-20 px-2 py-1" /> / {calc.totalWorkingDays ?? 0}</p>
+                          <p className="text-sm">{t('daysWorked')}: <ValidatedInput type="number" value={empForm.daysWorked ? String(empForm.daysWorked) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), calc?.totalWorkingDays ?? 999) }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseInt(v, 10))} inline className="w-20 px-2 py-1" /> / {calc.totalWorkingDays ?? 0}</p>
                         </div>
                       )}
                       {modalRecipientType === 'contractor' && calc?.workRecords && calc.workRecords.length > 0 && (
@@ -1102,11 +1107,11 @@ export default function AllPayments() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-                          <ValidatedInput type="text" inputMode="decimal" value={empForm.addDeductAmount ? String(empForm.addDeductAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+                          <ValidatedInput type="text" inputMode="decimal" value={empForm.addDeductAmount ? String(empForm.addDeductAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹)</label>
-                          <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceDeducted ? String(empForm.advanceDeducted) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} className="w-full px-3 py-2.5" />
+                          <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceDeducted ? String(empForm.advanceDeducted) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
                         </div>
                       </div>
                       <div className="p-4 bg-uff-accent/5 rounded-xl">
@@ -1114,7 +1119,7 @@ export default function AllPayments() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('paymentAmount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={empForm.paymentAmount ? String(empForm.paymentAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} className="w-full px-3 py-2.5" />
+                        <ValidatedInput type="text" inputMode="decimal" value={empForm.paymentAmount ? String(empForm.paymentAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
                       </div>
                     </>
                   )}
@@ -1164,7 +1169,7 @@ export default function AllPayments() {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('amount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.advanceAmount ? String(vendorForm.advanceAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, advanceAmount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.advanceAmount ? String(vendorForm.advanceAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, advanceAmount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('reasons')}</label>
@@ -1197,14 +1202,14 @@ export default function AllPayments() {
                       )}
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.addDeductAmount ? String(vendorForm.addDeductAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} className="w-full px-3 py-2.5" />
+                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.addDeductAmount ? String(vendorForm.addDeductAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
                       </div>
                       <div className="p-4 bg-uff-accent/5 rounded-xl">
                         <p className="text-lg font-bold">₹{formatAmount(vendorTotalPayable)}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('paymentAmount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.paymentAmount ? String(vendorForm.paymentAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} className="w-full px-3 py-2.5" />
+                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.paymentAmount ? String(vendorForm.paymentAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
                       </div>
                     </>
                   )}

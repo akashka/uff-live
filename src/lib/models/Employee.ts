@@ -31,12 +31,18 @@ export interface IEmployee extends Document {
   monthlyPfAmount?: number;
   esiOpted?: boolean;
   monthlyEsiAmount?: number;
+  /** Full-time: monthly salary (mutually exclusive with dailySalary) */
   monthlySalary?: number;
+  /** Full-time: daily salary (mutually exclusive with monthlySalary). Payment = dailySalary × daysWorked */
+  dailySalary?: number;
+  /** Full-time: mandatory overtime cost per hour. OT amount = otHours × this */
+  overtimeCostPerHour?: number;
   salaryBreakup?: {
     pf?: number;
     esi?: number;
-    other?: number;
   };
+  /** Multiple other deductions with reason. Total = sum(amount) */
+  otherDeductions?: { reason: string; amount: number }[];
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -77,11 +83,16 @@ const EmployeeSchema = new Schema<IEmployee>(
     esiOpted: { type: Boolean, default: false },
     monthlyEsiAmount: { type: Number, default: 0 },
     monthlySalary: { type: Number, default: 0 },
+    dailySalary: { type: Number, default: 0 },
+    overtimeCostPerHour: { type: Number, default: 0 },
     salaryBreakup: {
       pf: { type: Number, default: 0 },
       esi: { type: Number, default: 0 },
-      other: { type: Number, default: 0 },
     },
+    otherDeductions: [{
+      reason: { type: String, default: '' },
+      amount: { type: Number, default: 0 },
+    }],
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

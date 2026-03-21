@@ -75,7 +75,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.esiOpted !== undefined) employee.esiOpted = body.esiOpted;
     if (body.monthlyEsiAmount !== undefined) employee.monthlyEsiAmount = body.monthlyEsiAmount;
     if (body.monthlySalary !== undefined) employee.monthlySalary = body.monthlySalary;
+    if (body.dailySalary !== undefined) employee.dailySalary = body.dailySalary;
+    if (body.overtimeCostPerHour !== undefined) employee.overtimeCostPerHour = body.overtimeCostPerHour;
     if (body.salaryBreakup !== undefined) employee.salaryBreakup = body.salaryBreakup;
+    if (body.otherDeductions !== undefined) employee.otherDeductions = Array.isArray(body.otherDeductions) ? body.otherDeductions.filter((d: { reason?: string; amount?: number }) => d && (d.reason || d.amount)) : [];
     if (body.isActive !== undefined) employee.isActive = body.isActive;
 
     // Role update - admin only

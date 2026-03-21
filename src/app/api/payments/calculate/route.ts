@@ -28,6 +28,22 @@ export async function GET(req: NextRequest) {
     const emp = await Employee.findById(employeeId).lean();
     if (!emp) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
+    // Working days in month (excluding Sundays)
+    const [y, m] = monthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0);
+    let totalWorkingDays = 0;
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const day = new Date(y, m - 1, d);
+      if (day.getDay() !== 0) totalWorkingDays++;
+    }
+    const twd = roundDays(totalWorkingDays);
+
+    const legacyOther = (emp.salaryBreakup as { other?: number } | undefined)?.other ?? 0;
+    const otherTotal = roundAmount(
+      (Array.isArray(emp.otherDeductions) ? emp.otherDeductions.reduce((s: number, d: { amount?: number }) => s + (d.amount || 0), 0) : 0) +
+      legacyOther
+    );
+
     if (type === 'contractor') {
       const workRecords = await WorkRecord.find({
         employee: employeeId,
@@ -52,36 +68,43 @@ export async function GET(req: NextRequest) {
         esiOpted: emp.esiOpted,
         monthlyEsiAmount: emp.monthlyEsiAmount,
         esiToDeduct,
+        otherToDeduct: otherTotal,
         baseAmount: totalWorkAmount,
       });
     }
 
     if (type === 'full_time') {
-      const gross = roundAmount(emp.monthlySalary || 0);
+      const monthlySalary = roundAmount(emp.monthlySalary || 0);
+      const dailySalary = roundAmount(emp.dailySalary || 0);
+      const salaryBasis = monthlySalary > 0 ? 'monthly' : 'daily';
       const pf = roundAmount(emp.salaryBreakup?.pf || 0);
       const esi = roundAmount(emp.salaryBreakup?.esi || 0);
-      const other = roundAmount(emp.salaryBreakup?.other || 0);
+      const other = otherTotal;
       const totalDeductions = roundAmount(pf + esi + other);
-      const baseAmount = roundAmount(gross - totalDeductions);
 
-      // Working days in month (excluding Sundays)
-      const [y, m] = monthStr.split('-').map(Number);
-      const lastDay = new Date(y, m, 0);
-      let totalWorkingDays = 0;
-      for (let d = 1; d <= lastDay.getDate(); d++) {
-        const day = new Date(y, m - 1, d);
-        if (day.getDay() !== 0) totalWorkingDays++;
+      let gross = 0;
+      let baseAmount = 0;
+      if (salaryBasis === 'monthly') {
+        gross = monthlySalary;
+        baseAmount = roundAmount(gross - totalDeductions);
+      } else {
+        gross = roundAmount(dailySalary * twd);
+        baseAmount = roundAmount(gross - totalDeductions);
       }
 
       return NextResponse.json({
         type: 'full_time',
+        salaryBasis,
         baseAmount,
         grossSalary: gross,
+        monthlySalary,
+        dailySalary,
         pf,
         esi,
         other,
         totalDeductions,
-        totalWorkingDays: roundDays(totalWorkingDays),
+        totalWorkingDays: twd,
+        overtimeCostPerHour: roundAmount(emp.overtimeCostPerHour || 0),
       });
     }
 

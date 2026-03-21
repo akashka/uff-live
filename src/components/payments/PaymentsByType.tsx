@@ -684,7 +684,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-              <ValidatedInput type="text" inputMode="decimal" value={form.addDeductAmount ? String(form.addDeductAmount) : ''} onChange={(v) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} placeholderHint="+/- amount" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+              <ValidatedInput type="text" inputMode="decimal" value={form.addDeductAmount ? String(form.addDeductAmount) : ''} onChange={(v) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} placeholderHint="+/- amount" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('remarks')}</label>
@@ -773,7 +773,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('amount')} (₹) <span className="text-red-500">*</span></label>
-            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
+            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('reasons')}</label>

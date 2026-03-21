@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
       addDeductRemarks,
       pfDeducted,
       esiDeducted,
+      otherDeducted,
       advanceDeducted,
       totalPayable,
       paymentAmount,
@@ -123,6 +124,8 @@ export async function POST(req: NextRequest) {
       workRecordIds,
       daysWorked,
       totalWorkingDays,
+      otHours,
+      otAmount,
     } = body;
 
     if (!employeeId || !paymentType || !month || totalPayable === undefined || paymentAmount === undefined || paymentAmount === null || !paymentMode) {
@@ -156,6 +159,7 @@ export async function POST(req: NextRequest) {
       addDeductRemarks: addDeductRemarks || '',
       pfDeducted: roundAmount(pfDeducted ?? 0),
       esiDeducted: roundAmount(esiDeducted ?? 0),
+      otherDeducted: roundAmount(otherDeducted ?? 0),
       advanceDeducted: roundAmount(advanceDeducted ?? 0),
       totalPayable: roundAmount(totalPayable),
       paymentAmount: roundAmount(paymentAmount),
@@ -175,6 +179,8 @@ export async function POST(req: NextRequest) {
       paymentData.totalWorkingDays = roundDays(typeof body.totalWorkingDays === 'number' ? body.totalWorkingDays : Number(body.totalWorkingDays) || 0);
       const vda = computeVirtualDaysAttended(paymentAmount, paymentData.daysWorked as number);
       if (vda != null) paymentData.virtualDaysAttended = roundDays(vda);
+      if (body.otHours != null) paymentData.otHours = roundAmount(Number(body.otHours) || 0);
+      if (body.otAmount != null) paymentData.otAmount = roundAmount(Number(body.otAmount) || 0);
     }
 
     // Use collection.insertOne to bypass Mongoose schema caching (ensures daysWorked is saved)
@@ -188,6 +194,7 @@ export async function POST(req: NextRequest) {
       addDeductRemarks: addDeductRemarks || '',
       pfDeducted: paymentData.pfDeducted,
       esiDeducted: paymentData.esiDeducted,
+      otherDeducted: roundAmount(otherDeducted ?? 0),
       advanceDeducted: paymentData.advanceDeducted,
       totalPayable: paymentData.totalPayable,
       paymentAmount: paymentData.paymentAmount,
@@ -207,6 +214,9 @@ export async function POST(req: NextRequest) {
       doc.daysWorked = paymentData.daysWorked;
       doc.totalWorkingDays = paymentData.totalWorkingDays;
       if (paymentData.virtualDaysAttended != null) doc.virtualDaysAttended = paymentData.virtualDaysAttended;
+      if (paymentData.otHours != null) doc.otHours = paymentData.otHours;
+      if (paymentData.otAmount != null) doc.otAmount = paymentData.otAmount;
+      if (paymentData.otherDeducted != null) doc.otherDeducted = paymentData.otherDeducted;
     }
     await Payment.collection.insertOne(doc);
     const payment = { _id: doc._id, ...doc };

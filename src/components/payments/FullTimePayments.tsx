@@ -35,10 +35,13 @@ interface Payment {
   daysWorked?: number;
   totalWorkingDays?: number;
   virtualDaysAttended?: number;
+  otHours?: number;
+  otAmount?: number;
   addDeductAmount: number;
   addDeductRemarks: string;
   pfDeducted: number;
   esiDeducted: number;
+  otherDeducted?: number;
   advanceDeducted?: number;
   totalPayable: number;
   paymentAmount: number;
@@ -62,11 +65,15 @@ const PAYMENT_MODES = [
 interface CalcResponse {
   baseAmount: number;
   grossSalary: number;
+  salaryBasis?: 'monthly' | 'daily';
+  monthlySalary?: number;
+  dailySalary?: number;
   pf: number;
   esi: number;
   other: number;
   totalDeductions: number;
   totalWorkingDays: number;
+  overtimeCostPerHour?: number;
 }
 
 export default function FullTimePayments() {
@@ -102,6 +109,7 @@ export default function FullTimePayments() {
     employeeId: '',
     month: getCurrentMonth(),
     daysWorked: 0,
+    otHours: 0,
     addDeductAmount: 0,
     addDeductRemarks: '',
     advanceDeducted: 0,
@@ -195,6 +203,7 @@ export default function FullTimePayments() {
       employeeId: empId,
       month: getCurrentMonth(),
       daysWorked: 0,
+      otHours: 0,
       addDeductAmount: 0,
       addDeductRemarks: '',
       advanceDeducted: 0,
@@ -233,10 +242,36 @@ export default function FullTimePayments() {
   };
 
   const totalWorkingDays = roundDays(calc?.totalWorkingDays ?? 0);
+  const salaryBasis = calc?.salaryBasis ?? 'monthly';
+  const dailySalary = roundAmount(calc?.dailySalary ?? 0);
   const baseAmount = roundAmount(calc?.baseAmount ?? 0);
+  const pf = roundAmount(calc?.pf ?? 0);
+  const esi = roundAmount(calc?.esi ?? 0);
+  const other = roundAmount(calc?.other ?? 0);
+  const otCostPerHour = roundAmount(calc?.overtimeCostPerHour ?? 0);
   const daysWorked = roundDays(Math.min(Math.max(0, salaryForm.daysWorked), totalWorkingDays || 999));
-  const proratedAmount = roundAmount(totalWorkingDays > 0 ? (baseAmount / totalWorkingDays) * daysWorked : 0);
-  const totalPayable = roundAmount(proratedAmount + salaryForm.addDeductAmount - (salaryForm.advanceDeducted ?? 0));
+  const otHours = roundAmount(Math.max(0, salaryForm.otHours ?? 0));
+  const otAmount = roundAmount(otHours * otCostPerHour);
+
+  let proratedAmount: number;
+  let pfDeducted: number;
+  let esiDeducted: number;
+  let otherDeducted: number;
+  if (salaryBasis === 'daily' && dailySalary > 0) {
+    const gross = roundAmount(dailySalary * daysWorked);
+    const prorate = totalWorkingDays > 0 ? daysWorked / totalWorkingDays : 0;
+    pfDeducted = roundAmount(pf * prorate);
+    esiDeducted = roundAmount(esi * prorate);
+    otherDeducted = roundAmount(other * prorate);
+    proratedAmount = roundAmount(gross - pfDeducted - esiDeducted - otherDeducted);
+  } else {
+    proratedAmount = roundAmount(totalWorkingDays > 0 ? (baseAmount / totalWorkingDays) * daysWorked : 0);
+    pfDeducted = roundAmount(totalWorkingDays > 0 ? (pf / totalWorkingDays) * daysWorked : 0);
+    esiDeducted = roundAmount(totalWorkingDays > 0 ? (esi / totalWorkingDays) * daysWorked : 0);
+    otherDeducted = roundAmount(totalWorkingDays > 0 ? (other / totalWorkingDays) * daysWorked : 0);
+  }
+
+  const totalPayable = roundAmount(proratedAmount + otAmount + salaryForm.addDeductAmount - (salaryForm.advanceDeducted ?? 0));
   const paymentAmount = roundAmount(Math.max(0, totalPayable));
   const remaining = roundAmount(totalPayable - paymentAmount);
 
@@ -258,15 +293,16 @@ export default function FullTimePayments() {
   const doSalarySubmit = async (carryAmount?: number, carryRemarks?: string) => {
     setSaving(true);
     try {
-      const         payload = {
+      const payload = {
         employeeId: salaryForm.employeeId,
         paymentType: 'full_time',
         month: salaryForm.month,
         baseAmount: proratedAmount,
         addDeductAmount: roundAmount(salaryForm.addDeductAmount),
         addDeductRemarks: salaryForm.addDeductRemarks,
-        pfDeducted: 0,
-        esiDeducted: 0,
+        pfDeducted,
+        esiDeducted,
+        otherDeducted,
         advanceDeducted: roundAmount(salaryForm.advanceDeducted ?? 0),
         totalPayable: totalPayable,
         paymentAmount,
@@ -279,6 +315,8 @@ export default function FullTimePayments() {
         workRecordIds: [],
         daysWorked,
         totalWorkingDays,
+        otHours,
+        otAmount,
       };
       const res = await fetch('/api/payments', {
         method: 'POST',
@@ -486,6 +524,7 @@ export default function FullTimePayments() {
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('daysWorked')}</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('otHours')}</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('paymentAmount')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('advanceDeducted')}</th>
@@ -497,7 +536,7 @@ export default function FullTimePayments() {
                 <tbody className="divide-y divide-slate-200">
                   {sorted.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                      <td colSpan={10} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                     </tr>
                   ) : (
                     sorted.map((p) => (
@@ -510,6 +549,9 @@ export default function FullTimePayments() {
                             if (d) return <span className="font-medium">{d.days}{d.total != null ? ` / ${d.total}` : ''}</span>;
                             return <span className="text-slate-400">—</span>;
                           })()}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {p.otHours != null && p.otHours > 0 ? <span className="font-medium">{p.otHours}</span> : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right">₹{formatAmount(p.totalPayable)}</td>
                         <td className="px-4 py-3 text-right font-medium">₹{formatAmount(p.paymentAmount)}</td>
@@ -670,29 +712,34 @@ export default function FullTimePayments() {
           {calc && (
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
               <p className="text-sm font-medium text-slate-800 mb-2">{t('baseAmount')} & {t('deducted')} ({t('salaryBreakup')})</p>
-              <p className="text-sm text-slate-800">{t('grossSalary')}: ₹{formatAmount(calc.grossSalary)}</p>
+              <p className="text-sm text-slate-800">{t('grossSalary')}: ₹{formatAmount(calc.grossSalary)} {calc.salaryBasis === 'daily' && <span className="text-slate-500">({t('dailySalary')} × {calc.totalWorkingDays})</span>}</p>
               {calc.pf > 0 && <p className="text-sm text-slate-800">{t('pf')}: -₹{formatAmount(calc.pf)}</p>}
               {calc.esi > 0 && <p className="text-sm text-slate-800">{t('esi')}: -₹{formatAmount(calc.esi)}</p>}
-              {calc.other > 0 && <p className="text-sm text-slate-800">{t('other')}: -₹{formatAmount(calc.other)}</p>}
+              {calc.other > 0 && <p className="text-sm text-slate-800">{t('otherDeductions')}: -₹{formatAmount(calc.other)}</p>}
               <p className="text-sm font-medium text-slate-800 mt-1">{t('baseAmount')}: ₹{formatAmount(calc.baseAmount)} ({t('totalWorkingDays')}: {calc.totalWorkingDays})</p>
+              {otCostPerHour > 0 && <p className="text-sm text-slate-600 mt-1">{t('overtimeCostPerHour')}: ₹{formatAmount(otCostPerHour)}/hr</p>}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('daysWorked')} <span className="text-red-500">*</span> (max {totalWorkingDays})</label>
-              <ValidatedInput type="number" inputMode="numeric" value={salaryForm.daysWorked ? String(salaryForm.daysWorked) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), totalWorkingDays || 999) }))} placeholderHint={String(totalWorkingDays)} validate={(v) => v.trim() === '' || !isNaN(parseInt(v, 10))} className="w-full px-3 py-2.5" />
+              <ValidatedInput type="number" inputMode="numeric" value={salaryForm.daysWorked ? String(salaryForm.daysWorked) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), totalWorkingDays || 999) }))} placeholderHint={String(totalWorkingDays)} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseInt(v, 10))} className="w-full px-3 py-2.5" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('otHours')} {otCostPerHour > 0 && <span className="text-slate-500 text-xs">(× ₹{formatAmount(otCostPerHour)}/hr)</span>}</label>
+              <ValidatedInput type="number" inputMode="decimal" min={0} value={salaryForm.otHours ? String(salaryForm.otHours) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, otHours: Math.max(0, parseFloat(v) || 0) }))} placeholderHint="0" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('proratedAmount')}</label>
-              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">₹{formatAmount(proratedAmount)}</p>
+              <p className="px-3 py-2.5 bg-slate-100 rounded-lg text-slate-800">₹{formatAmount(proratedAmount)}{otAmount > 0 ? ` + OT ₹${formatAmount(otAmount)}` : ''}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-              <ValidatedInput type="text" inputMode="decimal" value={salaryForm.addDeductAmount ? String(salaryForm.addDeductAmount) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} placeholderHint="+/- amount" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+              <ValidatedInput type="text" inputMode="decimal" value={salaryForm.addDeductAmount ? String(salaryForm.addDeductAmount) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} placeholderHint="+/- amount" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('remarks')}</label>
@@ -700,7 +747,7 @@ export default function FullTimePayments() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹) {advanceOutstanding > 0 && <span className="text-slate-500 text-xs">(outstanding: ₹{formatAmount(advanceOutstanding)})</span>}</label>
-              <ValidatedInput type="text" inputMode="decimal" value={salaryForm.advanceDeducted != null && salaryForm.advanceDeducted !== 0 ? String(salaryForm.advanceDeducted) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} placeholderHint="0" className="w-full px-3 py-2.5" />
+              <ValidatedInput type="text" inputMode="decimal" value={salaryForm.advanceDeducted != null && salaryForm.advanceDeducted !== 0 ? String(salaryForm.advanceDeducted) : ''} onChange={(v) => setSalaryForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} placeholderHint="0" fieldType="number" className="w-full px-3 py-2.5" />
             </div>
           </div>
 
@@ -777,7 +824,7 @@ export default function FullTimePayments() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('amount')} (₹) <span className="text-red-500">*</span></label>
-            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
+            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('reasons')}</label>
@@ -819,6 +866,12 @@ export default function FullTimePayments() {
                   return null;
                 })()}
                 <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{formatAmount(detailPayment.baseAmount)}</p>
+                {detailPayment.otHours != null && detailPayment.otHours > 0 && (
+                  <p><span className="font-medium text-slate-700">{t('otHours')}:</span> {detailPayment.otHours} → ₹{formatAmount(detailPayment.otAmount ?? 0)}</p>
+                )}
+                {detailPayment.pfDeducted > 0 && <p><span className="font-medium text-slate-700">{t('pf')}:</span> -₹{formatAmount(detailPayment.pfDeducted)}</p>}
+                {detailPayment.esiDeducted > 0 && <p><span className="font-medium text-slate-700">{t('esi')}:</span> -₹{formatAmount(detailPayment.esiDeducted)}</p>}
+                {(detailPayment.otherDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('otherDeductions')}:</span> -₹{formatAmount(detailPayment.otherDeducted!)}</p>}
                 {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{formatAmount(detailPayment.addDeductAmount)} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
                 {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> -₹{formatAmount(detailPayment.advanceDeducted)}</p>}
               </>

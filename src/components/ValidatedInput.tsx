@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { validateField, type FieldType, FIELD_PLACEHOLDERS } from '@/lib/fieldValidation';
+import { validateField, type FieldType, FIELD_PLACEHOLDERS, FIELD_FORMAT_HINTS } from '@/lib/fieldValidation';
 
 export interface ValidatedInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
@@ -11,8 +11,12 @@ export interface ValidatedInputProps
   placeholderHint?: string;
   /** Custom validate fn; overrides fieldType if provided */
   validate?: (value: string) => boolean;
+  /** Error/format hint shown below when invalid. Used with custom validate. */
+  errorHint?: string;
   /** Use for dark/glass backgrounds (e.g. login) */
   variant?: 'default' | 'dark';
+  /** Use when embedded inline (e.g. inside a paragraph) */
+  inline?: boolean;
 }
 
 export default function ValidatedInput({
@@ -21,6 +25,7 @@ export default function ValidatedInput({
   fieldType = 'text',
   placeholderHint,
   validate,
+  errorHint,
   variant = 'default',
   className = '',
   readOnly,
@@ -34,6 +39,7 @@ export default function ValidatedInput({
     value.trim() === '' ? 'neutral' : isValid(value) ? 'valid' : 'invalid';
 
   const placeholder = placeholderHint ?? FIELD_PLACEHOLDERS[fieldType];
+  const formatHint = errorHint ?? FIELD_FORMAT_HINTS[fieldType];
 
   const borderClass =
     state === 'valid'
@@ -62,14 +68,28 @@ export default function ValidatedInput({
       : 'border-slate-300'
     : borderClass;
 
+  const errorTextClass =
+    variant === 'dark'
+      ? 'text-red-300'
+      : 'text-red-600';
+
+  const wrapperClass = inline ? 'inline-block align-baseline space-y-1' : 'block space-y-1';
+
   return (
-    <input
-      {...rest}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      readOnly={readOnly}
-      placeholder={placeholder}
-      className={`${baseClass} border ${effectiveBorder} ${bgClass} ${focusRing} ${className}`}
-    />
+    <span className={wrapperClass}>
+      <input
+        {...rest}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        readOnly={readOnly}
+        placeholder={placeholder}
+        className={`${baseClass} border ${effectiveBorder} ${bgClass} ${focusRing} ${className}`}
+      />
+      {state === 'invalid' && (
+        <span className={`block text-xs ${errorTextClass}`} role="alert">
+          {formatHint}
+        </span>
+      )}
+    </span>
   );
 }

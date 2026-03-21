@@ -17,6 +17,7 @@ export interface IPayment extends Document {
   addDeductRemarks: string;
   pfDeducted: number;
   esiDeducted: number;
+  otherDeducted?: number;
   advanceDeducted?: number;
   totalPayable: number;
   paymentAmount: number;
@@ -33,6 +34,10 @@ export interface IPayment extends Document {
   totalWorkingDays?: number;
   /** For full_time salary: virtual days attended for accountancy compliance (salary paid * working days / minimum wages) */
   virtualDaysAttended?: number;
+  /** For full_time salary: overtime hours worked (OT amount = hours × employee.overtimeCostPerHour) */
+  otHours?: number;
+  /** For full_time salary: calculated OT amount (hours × overtimeCostPerHour) */
+  otAmount?: number;
   paidAt: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -70,6 +75,9 @@ const PaymentSchema = new Schema<IPayment>(
     daysWorked: { type: Number },
     totalWorkingDays: { type: Number },
     virtualDaysAttended: { type: Number },
+    otHours: { type: Number },
+    otAmount: { type: Number },
+    otherDeducted: { type: Number },
     paidAt: { type: Date, required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

@@ -49,6 +49,11 @@ interface Department {
   name: string;
 }
 
+interface OtherDeduction {
+  reason: string;
+  amount: number;
+}
+
 interface Employee {
   _id: string;
   employeeId?: string;
@@ -74,7 +79,10 @@ interface Employee {
   branches: Branch[];
   department?: Department | { _id: string; name: string };
   monthlySalary?: number;
-  salaryBreakup?: { pf?: number; esi?: number; other?: number };
+  dailySalary?: number;
+  overtimeCostPerHour?: number;
+  salaryBreakup?: { pf?: number; esi?: number };
+  otherDeductions?: OtherDeduction[];
   pfOpted?: boolean;
   monthlyPfAmount?: number;
   esiOpted?: boolean;
@@ -132,10 +140,13 @@ export default function EmployeesPage() {
     branches: [] as string[],
     department: '' as string,
     monthlySalary: 0,
-    salaryBreakup: { pf: 0, esi: 0, other: 0 },
-    pfOpted: true,
+    dailySalary: 0,
+    overtimeCostPerHour: 0,
+    salaryBreakup: { pf: 0, esi: 0 },
+    otherDeductions: [] as OtherDeduction[],
+    pfOpted: false,
     monthlyPfAmount: 0,
-    esiOpted: true,
+    esiOpted: false,
     monthlyEsiAmount: 0,
     role: 'employee' as string,
     documents: [] as { type: string; name?: string; fileUrl: string; uploadedAt: string }[],
@@ -187,10 +198,13 @@ export default function EmployeesPage() {
       branches: [],
       department: '',
       monthlySalary: 0,
-      salaryBreakup: { pf: 0, esi: 0, other: 0 },
-      pfOpted: true,
+      dailySalary: 0,
+      overtimeCostPerHour: 0,
+      salaryBreakup: { pf: 0, esi: 0 },
+      otherDeductions: [],
+      pfOpted: false,
       monthlyPfAmount: 0,
-      esiOpted: true,
+      esiOpted: false,
       monthlyEsiAmount: 0,
       role: 'employee',
       documents: [],
@@ -206,6 +220,9 @@ export default function EmployeesPage() {
 
   const openEdit = (e: Employee) => {
     setPhotoFile(null);
+    const otherDeds = (e as { otherDeductions?: OtherDeduction[] }).otherDeductions ?? [];
+    const legacyOther = (e.salaryBreakup as { other?: number } | undefined)?.other ?? 0;
+    const hasLegacyOther = legacyOther > 0 && otherDeds.length === 0;
     setForm({
       employeeId: e.employeeId || '',
       name: e.name,
@@ -229,18 +246,20 @@ export default function EmployeesPage() {
       branches: (e.branches ?? []).map((b): string => (typeof b === 'object' && b && '_id' in b ? (b as Branch)._id : String(b))),
       department: (e.department && typeof e.department === 'object' && '_id' in e.department ? (e.department as Department)._id : e.department) || '',
       monthlySalary: e.monthlySalary || 0,
+      dailySalary: e.dailySalary || 0,
+      overtimeCostPerHour: e.overtimeCostPerHour || 0,
       salaryBreakup: {
         pf: e.salaryBreakup?.pf ?? 0,
         esi: e.salaryBreakup?.esi ?? 0,
-        other: e.salaryBreakup?.other ?? 0,
       },
+      otherDeductions: otherDeds.length > 0 ? otherDeds : (hasLegacyOther ? [{ reason: 'Other', amount: legacyOther }] : []),
       documents: (e.documents ?? []).map((d) => ({
         ...d,
         uploadedAt: typeof d.uploadedAt === 'string' ? d.uploadedAt : (d.uploadedAt as Date)?.toISOString?.() ?? '',
       })),
-      pfOpted: e.pfOpted ?? true,
+      pfOpted: e.pfOpted ?? false,
       monthlyPfAmount: e.monthlyPfAmount || 0,
-      esiOpted: e.esiOpted ?? true,
+      esiOpted: e.esiOpted ?? false,
       monthlyEsiAmount: e.monthlyEsiAmount || 0,
       role: 'employee',
     });
@@ -427,11 +446,21 @@ export default function EmployeesPage() {
     );
   }
 
+  const otherTotal = form.otherDeductions.reduce((s, d) => s + (d.amount || 0), 0);
+  const hasMonthly = (form.monthlySalary || 0) > 0;
+  const hasDaily = (form.dailySalary || 0) > 0;
+  const salaryValid = form.employeeType === 'contractor' || hasMonthly !== hasDaily;
+  const otValid = form.employeeType !== 'full_time' || (form.overtimeCostPerHour || 0) > 0;
+  const pfValid = !form.pfOpted || (form.employeeType === 'contractor' ? (form.monthlyPfAmount || 0) > 0 : (form.salaryBreakup?.pf ?? 0) > 0) && !!form.pfNumber?.trim();
+  const esiValid = !form.esiOpted || (form.employeeType === 'contractor' ? (form.monthlyEsiAmount || 0) > 0 : (form.salaryBreakup?.esi ?? 0) > 0) && !!form.esiNumber?.trim();
+  const canSave = !saving && !!form.name && !!form.contactNumber && !!form.email && !!form.emergencyNumber && !!form.dateOfBirth && form.branches.length > 0 && !!form.department && salaryValid && otValid && pfValid && esiValid;
+
   /* Full-screen add/edit form */
   if (modal) {
     return (
       <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
-        <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200">
+        {/* Sticky header - always visible */}
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-4 py-4 px-1 -mx-1 mb-4 bg-white border-b border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={closeForm}
@@ -451,7 +480,7 @@ export default function EmployeesPage() {
             {modal !== 'view' && (
               <button
                 onClick={handleSave}
-                disabled={saving || !form.name || !form.contactNumber || !form.email || !form.emergencyNumber || !form.dateOfBirth || form.branches.length === 0 || !form.department || (form.pfOpted && !form.pfNumber?.trim()) || (form.esiOpted && !form.esiNumber?.trim()) || (form.employeeType === 'contractor' && form.pfOpted && !form.monthlyPfAmount) || (form.employeeType === 'contractor' && form.esiOpted && !form.monthlyEsiAmount) || (form.employeeType === 'full_time' && form.pfOpted && (form.salaryBreakup?.pf ?? 0) <= 0) || (form.employeeType === 'full_time' && form.esiOpted && (form.salaryBreakup?.esi ?? 0) <= 0)}
+                disabled={!canSave}
                 className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
               >
                 {saving ? '...' : t('save')}
@@ -472,7 +501,7 @@ export default function EmployeesPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl space-y-8">
+          <div className="max-w-5xl space-y-8">
             <FormSection title={t('photo')}>
               <div className="flex items-center gap-6">
                 <div className="shrink-0">
@@ -635,157 +664,197 @@ export default function EmployeesPage() {
               </div>
             </FormSection>
 
-            {form.employeeType === 'contractor' && (
-              <FormSection title={t('pfDeduction') + ' & ' + t('esiDeduction')}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="min-w-0 space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                      <span className="text-sm font-medium text-slate-800">{t('pfOpted')}</span>
-                    </label>
-                    {form.pfOpted && (
-                      <FormField label={`${t('monthlyPfAmount')} (₹)`} required>
+            {/* PF & ESI - nice card section for both full-time and contractor */}
+            <FormSection title={t('pf') + ' & ' + t('esi')}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
+                    <span className="font-medium text-slate-800">{t('applicable')} — {t('pf')}</span>
+                  </label>
+                  {form.pfOpted && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
+                      <FormField label={t('pfNumber')} required>
+                        <ValidatedInput type="text" value={form.pfNumber || ''} onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))} fieldType="pfNumber" readOnly={modal === 'view'} />
+                      </FormField>
+                      <FormField label={`${form.employeeType === 'contractor' ? t('monthlyPfAmount') : t('pf')} (₹)`} required>
                         <ValidatedInput
                           type="number"
                           min={0}
                           step={0.01}
-                          value={String(form.monthlyPfAmount ?? '')}
-                          onChange={(v) => setForm((f) => ({ ...f, monthlyPfAmount: parseFloat(v) || 0 }))}
+                          value={String(form.employeeType === 'contractor' ? (form.monthlyPfAmount ?? '') : (form.salaryBreakup?.pf ?? ''))}
+                          onChange={(v) => setForm((f) => ({
+                            ...f,
+                            ...(f.employeeType === 'contractor' ? { monthlyPfAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }),
+                          }))}
                           fieldType="number"
-                          placeholderHint="e.g. 500"
+                          placeholderHint={form.employeeType === 'contractor' ? 'e.g. 500' : 'e.g. 2100'}
                           readOnly={modal === 'view'}
                         />
                       </FormField>
-                    )}
-                  </div>
-                  <div className="min-w-0 space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                      <span className="text-sm font-medium text-slate-800">{t('esiOpted')}</span>
-                    </label>
-                    {form.esiOpted && (
-                      <FormField label={`${t('monthlyEsiAmount')} (₹)`} required>
-                        <ValidatedInput
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={String(form.monthlyEsiAmount ?? '')}
-                          onChange={(v) => setForm((f) => ({ ...f, monthlyEsiAmount: parseFloat(v) || 0 }))}
-                          fieldType="number"
-                          placeholderHint="e.g. 200"
-                          readOnly={modal === 'view'}
-                        />
-                      </FormField>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              </FormSection>
-            )}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
+                    <span className="font-medium text-slate-800">{t('applicable')} — {t('esi')}</span>
+                  </label>
+                  {form.esiOpted && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
+                      <FormField label={t('esiNumber')} required>
+                        <ValidatedInput type="text" value={form.esiNumber || ''} onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))} fieldType="esiNumber" readOnly={modal === 'view'} />
+                      </FormField>
+                      <FormField label={`${form.employeeType === 'contractor' ? t('monthlyEsiAmount') : t('esi')} (₹)`} required>
+                        <ValidatedInput
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={String(form.employeeType === 'contractor' ? (form.monthlyEsiAmount ?? '') : (form.salaryBreakup?.esi ?? ''))}
+                          onChange={(v) => setForm((f) => ({
+                            ...f,
+                            ...(f.employeeType === 'contractor' ? { monthlyEsiAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }),
+                          }))}
+                          fieldType="number"
+                          placeholderHint={form.employeeType === 'contractor' ? 'e.g. 200' : 'e.g. 525'}
+                          readOnly={modal === 'view'}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </FormSection>
 
+            {/* Full-time: Salary (monthly OR daily) + OT cost */}
             {form.employeeType === 'full_time' && (
-              <FormSection title={t('pfDeduction') + ' & ' + t('esiDeduction') + ' & ' + t('salaryBreakup')}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <FormSection title={t('salaryBreakup')}>
+                <p className="text-sm text-slate-600 mb-4">{t('salaryBasis')}: Enter either {t('salaryBasisMonthly')} or {t('salaryBasisDaily')} (not both)</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <FormField label={`${t('monthlySalary')} (₹)`}>
                     <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={String(form.monthlySalary ?? '')}
-                      onChange={(v) => setForm((f) => ({ ...f, monthlySalary: parseFloat(v) || 0 }))}
+                      value={hasMonthly ? String(form.monthlySalary) : ''}
+                      onChange={(v) => setForm((f) => {
+                        const val = parseFloat(v) || 0;
+                        return { ...f, monthlySalary: val, dailySalary: val > 0 ? 0 : f.dailySalary };
+                      })}
                       fieldType="number"
                       placeholderHint="e.g. 35000"
                       readOnly={modal === 'view'}
                     />
                   </FormField>
-                  <FormField label={`${t('otherDeductions')} (₹)`}>
+                  <FormField label={`${t('dailySalary')} (₹)`}>
                     <ValidatedInput
                       type="number"
                       min={0}
                       step={0.01}
-                      value={String(form.salaryBreakup?.other ?? '')}
-                      onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, other: parseFloat(v) || 0 } }))}
+                      value={hasDaily ? String(form.dailySalary) : ''}
+                      onChange={(v) => setForm((f) => {
+                        const val = parseFloat(v) || 0;
+                        return { ...f, dailySalary: val, monthlySalary: val > 0 ? 0 : f.monthlySalary };
+                      })}
                       fieldType="number"
-                      placeholderHint="e.g. 0"
+                      placeholderHint="e.g. 1500"
                       readOnly={modal === 'view'}
                     />
                   </FormField>
-                  <div className="min-w-0 space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                      <span className="text-sm font-medium text-slate-800">{t('pfOpted')}</span>
-                    </label>
-                    {form.pfOpted && (
-                      <FormField label={`${t('pf')} (₹)`} required>
-                        <ValidatedInput
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={String(form.salaryBreakup?.pf ?? '')}
-                          onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }))}
-                          fieldType="number"
-                          placeholderHint="e.g. 2100"
-                          readOnly={modal === 'view'}
-                        />
-                      </FormField>
-                    )}
-                  </div>
-                  <div className="min-w-0 space-y-2">
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded" />
-                      <span className="text-sm font-medium text-slate-800">{t('esiOpted')}</span>
-                    </label>
-                    {form.esiOpted && (
-                      <FormField label={`${t('esi')} (₹)`} required>
-                        <ValidatedInput
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={String(form.salaryBreakup?.esi ?? '')}
-                          onChange={(v) => setForm((f) => ({ ...f, salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }))}
-                          fieldType="number"
-                          placeholderHint="e.g. 525"
-                          readOnly={modal === 'view'}
-                        />
-                      </FormField>
-                    )}
-                  </div>
-                  {(form.monthlySalary || 0) > 0 && (
-                    <div className="sm:col-span-2 lg:col-span-3 flex items-center">
-                      <p className="text-sm text-slate-600">
-                        {t('netSalary')}: ₹{formatAmount((form.monthlySalary || 0) - (form.pfOpted ? (form.salaryBreakup?.pf || 0) : 0) - (form.esiOpted ? (form.salaryBreakup?.esi || 0) : 0) - (form.salaryBreakup?.other || 0))}
-                      </p>
-                    </div>
-                  )}
                 </div>
+                <FormField label={`${t('overtimeCostPerHour')} (₹)`} required>
+                  <ValidatedInput
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={String(form.overtimeCostPerHour ?? '')}
+                    onChange={(v) => setForm((f) => ({ ...f, overtimeCostPerHour: parseFloat(v) || 0 }))}
+                    fieldType="number"
+                    placeholderHint="e.g. 80"
+                    readOnly={modal === 'view'}
+                  />
+                </FormField>
+                <p className="text-xs text-slate-500 mt-1">{t('overtimeCostPerHourHint')}</p>
+                {((form.monthlySalary || 0) > 0 || (form.dailySalary || 0) > 0) && (
+                  <p className="text-sm text-slate-700 mt-2">
+                    {t('netSalary')} (approx): ₹{formatAmount(
+                      (form.monthlySalary || 0) + (form.dailySalary || 0) * 26 - (form.pfOpted ? (form.salaryBreakup?.pf || 0) : 0) - (form.esiOpted ? (form.salaryBreakup?.esi || 0) : 0) - otherTotal
+                    )}
+                  </p>
+                )}
               </FormSection>
             )}
 
-            <FormSection title={t('aadhaarNumber') + ' / ' + t('pfNumber') + ' / ' + t('esiNumber') + ' / ' + t('panNumber')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* Other deductions - multiple with add/remove */}
+            <FormSection title={t('otherDeductions')}>
+              <div className="space-y-3">
+                {form.otherDeductions.map((d, idx) => (
+                  <div key={idx} className="flex gap-3 items-end">
+                    <div className="flex-1 min-w-0">
+                    <FormField label={t('reasonForDeduction')}>
+                      <ValidatedInput
+                        type="text"
+                        value={d.reason}
+                        onChange={(v) => setForm((f) => ({
+                          ...f,
+                          otherDeductions: f.otherDeductions.map((x, i) => i === idx ? { ...x, reason: v } : x),
+                        }))}
+                        fieldType="text"
+                        placeholderHint="e.g. Loan recovery"
+                        readOnly={modal === 'view'}
+                      />
+                    </FormField>
+                    </div>
+                    <div className="w-32 shrink-0">
+                    <FormField label={`${t('amount')} (₹)`}>
+                      <ValidatedInput
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={String(d.amount || '')}
+                        onChange={(v) => setForm((f) => ({
+                          ...f,
+                          otherDeductions: f.otherDeductions.map((x, i) => i === idx ? { ...x, amount: parseFloat(v) || 0 } : x),
+                        }))}
+                        fieldType="number"
+                        readOnly={modal === 'view'}
+                      />
+                    </FormField>
+                    </div>
+                    {modal !== 'view' && (
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, otherDeductions: f.otherDeductions.filter((_, i) => i !== idx) }))}
+                        className="shrink-0 p-2 rounded-lg text-red-600 hover:bg-red-50"
+                        aria-label={t('removeDeduction')}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {modal !== 'view' && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, otherDeductions: [...f.otherDeductions, { reason: '', amount: 0 }] }))}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    {t('addDeduction')}
+                  </button>
+                )}
+                {otherTotal > 0 && <p className="text-sm text-slate-600">Total: ₹{formatAmount(otherTotal)}</p>}
+              </div>
+            </FormSection>
+
+            <FormSection title={t('aadhaarNumber') + ' / ' + t('panNumber')}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <FormField label={t('aadhaarNumber')}>
                   <ValidatedInput
                     type="text"
                     value={form.aadhaarNumber || ''}
                     onChange={(v) => setForm((f) => ({ ...f, aadhaarNumber: v }))}
                     fieldType="aadhaar"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('pfNumber')} required={form.pfOpted}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.pfNumber || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))}
-                    fieldType="pfNumber"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('esiNumber')} required={form.esiOpted}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.esiNumber || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))}
-                    fieldType="esiNumber"
                     readOnly={modal === 'view'}
                   />
                 </FormField>
@@ -986,6 +1055,7 @@ export default function EmployeesPage() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeType')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('salaryBreakup')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                 </tr>
@@ -993,7 +1063,7 @@ export default function EmployeesPage() {
               <tbody className="divide-y divide-slate-200">
                 {sortedEmployees.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-600">
                       {t('noData')}
                     </td>
                   </tr>
@@ -1013,6 +1083,18 @@ export default function EmployeesPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         {e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">
+                        {e.employeeType === 'full_time' ? (
+                          (e as Employee).monthlySalary && (e as Employee).monthlySalary! > 0
+                            ? `₹${formatAmount((e as Employee).monthlySalary!)}/mo`
+                            : (e as Employee).dailySalary && (e as Employee).dailySalary! > 0
+                              ? `₹${formatAmount((e as Employee).dailySalary!)}/day`
+                              : '—'
+                        ) : '—'}
+                        {e.employeeType === 'full_time' && (e as Employee).overtimeCostPerHour && (e as Employee).overtimeCostPerHour! > 0 && (
+                          <span className="block text-xs text-slate-500">OT ₹{formatAmount((e as Employee).overtimeCostPerHour!)}/hr</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${e.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>

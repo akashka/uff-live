@@ -107,7 +107,10 @@ export async function POST(req: NextRequest) {
       esiOpted,
       monthlyEsiAmount,
       monthlySalary,
+      dailySalary,
+      overtimeCostPerHour,
       salaryBreakup,
+      otherDeductions,
       role: empRole,
     } = body;
 
@@ -174,7 +177,10 @@ export async function POST(req: NextRequest) {
       esiOpted: esiOpted ?? false,
       monthlyEsiAmount: monthlyEsiAmount || 0,
       monthlySalary: monthlySalary || 0,
-      salaryBreakup: salaryBreakup || { pf: 0, esi: 0, other: 0 },
+      dailySalary: dailySalary || 0,
+      overtimeCostPerHour: overtimeCostPerHour || 0,
+      salaryBreakup: salaryBreakup || { pf: 0, esi: 0 },
+      otherDeductions: Array.isArray(otherDeductions) ? otherDeductions.filter((d: { reason?: string; amount?: number }) => d && (d.reason || d.amount)) : [],
     });
 
     const password = generatePassword(12);

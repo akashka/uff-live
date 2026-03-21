@@ -368,7 +368,6 @@ export default function BranchesPage() {
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('departmentName')}</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('description')}</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                     </tr>
@@ -376,13 +375,12 @@ export default function BranchesPage() {
                   <tbody className="divide-y divide-slate-200">
                     {deptSorted.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                        <td colSpan={3} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                       </tr>
                     ) : (
                       deptSorted.map((d) => (
                         <tr key={d._id} className="hover:bg-uff-surface">
                           <td className="px-4 py-3 text-slate-800">{d.name}</td>
-                          <td className="px-4 py-3 text-slate-700">{d.description || '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded text-xs font-medium ${d.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                               {d.isActive ? t('active') : t('inactive')}
@@ -406,7 +404,6 @@ export default function BranchesPage() {
                 deptSorted.map((d) => (
                   <div key={d._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                     <h3 className="font-semibold text-slate-900">{d.name}</h3>
-                    <p className="text-sm text-slate-600 mt-1">{d.description || '—'}</p>
                     <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${d.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>{d.isActive ? t('active') : t('inactive')}</span>
                     <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                       <ActionButtons onView={() => openDeptView(d)} onEdit={() => openDeptEdit(d)} onToggleActive={() => handleDeptToggleActive(d)} isActive={d.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={d.isActive ? t('makeInactive') : t('makeActive')} />

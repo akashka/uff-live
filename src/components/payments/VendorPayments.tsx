@@ -403,7 +403,7 @@ export default function VendorPayments() {
             <p className="text-sm text-slate-800">{t('baseAmount')}: ₹{formatAmount(form.baseAmount)}</p>
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-              <ValidatedInput type="text" inputMode="decimal" value={form.addDeductAmount ? String(form.addDeductAmount) : ''} onChange={(v) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+              <ValidatedInput type="text" inputMode="decimal" value={form.addDeductAmount ? String(form.addDeductAmount) : ''} onChange={(v) => setForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
             </div>
           </div>
           <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
@@ -460,7 +460,7 @@ export default function VendorPayments() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('amount')} (₹) *</label>
-            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
+            <ValidatedInput type="text" inputMode="decimal" value={advanceForm.amount ? String(advanceForm.amount) : ''} onChange={(v) => setAdvanceForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))} placeholderHint="e.g. 5000" fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" required />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('reasons')}</label>

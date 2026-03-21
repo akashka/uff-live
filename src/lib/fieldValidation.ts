@@ -92,3 +92,25 @@ export const FIELD_PLACEHOLDERS: Record<FieldType, string> = {
   address: 'e.g. Street, City, Pin',
   bankName: 'e.g. State Bank of India',
 };
+
+/** Error/format hints shown below field when invalid. Helps user fix the input. */
+export const FIELD_FORMAT_HINTS: Record<FieldType, string> = {
+  email: 'Expected: valid email (e.g. name@example.com)',
+  phone: 'Expected: 10+ digit phone (e.g. 9876543210)',
+  name: 'Expected: at least 2 characters',
+  required: 'This field is required',
+  password: 'Expected: at least 6 characters',
+  aadhaar: 'Expected: 12 digits, with or without spaces (e.g. 1234 5678 9012)',
+  pan: 'Expected: 5 letters + 4 digits + 1 letter (e.g. ABCDE1234F)',
+  pfNumber: 'Expected: alphanumeric, min 5 chars (e.g. KA/BLR/12345)',
+  esiNumber: 'Expected: alphanumeric with hyphens (e.g. 12-34567-89)',
+  ifsc: 'Expected: 11 chars, 4 letters + 0 + 6 alphanumeric (e.g. SBIN0001234)',
+  accountNumber: 'Expected: 9–18 digits',
+  upi: 'Expected: id@provider (e.g. name@bank)',
+  date: 'Expected: YYYY-MM-DD',
+  otp: 'Expected: 6 digits',
+  number: 'Expected: valid number (e.g. 0 or 100.50)',
+  text: 'Enter a value',
+  address: 'Expected: at least 2 characters',
+  bankName: 'Expected: at least 2 characters',
+};

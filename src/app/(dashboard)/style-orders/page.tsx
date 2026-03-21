@@ -39,9 +39,8 @@ export default function StyleOrdersPage() {
   const { t } = useApp();
   const { user } = useAuth();
   const [includeInactive, setIncludeInactive] = useState(false);
-  const [filterBranch, setFilterBranch] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
-  const { styleOrders, loading, mutate } = useStyleOrders(includeInactive, filterBranch || undefined, filterMonth || undefined);
+  const { styleOrders, loading, mutate } = useStyleOrders(includeInactive, undefined, filterMonth || undefined);
   const { branches } = useBranches(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,12 +67,6 @@ export default function StyleOrdersPage() {
 
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
-
-  useEffect(() => {
-    if (Array.isArray(branches) && branches.length === 1 && !filterBranch) {
-      setFilterBranch(branches[0]._id);
-    }
-  }, [branches, filterBranch]);
 
   const openCreate = () => {
     const now = new Date();
@@ -250,20 +243,17 @@ export default function StyleOrdersPage() {
     });
   };
 
-  const getBranchNames = (s: StyleOrder) => {
-    const brs = (s.branches || []) as (Branch | string)[];
-    return brs.map((b) => (typeof b === 'object' && b.name ? b.name : '')).filter(Boolean).join(', ') || '-';
-  };
+  const getColour = (s: StyleOrder) => s.colour ?? (Array.isArray((s as { colours?: string[] }).colours) ? (s as { colours?: string[] }).colours?.join(', ') : '') ?? '';
 
   const filtered = (Array.isArray(styleOrders) ? styleOrders : []).filter((s) => {
     const q = search.toLowerCase();
     if (!q) return true;
-    const branchNames = getBranchNames(s);
+    const colourStr = getColour(s);
     return (
       s.styleCode.toLowerCase().includes(q) ||
       (s.brand || '').toLowerCase().includes(q) ||
       (s.details || '').toLowerCase().includes(q) ||
-      branchNames.toLowerCase().includes(q)
+      (colourStr || '').toLowerCase().includes(q)
     );
   });
   const sorted = [...filtered].sort((a, b) => {
@@ -328,12 +318,6 @@ export default function StyleOrdersPage() {
           <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} className="rounded border-slate-400" />
           <span className="text-sm text-slate-800">{t('inactive')}</span>
         </label>
-        <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
-          <option value="">{t('all')} {t('branches')}</option>
-          {(Array.isArray(branches) ? branches : []).map((b) => (
-            <option key={b._id} value={b._id}>{b.name}</option>
-          ))}
-        </select>
         <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Month" />
       </ListToolbar>
 
@@ -345,8 +329,7 @@ export default function StyleOrdersPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrderCode')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('brand')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('details')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('colour')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                 </tr>
@@ -354,16 +337,14 @@ export default function StyleOrdersPage() {
               <tbody className="divide-y divide-slate-200">
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                   </tr>
                 ) : (
                   sorted.map((s) => (
                     <tr key={s._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
                       <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{(s.colour ?? (Array.isArray((s as { colours?: string[] }).colours) ? (s as { colours?: string[] }).colours?.join(', ') : '')) || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{s.details || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700">{getBranchNames(s)}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">{getColour(s) || '–'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                           {s.isActive ? t('active') : t('inactive')}
@@ -395,8 +376,9 @@ export default function StyleOrdersPage() {
             sorted.map((s) => (
               <div key={s._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{s.styleCode} {s.brand ? `— ${s.brand}` : ''}</h3>
-                <p className="text-sm text-slate-600 mt-1 line-clamp-2">{s.details || '–'}</p>
-                <p className="text-sm text-slate-700 mt-1">{getBranchNames(s)}</p>
+                {getColour(s) && (
+                  <p className="text-sm text-slate-600 mt-1">{t('colour')}: {getColour(s)}</p>
+                )}
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                   {s.isActive ? t('active') : t('inactive')}
                 </span>
@@ -470,6 +452,7 @@ export default function StyleOrdersPage() {
                 value={form.styleCode}
                 onChange={(v) => setForm((f) => ({ ...f, styleCode: formatCodeInput(v) || '' }))}
                 validate={(v) => v === '' || /^\d{1,4}$/.test(v)}
+                errorHint="Expected: 1-4 digits"
                 readOnly={modal === 'view'}
                 className="w-full px-3 py-2"
                 placeholderHint="0001"
