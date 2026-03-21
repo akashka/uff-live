@@ -27,6 +27,7 @@ export default function ValidatedInput({
   validate,
   errorHint,
   variant = 'default',
+  inline = false,
   className = '',
   readOnly,
   ...rest
