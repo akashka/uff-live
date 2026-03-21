@@ -67,16 +67,32 @@ export function useDepartments(includeInactive = false) {
   };
 }
 
-/** Rates list - cached 60s */
-export function useRates(includeInactive = false, branchId?: string) {
+/** Rates list - cached 60s, filtered by branch and department for work records */
+export function useRates(includeInactive = false, branchId?: string, departmentId?: string) {
   let key = `/api/rates?includeInactive=${includeInactive}`;
   if (branchId) key += `&branch=${branchId}`;
+  if (departmentId) key += `&department=${departmentId}`;
   const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
   });
   return {
     rates: Array.isArray(data) ? data : [],
+    error,
+    loading: isLoading,
+    mutate,
+  };
+}
+
+/** Vendor work items - hardcoded Stitching, Cutting, Finishing & Packing (no rate master) */
+export function useVendorWorkItems() {
+  const key = '/api/vendor-work-items';
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+  });
+  return {
+    items: Array.isArray(data) ? data : [],
     error,
     loading: isLoading,
     mutate,

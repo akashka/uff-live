@@ -15,6 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     await connectDB();
     const rate = await RateMaster.findById(id)
       .populate('branchRates.branch', 'name')
+      .populate('branchDepartmentRates.branch', 'name')
+      .populate('branchDepartmentRates.department', 'name')
       .lean();
     if (!rate) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(rate);
@@ -47,7 +49,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .filter((r: { branch: string; amount: number }) => r.branch && typeof r.amount === 'number' && r.amount >= 0)
         .map((r: { branch: string; amount: number }) => ({ branch: r.branch, amount: r.amount }));
       if (validRates.length > 0) {
-        rate.branchRates = validRates;
+        rate.branchRates = validRates as typeof rate.branchRates;
+      }
+    }
+
+    if (body.branchId && body.departmentId && typeof body.amount === 'number' && body.amount >= 0) {
+      const bdr = (rate.branchDepartmentRates || []) as { branch: { toString?: () => string }; department: { toString?: () => string }; amount: number }[];
+      const idx = bdr.findIndex(
+        (e) => String(e.branch?.toString?.() || e.branch) === body.branchId && String(e.department?.toString?.() || e.department) === body.departmentId
+      );
+      if (idx >= 0) {
+        rate.branchDepartmentRates[idx].amount = body.amount;
+      } else {
+        rate.branchDepartmentRates.push({
+          branch: body.branchId,
+          department: body.departmentId,
+          amount: body.amount,
+        } as (typeof rate.branchDepartmentRates)[0]);
       }
     }
 
@@ -66,6 +84,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const updated = await RateMaster.findById(id)
       .populate('branchRates.branch', 'name')
+      .populate('branchDepartmentRates.branch', 'name')
+      .populate('branchDepartmentRates.department', 'name')
       .lean();
     return NextResponse.json(updated);
   } catch (e) {

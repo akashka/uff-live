@@ -8,7 +8,7 @@ import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useVendors, useBranches, useRates, useVendorWorkOrders, useStyleOrdersByBranchMonth } from '@/lib/hooks/useApi';
+import { useVendors, useBranches, useVendorWorkItems, useVendorWorkOrders, useStyleOrdersByBranchMonth } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -32,24 +32,16 @@ interface Vendor {
   isActive?: boolean;
 }
 
-interface RateMaster {
-  _id: string;
+interface VendorWorkItemDef {
+  id: string;
   name: string;
   unit: string;
-  amountForBranch?: number;
-}
-
-interface StyleOrderWithAvailability {
-  _id: string;
-  styleCode: string;
-  monthData?: {
-    entries: { rateMasterId: string; totalOrderQuantity: number; availableQuantity: number; sellingPricePerQuantity?: number }[];
-  } | null;
 }
 
 interface WorkItem {
   rateMaster?: unknown;
   rateMasterId?: string;
+  workItemKey?: string;
   rateName: string;
   unit: string;
   quantity: number;
@@ -113,7 +105,7 @@ export default function VendorWorkOrdersPage() {
     reasons: '',
   });
 
-  const { rates } = useRates(true, form.branchId || undefined);
+  const { items: vendorWorkItems } = useVendorWorkItems();
   const { styleOrders: stylesForForm } = useStyleOrdersByBranchMonth(form.branchId || undefined, form.month || undefined, !!(form.branchId && form.month));
 
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
@@ -159,7 +151,7 @@ export default function VendorWorkOrdersPage() {
       workItems: (() => {
         const rec: Record<string, { quantity: number; defaultQuantity: number; ratePerUnit: number; defaultRatePerUnit: number; remarks: string }> = {};
         for (const wi of r.workItems || []) {
-          const id = String(wi.rateMaster ?? (wi as { rateMasterId?: string }).rateMasterId ?? '');
+          const id = String((wi as { workItemKey?: string }).workItemKey ?? wi.rateMaster ?? (wi as { rateMasterId?: string }).rateMasterId ?? '');
           const qty = Math.max(1, wi.quantity || 1);
           const rate = Math.max(0, wi.ratePerUnit || 0);
           if (id) rec[id] = { quantity: qty, defaultQuantity: qty, ratePerUnit: rate, defaultRatePerUnit: rate, remarks: (wi as { remarks?: string }).remarks ?? '' };
@@ -176,12 +168,6 @@ export default function VendorWorkOrdersPage() {
   const openView = (r: VendorWorkOrder) => {
     openEdit(r);
     setModal('view');
-  };
-
-  const selectedStyle = stylesForForm?.find((s: { _id: string }) => s._id === form.styleOrderId) as StyleOrderWithAvailability | undefined;
-  const getDefaultQuantity = (rateMasterId: string) => {
-    const entry = selectedStyle?.monthData?.entries?.find((e: { rateMasterId: string; availableQuantity?: number }) => e.rateMasterId === rateMasterId);
-    return entry?.availableQuantity ?? 0;
   };
 
   useEffect(() => {
@@ -211,36 +197,50 @@ export default function VendorWorkOrdersPage() {
     }
   }, [modal, form.branchId, form.month, form.styleOrderId, stylesForForm]);
 
-  const toggleRateChecked = (rateMasterId: string, checked: boolean) => {
-    if (!rates?.length || !form.branchId) return;
-    const rate = rates.find((r: RateMaster) => r._id === rateMasterId);
-    if (!rate) return;
+  const toggleWorkItemChecked = (workItemKey: string, checked: boolean) => {
+    if (!vendorWorkItems?.length) return;
+    const item = vendorWorkItems.find((x: VendorWorkItemDef) => x.id === workItemKey);
+    if (!item) return;
     if (checked) {
-      const defaultQty = Math.max(1, getDefaultQuantity(rateMasterId));
       setForm((f) => ({
         ...f,
         workItems: {
           ...f.workItems,
-          [rateMasterId]: { quantity: defaultQty, defaultQuantity: defaultQty, ratePerUnit: Math.max(0, rate.amountForBranch ?? 0), defaultRatePerUnit: Math.max(0, rate.amountForBranch ?? 0), remarks: '' },
+          [workItemKey]: { quantity: 1, defaultQuantity: 1, ratePerUnit: 0, defaultRatePerUnit: 0, remarks: '' },
         },
       }));
     } else {
       setForm((f) => {
         const next = { ...f.workItems };
-        delete next[rateMasterId];
+        delete next[workItemKey];
         return { ...f, workItems: next };
       });
     }
   };
 
-  const updateWorkItemField = (rateMasterId: string, field: 'quantity' | 'ratePerUnit' | 'remarks', value: number | string) => {
+  const selectAllWorkItems = (checked: boolean) => {
+    if (!vendorWorkItems?.length) return;
+    if (checked) {
+      const next: Record<string, { quantity: number; defaultQuantity: number; ratePerUnit: number; defaultRatePerUnit: number; remarks: string }> = {};
+      for (const item of vendorWorkItems) {
+        next[item.id] = { quantity: 1, defaultQuantity: 1, ratePerUnit: 0, defaultRatePerUnit: 0, remarks: '' };
+      }
+      setForm((f) => ({ ...f, workItems: next }));
+    } else {
+      setForm((f) => ({ ...f, workItems: {} }));
+    }
+  };
+
+  const allWorkItemsSelected = vendorWorkItems.length > 0 && vendorWorkItems.every((x: VendorWorkItemDef) => !!form.workItems[x.id]);
+
+  const updateWorkItemField = (workItemKey: string, field: 'quantity' | 'ratePerUnit' | 'remarks', value: number | string) => {
     setForm((f) => {
-      const item = f.workItems[rateMasterId];
+      const item = f.workItems[workItemKey];
       if (!item) return f;
       const next = { ...f.workItems };
-      if (field === 'quantity') next[rateMasterId] = { ...item, quantity: Math.max(1, Number(value) || 1) };
-      else if (field === 'ratePerUnit') next[rateMasterId] = { ...item, ratePerUnit: Math.max(0, Number(value) || 0) };
-      else next[rateMasterId] = { ...item, remarks: String(value ?? '') };
+      if (field === 'quantity') next[workItemKey] = { ...item, quantity: Math.max(1, Number(value) || 1) };
+      else if (field === 'ratePerUnit') next[workItemKey] = { ...item, ratePerUnit: Math.max(0, Number(value) || 0) };
+      else next[workItemKey] = { ...item, remarks: String(value ?? '') };
       return { ...f, workItems: next };
     });
   };
@@ -254,15 +254,20 @@ export default function VendorWorkOrdersPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const workItemsArray = Object.entries(form.workItems)
-        .filter(([, wi]) => (wi.quantity || 0) >= 1)
-        .map(([rateMasterId, wi]) => {
-          const needsRemarks = wi.ratePerUnit !== wi.defaultRatePerUnit;
-          if (needsRemarks && !(wi.remarks || '').trim()) {
-            throw new Error(t('remarksRequiredWhenRateChanged'));
-          }
-          return { rateMasterId, quantity: wi.quantity, multiplier: 1, remarks: wi.remarks ?? '', ratePerUnit: wi.ratePerUnit };
-        });
+      const entries = Object.entries(form.workItems).filter(([, wi]) => (wi.quantity || 0) >= 1);
+      const missingRate = entries.some(([, wi]) => (wi.ratePerUnit ?? 0) <= 0);
+      if (missingRate) {
+        toast.error(t('enterRateForWorkItems') || 'Please enter rate (₹) for all selected work items.');
+        setSaving(false);
+        return;
+      }
+      const workItemsArray = entries.map(([workItemKey, wi]) => ({
+        workItemKey,
+        quantity: wi.quantity,
+        multiplier: 1,
+        remarks: wi.remarks ?? '',
+        ratePerUnit: wi.ratePerUnit,
+      }));
 
       const payload = {
         vendorId: form.vendorId,
@@ -630,25 +635,39 @@ export default function VendorWorkOrdersPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-2">{t('workItems')} <span className="text-red-500" aria-hidden="true">*</span></label>
-            <p className="text-xs text-slate-600 mb-2">{!form.branchId ? 'Select branch first to load rates' : 'Check the rates that apply. Enter quantity and adjust pricing if needed.'}</p>
-            {form.branchId && rates && rates.length > 0 && (
+            <p className="text-xs text-slate-600 mb-2">Select work items and enter quantity and rate (₹) for each. Pricing is entered every time.</p>
+            {vendorWorkItems && vendorWorkItems.length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden">
                 <div className="grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 bg-uff-surface text-sm font-medium text-slate-800 border-b border-slate-200">
-                  <span className="w-8" />
-                  <span>{t('rateName') || 'Rate'}</span>
+                  {modal !== 'view' ? (
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={allWorkItemsSelected}
+                        onChange={(e) => selectAllWorkItems(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-xs font-medium">{t('selectAll')}</span>
+                    </label>
+                  ) : (
+                    <span className="w-8" />
+                  )}
+                  <span>{t('rateName') || 'Work Item'}</span>
                   <span>{t('quantityShort') || 'Qty'}</span>
                   <span>{t('rate') || 'Rate (₹)'}</span>
                   <span>{t('amount') || 'Amount'}</span>
                   <span>{t('remarks')}</span>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
-                  {(modal === 'view' ? (rates as RateMaster[]).filter((r) => form.workItems[r._id]) : (rates as RateMaster[])).map((r) => {
-                    const wi = form.workItems[r._id];
+                  {(modal === 'view'
+                    ? (vendorWorkItems as VendorWorkItemDef[]).filter((r) => form.workItems[r.id])
+                    : (vendorWorkItems as VendorWorkItemDef[])
+                  ).map((r) => {
+                    const wi = form.workItems[r.id];
                     const isChecked = !!wi;
-                    const showRemarks = isChecked && wi.ratePerUnit !== wi.defaultRatePerUnit;
                     const amount = isChecked ? (wi.quantity || 0) * (wi.ratePerUnit || 0) : 0;
                     return (
-                      <div key={r._id} className={`grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 items-center border-b border-slate-100 last:border-0 text-sm ${isChecked ? 'bg-uff-surface/50' : ''}`}>
+                      <div key={r.id} className={`grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 items-center border-b border-slate-100 last:border-0 text-sm ${isChecked ? 'bg-uff-surface/50' : ''}`}>
                         {modal === 'view' ? (
                           <>
                             <span className="w-8" />
@@ -663,8 +682,7 @@ export default function VendorWorkOrdersPage() {
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={(e) => toggleRateChecked(r._id, e.target.checked)}
-                              disabled={!form.branchId}
+                              onChange={(e) => toggleWorkItemChecked(r.id, e.target.checked)}
                               className="w-4 h-4 rounded border-slate-300"
                             />
                             <span className="text-slate-800">{r.name} ({r.unit})</span>
@@ -674,7 +692,7 @@ export default function VendorWorkOrdersPage() {
                                   type="number"
                                   min={1}
                                   value={wi.quantity || ''}
-                                  onChange={(e) => updateWorkItemField(r._id, 'quantity', parseFloat(e.target.value) || 1)}
+                                  onChange={(e) => updateWorkItemField(r.id, 'quantity', parseFloat(e.target.value) || 1)}
                                   className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
                                   placeholder="1"
                                 />
@@ -683,23 +701,18 @@ export default function VendorWorkOrdersPage() {
                                   min={0}
                                   step={0.01}
                                   value={wi.ratePerUnit ?? ''}
-                                  onChange={(e) => updateWorkItemField(r._id, 'ratePerUnit', parseFloat(e.target.value) ?? 0)}
+                                  onChange={(e) => updateWorkItemField(r.id, 'ratePerUnit', parseFloat(e.target.value) ?? 0)}
                                   className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
                                   placeholder="0"
                                 />
                                 <span className="text-slate-700">₹{formatAmount(amount)}</span>
-                                {showRemarks ? (
-                                  <input
-                                    type="text"
-                                    value={wi.remarks ?? ''}
-                                    onChange={(e) => updateWorkItemField(r._id, 'remarks', e.target.value)}
-                                    placeholder={t('remarksRequiredWhenRateChanged')}
-                                    className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
-                                    required
-                                  />
-                                ) : (
-                                  <span className="text-slate-400 text-xs">–</span>
-                                )}
+                                <input
+                                  type="text"
+                                  value={wi.remarks ?? ''}
+                                  onChange={(e) => updateWorkItemField(r.id, 'remarks', e.target.value)}
+                                  placeholder={t('remarks')}
+                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                                />
                               </>
                             ) : (
                               <>
@@ -716,9 +729,6 @@ export default function VendorWorkOrdersPage() {
                   })}
                 </div>
               </div>
-            )}
-            {form.branchId && (!rates || rates.length === 0) && (
-              <p className="text-sm text-slate-500 py-4">No rates configured for this branch.</p>
             )}
           </div>
 

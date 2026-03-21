@@ -181,13 +181,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const hasPayments = canAccessPayments || isEmployee;
 
-  const canAccessMaster = canAccessBranches || canAccessRates || canAccessStyleOrders;
+  const canAccessMaster = canAccessBranches || canAccessRates || canAccessStyleOrders || canAccessVendors;
   const masterNavItem = canAccessMaster
     ? {
         label: t('master'),
         icon: <MasterIcon />,
         children: [
           ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
+          ...(canAccessVendors ? [{ href: '/vendors', label: t('jobworkVendors') }] : []),
           ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
           ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders') }] : []),
         ].filter((c) => c.href && c.label) as { href: string; label: string }[],
@@ -226,14 +227,21 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         }
       : null;
 
+  const profileNavItem = {
+    label: t('profile'),
+    icon: <ProfileIcon />,
+    children: [
+      { href: '/profile', label: t('myProfile') },
+      ...(canAccessUsers ? [{ href: '/users', label: t('users') }] : []),
+    ].filter((c) => c.href && c.label) as { href: string; label: string }[],
+  };
+
   const navItems: { href?: string; label: string; icon: React.ReactNode; children?: { href: string; label: string }[]; badge?: number }[] = [
     { href: '/', label: t('home'), icon: <HomeIcon /> },
     { href: '/notifications', label: t('notifications'), icon: <NotificationsIcon />, badge: unreadCount },
-    { href: '/profile', label: t('profile'), icon: <ProfileIcon /> },
+    profileNavItem,
     ...(masterNavItem && masterNavItem.children && masterNavItem.children.length > 0 ? [masterNavItem] : []),
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
-    ...(canAccessUsers ? [{ href: '/users', label: t('users'), icon: <UsersIcon /> }] : []),
-    ...(canAccessVendors ? [{ href: '/vendors', label: t('vendors'), icon: <VendorsIcon /> }] : []),
     ...(workRecordsNavItem ? [workRecordsNavItem] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),

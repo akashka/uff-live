@@ -76,7 +76,7 @@ export default function StyleOrdersPage() {
       styleCode: '',
       brand: '',
       details: '',
-      branchIds: filterBranch ? [filterBranch] : (Array.isArray(branches) && branches[0] ? [branches[0]._id] : []),
+      branchIds: [], // Create defaults to all branches in backend
       month: currentMonth,
       totalOrderQuantity: 0,
       clientCostPerPiece: 0,
@@ -147,7 +147,7 @@ export default function StyleOrdersPage() {
         styleCode: codeStr,
         brand: String(form.brand || '').trim(),
         details: form.details || '',
-        branches: form.branchIds,
+        branches: modal === 'create' ? [] : form.branchIds, // Create: backend maps to all branches
         month: monthVal,
         totalOrderQuantity: toNum(form.totalOrderQuantity),
         clientCostPerPiece: toNum(form.clientCostPerPiece),
@@ -373,7 +373,7 @@ export default function StyleOrdersPage() {
                   saving ||
                   !form.styleCode.trim() ||
                   !form.brand.trim() ||
-                  form.branchIds.length === 0 ||
+                  (modal === 'edit' && form.branchIds.length === 0) ||
                   !getCodeForSave()
                 }
                 className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition"
@@ -422,33 +422,50 @@ export default function StyleOrdersPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-800 mb-1">{t('month')}</label>
-            <input
-              type="month"
-              value={form.month}
-              onChange={(e) => modal === 'create' && setForm((f) => ({ ...f, month: e.target.value }))}
-              readOnly={modal === 'view' || modal === 'edit'}
-              disabled={modal === 'edit'}
-              className={`px-3 py-2 border border-slate-300 rounded-lg text-sm ${modal === 'view' || modal === 'edit' ? 'bg-slate-100 cursor-not-allowed' : ''}`}
-            />
-            {modal === 'edit' && <p className="text-xs text-slate-500 mt-0.5">{t('monthNotEditable')}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('month')}</label>
+              <input
+                type="month"
+                value={form.month}
+                onChange={(e) => modal === 'create' && setForm((f) => ({ ...f, month: e.target.value }))}
+                readOnly={modal === 'view' || modal === 'edit'}
+                disabled={modal === 'edit'}
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm ${modal === 'view' || modal === 'edit' ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+              />
+              {modal === 'edit' && <p className="text-xs text-slate-500 mt-0.5">{t('monthNotEditable')}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('totalPieces')}</label>
+              <input
+                type="number"
+                min={0}
+                value={form.totalOrderQuantity || ''}
+                onChange={(e) => setForm((f) => ({ ...f, totalOrderQuantity: parseFloat(e.target.value) || 0 }))}
+                onBlur={updateCostFromPerPiece}
+                readOnly={modal === 'view'}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                placeholder="0"
+              />
+            </div>
           </div>
 
-          <div>
-            <p className="text-xs text-slate-600 mb-2">Select branches where this style is produced (e.g. stitching at one, cutting at another)</p>
-            <MultiselectDropdown
-              options={Array.isArray(branches) ? branches : []}
-              selectedIds={form.branchIds}
-              onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
-              placeholder={t('selectBranches')}
-              label={t('branches')}
-              required
-              disabled={modal === 'view'}
-              selectAllLabel={t('selectAll')}
-              searchPlaceholder={t('search')}
-            />
-          </div>
+          {modal !== 'create' && (
+            <div>
+              <p className="text-xs text-slate-600 mb-2">Select branches where this style is produced (e.g. stitching at one, cutting at another)</p>
+              <MultiselectDropdown
+                options={Array.isArray(branches) ? branches : []}
+                selectedIds={form.branchIds}
+                onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
+                placeholder={t('selectBranches')}
+                label={t('branches')}
+                required
+                disabled={modal === 'view'}
+                selectAllLabel={t('selectAll')}
+                searchPlaceholder={t('search')}
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1">{t('details')}</label>
@@ -462,22 +479,9 @@ export default function StyleOrdersPage() {
           </div>
 
           <div className="border-t border-slate-200 pt-4">
-            <label className="block text-sm font-medium text-slate-800 mb-3">{t('orderQuantityAndCost')}</label>
+            <label className="block text-sm font-medium text-slate-800 mb-3">{t('clientCost')}</label>
             <p className="text-xs text-slate-600 mb-2">{t('clientCostOptionalHint')}</p>
             <div className="p-3 bg-uff-surface rounded-lg flex flex-wrap gap-4 items-end">
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">{t('totalPieces')}</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.totalOrderQuantity || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, totalOrderQuantity: parseFloat(e.target.value) || 0 }))}
-                  onBlur={updateCostFromPerPiece}
-                  readOnly={modal === 'view'}
-                  className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
-                  placeholder="0"
-                />
-              </div>
               <div>
                 <label className="block text-xs text-slate-600 mb-1">{t('clientCostPerPiece')}</label>
                 <input

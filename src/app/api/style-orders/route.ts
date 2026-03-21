@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
+import Branch from '@/lib/models/Branch';
 import '@/lib/models/RateMaster'; // Register for populate('rateMasterItems')
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
@@ -55,9 +56,14 @@ export async function POST(req: NextRequest) {
       clientCostTotalAmount,
     } = body;
 
-    const branchIds = Array.isArray(branchesInput) ? branchesInput : (branchesInput ? [branchesInput] : []);
+    let branchIds = Array.isArray(branchesInput) ? branchesInput : (branchesInput ? [branchesInput] : []);
+    await connectDB();
+    if (branchIds.length === 0) {
+      const allBranches = await Branch.find({ isActive: true }).select('_id').lean();
+      branchIds = (allBranches || []).map((b) => String((b as { _id: unknown })._id));
+    }
     if (!styleCode || !brand || branchIds.length === 0) {
-      return NextResponse.json({ error: 'Style code, brand and at least one branch required' }, { status: 400 });
+      return NextResponse.json({ error: 'Style code, brand required. Add at least one branch to the system.' }, { status: 400 });
     }
 
     const codeStr = String(styleCode).trim();
@@ -69,8 +75,6 @@ export async function POST(req: NextRequest) {
     if (!brandStr) {
       return NextResponse.json({ error: 'Brand is required' }, { status: 400 });
     }
-
-    await connectDB();
 
     const existing = await StyleOrder.findOne({ brand: brandStr, styleCode: codeStr });
     if (existing) {

@@ -1,7 +1,9 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IVendorWorkItem {
-  rateMaster: mongoose.Types.ObjectId;
+  rateMaster?: mongoose.Types.ObjectId | null;
+  /** For vendor-only items (no rate master): stitching | cutting | finishing-packing */
+  workItemKey?: string;
   rateName: string;
   unit: string;
   quantity: number;
@@ -27,7 +29,8 @@ export interface IVendorWorkOrder extends Document {
 
 const VendorWorkItemSchema = new Schema<IVendorWorkItem>(
   {
-    rateMaster: { type: Schema.Types.ObjectId, ref: 'RateMaster', required: true },
+    rateMaster: { type: Schema.Types.ObjectId, ref: 'RateMaster', default: null },
+    workItemKey: { type: String, default: null },
     rateName: { type: String, required: true },
     unit: { type: String, required: true },
     quantity: { type: Number, required: true, min: 0 },

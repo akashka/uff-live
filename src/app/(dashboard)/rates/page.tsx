@@ -7,7 +7,7 @@ import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
-import { useRates, useBranches } from '@/lib/hooks/useApi';
+import { useRates, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import SaveOverlay from '@/components/SaveOverlay';
 import Modal from '@/components/Modal';
@@ -17,6 +17,12 @@ import ValidatedInput from '@/components/ValidatedInput';
 interface Branch {
   _id: string;
   name: string;
+}
+
+interface BranchDepartmentRate {
+  branch: string | Branch;
+  department: { _id: string; name: string };
+  amount: number;
 }
 
 interface BranchRate {
@@ -29,7 +35,8 @@ interface RateMaster {
   name: string;
   description?: string;
   unit: string;
-  branchRates: BranchRate[];
+  branchRates?: BranchRate[];
+  branchDepartmentRates?: BranchDepartmentRate[];
   isActive: boolean;
 }
 
@@ -39,6 +46,7 @@ export default function RatesPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const { rates, loading, mutate: mutateRates } = useRates(includeInactive);
   const { branches } = useBranches(false);
+  const { departments } = useDepartments(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -48,12 +56,14 @@ export default function RatesPage() {
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
   const [form, setForm] = useState({
+    branchId: '',
+    branchName: '',
+    departmentId: '',
+    departmentName: '',
     name: '',
     description: '',
     unit: 'per piece',
-    sameForAll: true,
-    amountForAll: 0,
-    branchRates: [] as { branch: string; amount: number }[],
+    amount: 0,
   });
   const [importing, setImporting] = useState(false);
   const [importModal, setImportModal] = useState(false);
@@ -62,112 +72,92 @@ export default function RatesPage() {
 
 
   const openCreate = () => {
-    if (!Array.isArray(branches) || branches.length === 0) {
-      toast.error(t('addBranchFirst'));
-      return;
-    }
     setForm({
+      branchId: '',
+      branchName: '',
+      departmentId: '',
+      departmentName: '',
       name: '',
       description: '',
       unit: 'per piece',
-      sameForAll: true,
-      amountForAll: 0,
-      branchRates: (Array.isArray(branches) ? branches : []).map((b) => ({ branch: b._id, amount: 0 })) || [],
+      amount: 0,
     });
     setModal('create');
     setEditingId(null);
   };
 
   const openEdit = (r: RateMaster) => {
-    if (!Array.isArray(branches) || branches.length === 0) return;
-    const branchRates = (branches as { _id: string }[]).map((b) => {
-      const existing = r.branchRates?.find(
-        (br) => (typeof br.branch === 'object' ? br.branch._id : br.branch) === b._id
-      );
-      return { branch: b._id, amount: existing?.amount ?? 0 };
-    });
-    const allSame = branchRates.length > 0 && branchRates.every((br) => br.amount === branchRates[0].amount);
-    setForm({
-      name: r.name,
-      description: r.description || '',
-      unit: r.unit || 'per piece',
-      sameForAll: allSame,
-      amountForAll: allSame && branchRates[0] ? branchRates[0].amount : 0,
-      branchRates,
-    });
+    const bdr = r.branchDepartmentRates?.[0];
+    const br = r.branchRates?.[0];
+    if (bdr) {
+      const branch = typeof bdr.branch === 'object' ? (bdr.branch as Branch) : null;
+      const dept = bdr.department as { _id: string; name: string };
+      setForm({
+        branchId: branch?._id ?? (bdr.branch as string) ?? '',
+        branchName: branch?.name ?? '',
+        departmentId: dept?._id ?? '',
+        departmentName: dept?.name ?? '',
+        name: r.name,
+        description: r.description || '',
+        unit: r.unit || 'per piece',
+        amount: bdr.amount ?? 0,
+      });
+    } else if (br) {
+      const branch = typeof br.branch === 'object' ? (br.branch as Branch) : null;
+      setForm({
+        branchId: branch?._id ?? (br.branch as string) ?? '',
+        branchName: branch?.name ?? '',
+        departmentId: '',
+        departmentName: '',
+        name: r.name,
+        description: r.description || '',
+        unit: r.unit || 'per piece',
+        amount: br.amount ?? 0,
+      });
+    } else {
+      setForm({
+        branchId: '',
+        branchName: '',
+        departmentId: '',
+        departmentName: '',
+        name: r.name,
+        description: r.description || '',
+        unit: r.unit || 'per piece',
+        amount: 0,
+      });
+    }
     setModal('edit');
     setEditingId(r._id);
   };
 
   const openView = (r: RateMaster) => {
-    if (!Array.isArray(branches) || branches.length === 0) return;
-    const branchRates = (branches as { _id: string }[]).map((b) => {
-      const existing = r.branchRates?.find(
-        (br) => (typeof br.branch === 'object' ? br.branch._id : br.branch) === b._id
-      );
-      return { branch: b._id, amount: existing?.amount ?? 0 };
-    });
-    const allSame = branchRates.length > 0 && branchRates.every((br) => br.amount === branchRates[0].amount);
-    setForm({
-      name: r.name,
-      description: r.description || '',
-      unit: r.unit || 'per piece',
-      sameForAll: allSame,
-      amountForAll: allSame && branchRates[0] ? branchRates[0].amount : 0,
-      branchRates,
-    });
+    openEdit(r);
     setModal('view');
-    setEditingId(r._id);
-  };
-
-  const handleSameForAllChange = (checked: boolean) => {
-    setForm((f) => ({
-      ...f,
-      sameForAll: checked,
-      ...(checked && f.branchRates.length > 0
-        ? { amountForAll: f.branchRates[0]?.amount ?? 0 }
-        : {}),
-    }));
-  };
-
-  const applyAmountToAll = () => {
-    const amt = form.amountForAll;
-    setForm((f) => ({
-      ...f,
-      branchRates: f.branchRates.map((br) => ({ ...br, amount: amt })),
-    }));
-  };
-
-  const updateBranchAmount = (branchId: string, amount: number) => {
-    setForm((f) => ({
-      ...f,
-      branchRates: f.branchRates.map((br) => (br.branch === branchId ? { ...br, amount } : br)),
-    }));
-  };
-
-  const getBranchRatesPayload = () => {
-    if (!Array.isArray(branches) || branches.length === 0) return [];
-    if (form.sameForAll) {
-      return (Array.isArray(branches) ? branches : []).map((b) => ({ branch: b._id, amount: form.amountForAll }));
-    }
-    return form.branchRates.filter((br) => br.amount >= 0);
   };
 
   const handleSave = async () => {
+    if (!form.branchId || !form.departmentId) {
+      toast.error(t('addBranchFirst'));
+      return;
+    }
+    if (!form.name?.trim() || !form.unit) {
+      toast.error(t('error'));
+      return;
+    }
     setSaving(true);
     try {
-      const branchRates = getBranchRatesPayload();
-      if (branchRates.length === 0 || branches.length === 0) {
-        toast.error(t('addBranchFirst'));
-        setSaving(false);
-        return;
-      }
-
       if (modal === 'create') {
         const res = await fetch('/api/rates', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.name, description: form.description, unit: form.unit, branchRates }),
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            unit: form.unit,
+            branchId: form.branchId,
+            departmentId: form.departmentId,
+            amount: form.amount,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || t('error'));
@@ -178,9 +168,17 @@ export default function RatesPage() {
         const res = await fetch(`/api/rates/${editingId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: form.name, description: form.description, unit: form.unit, branchRates }),
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            unit: form.unit,
+            branchId: form.branchId,
+            departmentId: form.departmentId,
+            amount: form.amount,
+          }),
         });
-        if (!res.ok) throw new Error((await res.json()).error);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || t('error'));
         toast.success(t('saveSuccess'));
         await mutateRates();
         setModal(null);
@@ -248,15 +246,22 @@ export default function RatesPage() {
   };
 
   const formatRate = (r: RateMaster) => {
-    const rates = r.branchRates || [];
-    if (rates.length === 0) return '-';
-    const amounts = rates.map((br) => br.amount);
-    const allSame = amounts.every((a) => a === amounts[0]);
-    if (allSame) return `₹${amounts[0]} ${r.unit}`;
-    return rates.map((br) => {
-      const branchName = typeof br.branch === 'object' ? (br.branch as Branch).name : '-';
-      return `${branchName}: ₹${br.amount}`;
-    }).join(' | ');
+    const bdr = r.branchDepartmentRates || [];
+    const br = r.branchRates || [];
+    if (bdr.length > 0) {
+      return bdr.map((e) => {
+        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
+        const deptName = typeof e.department === 'object' ? (e.department as { name: string }).name : '-';
+        return `${branchName} / ${deptName}: ₹${e.amount}`;
+      }).join(' | ');
+    }
+    if (br.length > 0) {
+      return br.map((e) => {
+        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
+        return `${branchName}: ₹${e.amount}`;
+      }).join(' | ');
+    }
+    return '-';
   };
 
   const filtered = (Array.isArray(rates) ? rates : []).filter((r) => {
@@ -380,7 +385,7 @@ export default function RatesPage() {
         footer={
           <div className="flex gap-3 justify-end">
             {modal !== 'view' && (
-              <button onClick={handleSave} disabled={saving || !form.name || !form.unit} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
+              <button onClick={handleSave} disabled={saving || !form.branchId || !form.departmentId || !form.name || !form.unit} className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition">
                 {saving ? '...' : t('save')}
               </button>
             )}
@@ -396,128 +401,105 @@ export default function RatesPage() {
         }
       >
         <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('rateName')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                <ValidatedInput
-                  type="text"
-                  value={form.name}
-                  onChange={(v) => setForm((f) => ({ ...f, name: v }))}
-                  fieldType="name"
-                  placeholderHint="e.g. Stitching jeans"
-                  readOnly={modal === 'view'}
-                  className="w-full px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('description')}</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  readOnly={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  placeholder="Optional detailed description"
-                  rows={2}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">{t('unit')} <span className="text-red-500" aria-hidden="true">*</span></label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')} <span className="text-red-500" aria-hidden="true">*</span></label>
+              {modal === 'view' ? (
+                <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.branchName || '–'}</p>
+              ) : (
                 <select
-                  value={form.unit}
-                  onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                  disabled={modal === 'view'}
-                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                  value={form.branchId}
+                  onChange={(e) => {
+                    const b = (branches as { _id: string; name: string }[]).find((x) => x._id === e.target.value);
+                    setForm((f) => ({ ...f, branchId: e.target.value, branchName: b?.name ?? '', departmentId: '', departmentName: '' }));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  required
                 >
-                  <option value="per piece">{t('perPiece')}</option>
-                  <option value="per meter">{t('perMeter')}</option>
-                  <option value="per kg">{t('perKg')}</option>
-                  <option value="per dozen">{t('perDozen')}</option>
-                    <option value="per unit">{t('perUnit')}</option>
+                  <option value="">{t('selectBranch')}...</option>
+                  {(Array.isArray(branches) ? branches : []).map((b) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
                 </select>
-              </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('department')} <span className="text-red-500" aria-hidden="true">*</span></label>
+              {modal === 'view' ? (
+                <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.departmentName || '–'}</p>
+              ) : (
+                <select
+                  value={form.departmentId}
+                  onChange={(e) => {
+                    const d = (departments as { _id: string; name: string }[]).find((x) => x._id === e.target.value);
+                    setForm((f) => ({ ...f, departmentId: e.target.value, departmentName: d?.name ?? '' }));
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  disabled={!form.branchId}
+                  required
+                >
+                  <option value="">{!form.branchId ? t('selectBranch') + ' first' : t('selectDepartment') + '...'}</option>
+                  {(Array.isArray(departments) ? departments : []).map((d) => (
+                    <option key={d._id} value={d._id}>{d.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
 
-              <div className="border-t border-slate-200 pt-4">
-                {(!Array.isArray(branches) || branches.length === 0) && (
-                  <p className="text-uff-accent text-sm mb-3">{t('addBranchFirst')}</p>
-                )}
-                {modal !== 'view' && (
-                  <label className="flex items-center gap-2 mb-3">
-                    <input
-                      type="checkbox"
-                      checked={form.sameForAll}
-                      onChange={(e) => handleSameForAllChange(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-medium text-slate-800">{t('sameForAllBranches')}</span>
-                  </label>
-                )}
-
-                {form.sameForAll ? (
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-slate-700 mb-1">{t('amount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
-                      <ValidatedInput
-                        type="text"
-                        inputMode="decimal"
-                        value={form.amountForAll ? String(form.amountForAll) : ''}
-                        onChange={(v) => setForm((f) => ({ ...f, amountForAll: parseFloat(v) || 0 }))}
-                        fieldType="number"
-                        placeholderHint="e.g. 10"
-                        readOnly={modal === 'view'}
-                        className="w-full px-3 py-2"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {modal !== 'view' && (
-                      <div className="flex flex-wrap items-center gap-2 p-2 bg-uff-surface rounded-lg">
-                        <span className="text-sm font-medium text-slate-800">{t('enterPerBranch')}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          id="apply-amount"
-                          className="w-20 px-2 py-1 border border-slate-300 rounded text-sm"
-                          placeholder="0"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const input = document.getElementById('apply-amount') as HTMLInputElement;
-                            const amt = parseFloat(input?.value || '0') || 0;
-                            if (amt >= 0) {
-                              setForm((f) => ({
-                                ...f,
-                                amountForAll: amt,
-                                branchRates: f.branchRates.map((br) => ({ ...br, amount: amt })),
-                              }));
-                            }
-                          }}
-                          className="text-sm text-uff-accent hover:text-uff-accent-hover font-medium"
-                        >
-                          {t('applyToAll')}
-                        </button>
-                      </div>
-                    )}
-                    {(Array.isArray(branches) ? branches : []).map((b) => (
-                      <div key={b._id} className="flex items-center gap-2">
-                        <span className="text-sm text-slate-600 w-32 truncate">{b.name}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={form.branchRates.find((br) => br.branch === b._id)?.amount ?? ''}
-                          onChange={(e) => updateBranchAmount(b._id, parseFloat(e.target.value) || 0)}
-                          readOnly={modal === 'view'}
-                          className={`flex-1 px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                          placeholder="0"
-                        />
-                        <span className="text-sm text-slate-700">₹</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('rateName')} <span className="text-red-500" aria-hidden="true">*</span></label>
+            <ValidatedInput
+              type="text"
+              value={form.name}
+              onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+              fieldType="name"
+              placeholderHint="e.g. Stitching jeans"
+              readOnly={modal === 'view'}
+              className="w-full px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('description')}</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              readOnly={modal === 'view'}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+              placeholder="Optional detailed description"
+              rows={2}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('unit')} <span className="text-red-500" aria-hidden="true">*</span></label>
+              <select
+                value={form.unit}
+                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                disabled={modal === 'view'}
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+              >
+                <option value="per piece">{t('perPiece')}</option>
+                <option value="per meter">{t('perMeter')}</option>
+                <option value="per kg">{t('perKg')}</option>
+                <option value="per dozen">{t('perDozen')}</option>
+                <option value="per unit">{t('perUnit')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('amount')} (₹) <span className="text-red-500" aria-hidden="true">*</span></label>
+              <ValidatedInput
+                type="text"
+                inputMode="decimal"
+                value={form.amount ? String(form.amount) : ''}
+                onChange={(v) => setForm((f) => ({ ...f, amount: parseFloat(v) || 0 }))}
+                fieldType="number"
+                placeholderHint="e.g. 10"
+                readOnly={modal === 'view'}
+                className="w-full px-3 py-2"
+              />
+            </div>
+          </div>
         </div>
       </Modal>
 

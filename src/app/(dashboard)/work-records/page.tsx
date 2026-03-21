@@ -136,7 +136,7 @@ export default function WorkRecordsPage() {
     setPage(1);
   }, [filterEmployee, filterBranch, filterDepartment, filterMonth]);
 
-  const { rates } = useRates(true, form.branchId || undefined);
+  const { rates } = useRates(true, form.branchId || undefined, form.departmentId || undefined);
   const { styleOrders: stylesForForm } = useStyleOrdersByBranchMonth(form.branchId || undefined, form.month || undefined, !!(form.branchId && form.month));
 
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
@@ -605,7 +605,7 @@ export default function WorkRecordsPage() {
                       value={form.departmentId}
                       onChange={(e) => {
                         const d = (Array.isArray(departments) ? departments : []).find((x: { _id: string; name: string }) => x._id === e.target.value);
-                        setForm((f) => ({ ...f, departmentId: e.target.value, departmentName: d?.name || '', employeeId: '', employeeName: '' }));
+                        setForm((f) => ({ ...f, departmentId: e.target.value, departmentName: d?.name || '', employeeId: '', employeeName: '', styleOrderId: '', styleOrderCode: '', workItems: {} }));
                       }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                       disabled={!form.branchId}

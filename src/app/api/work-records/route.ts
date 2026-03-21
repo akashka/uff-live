@@ -154,6 +154,9 @@ export async function POST(req: NextRequest) {
 
     const rateMasterIds = workItems.map((w: { rateMasterId: string }) => w.rateMasterId);
     const rateMasters = await RateMaster.find({ _id: { $in: rateMasterIds } }).lean();
+    const departmentId = (employee.department && typeof employee.department === 'object' && (employee.department as { _id?: unknown })._id)
+      ? String((employee.department as { _id: { toString: () => string } })._id)
+      : (employee.department ? String(employee.department) : null);
 
     const workItemsWithAmounts = [];
     let totalAmount = 0;
@@ -162,11 +165,21 @@ export async function POST(req: NextRequest) {
       const rateMaster = rateMasters.find((r: { _id: { toString: () => string } }) => r._id.toString() === item.rateMasterId);
       if (!rateMaster) continue;
 
-      const branchRate = (rateMaster as { branchRates: { branch: { toString?: () => string }; amount: number }[] }).branchRates?.find(
-        (br: { branch: { toString?: () => string }; amount: number }) =>
-          (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchId
-      );
-      const defaultRate = branchRate?.amount ?? 0;
+      let defaultRate = 0;
+      const bdr = (rateMaster as { branchDepartmentRates?: { branch: unknown; department: unknown; amount: number }[] }).branchDepartmentRates;
+      const br = (rateMaster as { branchRates?: { branch: unknown; amount: number }[] }).branchRates;
+      if (bdr?.length && departmentId) {
+        const match = bdr.find((e) => {
+          const bid = e.branch && typeof e.branch === 'object' && '_id' in e.branch ? String((e.branch as { _id: unknown })._id) : String(e.branch);
+          const did = e.department && typeof e.department === 'object' && '_id' in e.department ? String((e.department as { _id: unknown })._id) : String(e.department);
+          return bid === branchId && did === departmentId;
+        });
+        defaultRate = match?.amount ?? 0;
+      }
+      if (defaultRate === 0 && br?.length) {
+        const branchRate = br.find((b) => (typeof b.branch === 'object' ? (b.branch as { toString?: () => string })?.toString?.() : String(b.branch)) === branchId);
+        defaultRate = branchRate?.amount ?? 0;
+      }
       const ratePerUnit = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
       const quantity = Math.max(1, Number(item.quantity) || 1);
       const multiplier = Number(item.multiplier) || 1;

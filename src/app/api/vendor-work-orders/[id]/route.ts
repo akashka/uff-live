@@ -9,6 +9,7 @@ import WorkRecord from '@/lib/models/WorkRecord';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
+import { VENDOR_WORK_ITEMS } from '@/app/api/vendor-work-items/route';
 
 async function getAvailableQuantity(
   styleOrderId: string,
@@ -92,39 +93,67 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const monthStr = String(month || (existing as { month?: string }).month).slice(0, 7);
     const styleOrderIdFinal = styleOrderId ?? (existing.styleOrder as { toString?: () => string })?.toString?.();
 
-    let workItemsWithAmounts = (existing.workItems || []) as { rateMaster: unknown; rateName: string; unit: string; quantity: number; multiplier?: number; remarks?: string; ratePerUnit: number; amount: number }[];
+    type WorkItemEntry = { rateMaster?: unknown; workItemKey?: string; rateName: string; unit: string; quantity: number; multiplier?: number; remarks?: string; ratePerUnit: number; amount: number };
+    let workItemsWithAmounts = (existing.workItems || []) as WorkItemEntry[];
     let totalAmount = 0;
 
     if (Array.isArray(workItems) && workItems.length > 0) {
-      const rateMasterIds = workItems.map((w: { rateMasterId: string }) => w.rateMasterId);
-      const rateMasters = await RateMaster.find({ _id: { $in: rateMasterIds } }).lean();
+      const rateMasterIds = workItems
+        .filter((w: { rateMasterId?: string; workItemKey?: string }) => (w as { rateMasterId?: string }).rateMasterId)
+        .map((w: { rateMasterId: string }) => w.rateMasterId);
+      const rateMasters = rateMasterIds.length > 0 ? await RateMaster.find({ _id: { $in: rateMasterIds } }).lean() : [];
 
-      workItemsWithAmounts = [];
+      workItemsWithAmounts = [] as WorkItemEntry[];
       for (const item of workItems) {
-        const rateMaster = rateMasters.find((r: { _id: { toString: () => string } }) => r._id.toString() === item.rateMasterId);
-        if (!rateMaster) continue;
+        const workItemKey = (item as { workItemKey?: string }).workItemKey;
+        const isVendorWorkItem = !!workItemKey;
+        const quantity = Math.max(0, Number(item.quantity) || 0);
+        const multiplier = Number((item as { multiplier?: number }).multiplier) || 1;
+        const ratePerUnit = Number((item as { ratePerUnit?: number }).ratePerUnit) ?? 0;
 
-        const branchRate = (rateMaster as { branchRates: { branch: { toString?: () => string }; amount: number }[] }).branchRates?.find(
-          (br: { branch: { toString?: () => string }; amount: number }) =>
-            (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchIdFinal
-        );
-        const defaultRate = branchRate?.amount ?? 0;
-        const ratePerUnit = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
-        const quantity = Math.max(1, Number(item.quantity) || 1);
-        const multiplier = Number(item.multiplier) || 1;
+        if (quantity <= 0) continue;
 
-        const amount = roundAmount(quantity * multiplier * ratePerUnit);
-        workItemsWithAmounts.push({
-          rateMaster: item.rateMasterId,
-          rateName: (rateMaster as { name: string }).name,
-          unit: (rateMaster as { unit: string }).unit,
-          quantity,
-          multiplier,
-          remarks: item.remarks || '',
-          ratePerUnit,
-          amount,
-        });
-        totalAmount += amount;
+        if (isVendorWorkItem) {
+          const def = VENDOR_WORK_ITEMS.find((v) => v.id === workItemKey);
+          if (!def) continue;
+          const amount = roundAmount(quantity * multiplier * ratePerUnit);
+          workItemsWithAmounts.push({
+            rateMaster: null,
+            workItemKey,
+            rateName: def.name,
+            unit: def.unit,
+            quantity,
+            multiplier,
+            remarks: (item as { remarks?: string }).remarks || '',
+            ratePerUnit,
+            amount,
+          });
+          totalAmount += amount;
+        } else {
+          const rateMasterId = (item as { rateMasterId: string }).rateMasterId;
+          const rateMaster = rateMasters.find((r: { _id: { toString: () => string } }) => r._id.toString() === rateMasterId);
+          if (!rateMaster) continue;
+
+          const branchRate = (rateMaster as { branchRates: { branch: { toString?: () => string }; amount: number }[] }).branchRates?.find(
+            (br: { branch: { toString?: () => string }; amount: number }) =>
+              (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchIdFinal
+          );
+          const defaultRate = branchRate?.amount ?? 0;
+          const effectiveRate = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
+
+          const amount = roundAmount(quantity * multiplier * effectiveRate);
+          workItemsWithAmounts.push({
+            rateMaster: rateMasterId,
+            rateName: (rateMaster as { name: string }).name,
+            unit: (rateMaster as { unit: string }).unit,
+            quantity,
+            multiplier,
+            remarks: (item as { remarks?: string }).remarks || '',
+            ratePerUnit: effectiveRate,
+            amount,
+          });
+          totalAmount += amount;
+        }
       }
     } else {
       totalAmount = workItemsWithAmounts.reduce((s, wi) => s + (wi.amount || 0), 0);
