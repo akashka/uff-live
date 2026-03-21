@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { areBranchesAllowed, getUserBranchScope } from '@/lib/branchAccess';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 
@@ -19,6 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     await connectDB();
     const employee = await Employee.findById(id).populate('branches', 'name').populate('department', 'name').lean();
     if (!employee) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    if (scope.isRestricted) {
+      const employeeBranchIds = ((employee as { branches?: unknown[] }).branches || []).map((b) =>
+        b && typeof b === 'object' && '_id' in (b as Record<string, unknown>) ? String((b as { _id: unknown })._id) : String(b)
+      );
+      const canAccessEmployee = employeeBranchIds.some((bid) => scope.allowedBranchIds.includes(bid));
+      if (!canAccessEmployee) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     return NextResponse.json(employee);
   } catch (e) {
     console.error(e);
@@ -38,6 +47,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await connectDB();
     const employee = await Employee.findById(id);
     if (!employee) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    if (scope.isRestricted) {
+      const employeeBranchIds = ((employee.branches || []) as unknown[]).map((b) => String(b));
+      const canAccessEmployee = employeeBranchIds.some((bid) => scope.allowedBranchIds.includes(bid));
+      if (!canAccessEmployee) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Email, contactNumber, employeeId are immutable - ignore if sent (never update)
     // Only reject when values are actually being changed
@@ -68,7 +83,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.upiId !== undefined) employee.upiId = body.upiId;
     if (body.photo !== undefined) employee.photo = body.photo;
     if (body.employeeType !== undefined) employee.employeeType = body.employeeType;
-    if (body.branches !== undefined) employee.branches = body.branches;
+    if (body.branches !== undefined) {
+      const updatedBranchIds = Array.isArray(body.branches) ? body.branches.map((id: unknown) => String(id)) : [];
+      if (!areBranchesAllowed(scope, updatedBranchIds)) {
+        return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+      }
+      employee.branches = updatedBranchIds;
+    }
     if (body.department !== undefined) employee.department = body.department || undefined;
     if (body.pfOpted !== undefined) employee.pfOpted = body.pfOpted;
     if (body.monthlyPfAmount !== undefined) employee.monthlyPfAmount = body.monthlyPfAmount;

@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import StyleOrder from '@/lib/models/StyleOrder';
 import '@/lib/models/RateMaster'; // Register for populate('rateMasterItems')
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { areBranchesAllowed, getUserBranchScope } from '@/lib/branchAccess';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 
@@ -15,11 +16,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     await connectDB();
+    const scope = await getUserBranchScope(user);
     const doc = await StyleOrder.findById(id)
       .populate('branches', 'name _id')
       .populate('rateMasterItems', 'name unit _id')
       .lean();
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (scope.isRestricted) {
+      const docBranchIds = ((doc as { branches?: unknown[] }).branches || []).map((b) =>
+        b && typeof b === 'object' && '_id' in (b as Record<string, unknown>) ? String((b as { _id: unknown })._id) : String(b)
+      );
+      const canAccess = docBranchIds.some((bid) => scope.allowedBranchIds.includes(bid));
+      if (!canAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     return NextResponse.json(doc);
   } catch (e) {
     console.error(e);
@@ -37,8 +46,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
 
     await connectDB();
+    const scope = await getUserBranchScope(user);
     const doc = await StyleOrder.findById(id);
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (scope.isRestricted) {
+      const docBranchIds = ((doc.branches || []) as unknown[]).map((b) => String(b));
+      const canAccess = docBranchIds.some((bid) => scope.allowedBranchIds.includes(bid));
+      if (!canAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { styleCode, brand, colour: colourInput, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
 
@@ -71,7 +86,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       doc.markModified('colour');
     }
     if (Array.isArray(branchesInput) && branchesInput.length > 0) {
-      doc.branches = branchesInput.map((b: string) => new mongoose.Types.ObjectId(b));
+      const nextBranchIds = branchesInput.map((b: string) => String(b));
+      if (!areBranchesAllowed(scope, nextBranchIds)) {
+        return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+      }
+      doc.branches = nextBranchIds.map((b: string) => new mongoose.Types.ObjectId(b));
     }
     doc.rateMasterItems = [];
     if (isActive !== undefined) doc.isActive = isActive;
@@ -129,8 +148,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const { id } = await params;
     await connectDB();
+    const scope = await getUserBranchScope(user);
     const doc = await StyleOrder.findById(id).lean();
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (scope.isRestricted) {
+      const docBranchIds = ((doc as { branches?: unknown[] }).branches || []).map((b) => String(b));
+      const canAccess = docBranchIds.some((bid) => scope.allowedBranchIds.includes(bid));
+      if (!canAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const styleCode = (doc as { styleCode?: string }).styleCode || 'Unknown';
     await StyleOrder.findByIdAndDelete(id);
 

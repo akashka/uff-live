@@ -91,6 +91,19 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
   }, [record, mode]);
 
   useEffect(() => {
+    if (mode !== 'create' || form.branchId) return;
+    const branchList = Array.isArray(branches) ? branches : [];
+    if (branchList.length === 1) {
+      const onlyBranch = branchList[0] as { _id: string; name: string };
+      setForm((f) => ({
+        ...f,
+        branchId: onlyBranch._id,
+        branchName: onlyBranch.name,
+      }));
+    }
+  }, [mode, branches, form.branchId]);
+
+  useEffect(() => {
     if (!form.employeeId || !form.month || mode === 'create') return;
     const fetchUsed = async () => {
       try {

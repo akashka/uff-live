@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { canAccessBranch, getUserBranchScope } from '@/lib/branchAccess';
 import { roundAmount } from '@/lib/utils';
 
 function getWorkingDaysInMonth(monthStr: string): number {
@@ -38,6 +39,12 @@ export async function GET(
       .lean();
 
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    const recordBranchId =
+      record.branch && typeof record.branch === 'object' && '_id' in (record.branch as Record<string, unknown>)
+        ? String((record.branch as { _id: unknown })._id)
+        : String(record.branch ?? '');
+    if (!canAccessBranch(scope, recordBranchId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     return NextResponse.json(record);
   } catch (e) {
     console.error(e);
@@ -65,6 +72,10 @@ export async function PATCH(
     await connectDB();
     const existing = await FullTimeWorkRecord.findById(id).lean();
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    if (!canAccessBranch(scope, String((existing as { branch?: unknown }).branch ?? ''))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const monthStr = (existing as { month: string }).month;
     const employeeId = (existing as { employee: unknown }).employee?.toString?.() || String((existing as { employee: unknown }).employee);
@@ -125,6 +136,12 @@ export async function DELETE(
     }
 
     await connectDB();
+    const scope = await getUserBranchScope(user);
+    const existing = await FullTimeWorkRecord.findById(id).lean();
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (!canAccessBranch(scope, String((existing as { branch?: unknown }).branch ?? ''))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const deleted = await FullTimeWorkRecord.findByIdAndDelete(id);
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });

@@ -7,6 +7,7 @@ import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { canAccessBranch, getUserBranchScope } from '@/lib/branchAccess';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
@@ -69,6 +70,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    const recordBranchId =
+      record.branch && typeof record.branch === 'object' && '_id' in (record.branch as Record<string, unknown>)
+        ? String((record.branch as { _id: unknown })._id)
+        : String(record.branch ?? '');
+    if (!canAccessBranch(scope, recordBranchId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const emp = record.employee as { _id?: unknown } | undefined;
     const empId = emp && typeof emp === 'object' && '_id' in emp ? String(emp._id) : String(record.employee);
@@ -95,6 +102,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await connectDB();
     const record = await WorkRecord.findById(id);
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    if (!canAccessBranch(scope, String(record.branch))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { employeeId, branchId, month, styleOrderId, colour, workItems, notes, otHours, otAmount } = body;
 
@@ -111,7 +122,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
       record.employee = employeeId;
     }
-    if (branchId !== undefined) record.branch = branchId;
+    if (branchId !== undefined) {
+      if (!canAccessBranch(scope, String(branchId))) {
+        return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+      }
+      record.branch = branchId;
+    }
 
     if (workItems && Array.isArray(workItems) && workItems.length > 0) {
       const empId = employeeId || record.employee?.toString();
@@ -238,6 +254,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await connectDB();
     const record = await WorkRecord.findById(id).populate('employee', 'name').lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const scope = await getUserBranchScope(user);
+    if (!canAccessBranch(scope, String((record as { branch?: unknown }).branch ?? ''))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const empObj = record.employee as { _id?: unknown; name?: string } | undefined;
     const empId = empObj && typeof empObj === 'object' && '_id' in empObj ? String(empObj._id) : String(record.employee);
     const empName = empObj?.name || 'Employee';

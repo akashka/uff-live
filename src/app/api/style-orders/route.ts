@@ -5,6 +5,7 @@ import StyleOrder from '@/lib/models/StyleOrder';
 import Branch from '@/lib/models/Branch';
 import '@/lib/models/RateMaster'; // Register for populate('rateMasterItems')
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { applyMultiBranchScope, areBranchesAllowed, getUserBranchScope } from '@/lib/branchAccess';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 
@@ -19,10 +20,13 @@ export async function GET(req: NextRequest) {
     const includeInactive = searchParams.get('includeInactive') === 'true';
     const branchId = searchParams.get('branchId');
     const month = searchParams.get('month');
+    const scope = await getUserBranchScope(user);
 
     let filter: Record<string, unknown> = {};
     if (!includeInactive) filter.isActive = true;
-    if (branchId) filter.branches = branchId;
+    const scoped = applyMultiBranchScope(filter, 'branches', scope, branchId);
+    if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    filter = scoped.filter;
     if (month) filter.month = String(month).slice(0, 7);
 
     const list = await StyleOrder.find(filter)
@@ -57,11 +61,17 @@ export async function POST(req: NextRequest) {
       clientCostTotalAmount,
     } = body;
 
-    let branchIds = Array.isArray(branchesInput) ? branchesInput : (branchesInput ? [branchesInput] : []);
+    const scope = await getUserBranchScope(user);
+    let branchIds = Array.isArray(branchesInput) ? branchesInput.map((id: unknown) => String(id)) : (branchesInput ? [String(branchesInput)] : []);
     await connectDB();
     if (branchIds.length === 0) {
-      const allBranches = await Branch.find({ isActive: true }).select('_id').lean();
+      const allFilter: Record<string, unknown> = { isActive: true };
+      if (scope.isRestricted) allFilter._id = { $in: scope.allowedBranchIds };
+      const allBranches = await Branch.find(allFilter).select('_id').lean();
       branchIds = (allBranches || []).map((b) => String((b as { _id: unknown })._id));
+    }
+    if (!areBranchesAllowed(scope, branchIds)) {
+      return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
     }
     if (!styleCode || !brand || branchIds.length === 0) {
       return NextResponse.json({ error: 'Style code, brand required. Add at least one branch to the system.' }, { status: 400 });

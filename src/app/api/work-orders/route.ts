@@ -6,8 +6,14 @@ import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
 import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { applySingleBranchScope, getUserBranchScope } from '@/lib/branchAccess';
 
 export type WorkOrderType = 'contractor' | 'full_time' | 'vendor';
+
+function applyMultiBranchFilter(filter: Record<string, unknown>, scope: { isRestricted: boolean; allowedBranchIds: string[] }) {
+  if (!scope.isRestricted) return filter;
+  return { ...filter, branches: { $in: scope.allowedBranchIds } };
+}
 
 /** Unified work orders API - fetches contractor, full-time, and vendor work orders with type filter */
 export async function GET(req: NextRequest) {
@@ -30,6 +36,7 @@ export async function GET(req: NextRequest) {
     const branchId = searchParams.get('branchId');
     const departmentId = searchParams.get('departmentId');
     const month = searchParams.get('month');
+    const scope = await getUserBranchScope(user);
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get('limit') || '50', 10) || 50));
@@ -56,10 +63,14 @@ export async function GET(req: NextRequest) {
         wrFilter = { employee: user.employeeId };
       } else {
         if (employeeId) wrFilter = { ...wrFilter, employee: employeeId };
-        if (branchId) wrFilter = { ...wrFilter, branch: branchId };
+        const scoped = applySingleBranchScope(wrFilter, 'branch', scope, branchId);
+        if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        wrFilter = scoped.filter;
         if (monthStr) wrFilter = { ...wrFilter, month: monthStr };
         if (departmentId && !employeeId) {
-          const employeesInDept = await Employee.find({ department: departmentId }).select('_id').lean();
+          const empFilter: Record<string, unknown> = { department: departmentId };
+          const empScoped = applyMultiBranchFilter(empFilter, scope);
+          const employeesInDept = await Employee.find(empScoped).select('_id').lean();
           wrFilter = { ...wrFilter, employee: { $in: employeesInDept.map((e) => e._id) } };
         }
       }
@@ -98,10 +109,14 @@ export async function GET(req: NextRequest) {
     if ((!type || type === 'full_time') && canAccessAll) {
       let ftFilter: Record<string, unknown> = {};
       if (employeeId) ftFilter = { ...ftFilter, employee: employeeId };
-      if (branchId) ftFilter = { ...ftFilter, branch: branchId };
+      const scoped = applySingleBranchScope(ftFilter, 'branch', scope, branchId);
+      if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      ftFilter = scoped.filter;
       if (monthStr) ftFilter = { ...ftFilter, month: monthStr };
       if (departmentId && !employeeId) {
-        const employeesInDept = await Employee.find({ department: departmentId, employeeType: 'full_time' }).select('_id').lean();
+        const empFilter: Record<string, unknown> = { department: departmentId, employeeType: 'full_time' };
+        const empScoped = applyMultiBranchFilter(empFilter, scope);
+        const employeesInDept = await Employee.find(empScoped).select('_id').lean();
         ftFilter = { ...ftFilter, employee: { $in: employeesInDept.map((e) => e._id) } };
       }
 
@@ -136,7 +151,9 @@ export async function GET(req: NextRequest) {
     if ((!type || type === 'vendor') && canAccessAll) {
       let vwoFilter: Record<string, unknown> = {};
       if (vendorId) vwoFilter = { ...vwoFilter, vendor: vendorId };
-      if (branchId) vwoFilter = { ...vwoFilter, branch: branchId };
+      const scoped = applySingleBranchScope(vwoFilter, 'branch', scope, branchId);
+      if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      vwoFilter = scoped.filter;
       if (monthStr) vwoFilter = { ...vwoFilter, month: monthStr };
 
       const vendorOrders = await VendorWorkOrder.find(vwoFilter)

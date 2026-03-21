@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { areBranchesAllowed, getUserBranchScope } from '@/lib/branchAccess';
 import { generatePassword } from '@/lib/utils';
 import bcrypt from 'bcryptjs';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
@@ -12,7 +13,16 @@ import { logAudit } from '@/lib/audit';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string, employeeType?: string) {
+async function fetchEmployees(
+  includeInactive: boolean,
+  page: number,
+  limit: number,
+  search?: string,
+  departmentId?: string,
+  branchId?: string,
+  employeeType?: string,
+  allowedBranchIds?: string[]
+) {
   await connectDB();
   const filter: Record<string, unknown> = includeInactive ? {} : { isActive: true };
   if (search && search.trim()) {
@@ -26,7 +36,18 @@ async function fetchEmployees(includeInactive: boolean, page: number, limit: num
     ];
   }
   if (departmentId) filter.department = departmentId;
-  if (branchId) filter.branches = branchId;
+  if (Array.isArray(allowedBranchIds)) {
+    if (branchId) {
+      if (!allowedBranchIds.includes(branchId)) {
+        return { employees: [], total: 0, page, limit };
+      }
+      filter.branches = branchId;
+    } else {
+      filter.branches = { $in: allowedBranchIds };
+    }
+  } else if (branchId) {
+    filter.branches = branchId;
+  }
   if (employeeType && ['full_time', 'contractor'].includes(employeeType)) filter.employeeType = employeeType;
   const skip = (page - 1) * limit;
   const [employees, total] = await Promise.all([
@@ -36,10 +57,19 @@ async function fetchEmployees(includeInactive: boolean, page: number, limit: num
   return { employees, total, page, limit };
 }
 
-function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string, employeeType?: string) {
+function getCachedEmployees(
+  includeInactive: boolean,
+  page: number,
+  limit: number,
+  search?: string,
+  departmentId?: string,
+  branchId?: string,
+  employeeType?: string,
+  allowedBranchIds?: string[]
+) {
   return unstable_cache(
-    () => fetchEmployees(includeInactive, page, limit, search, departmentId, branchId, employeeType),
-    ['employees', String(includeInactive), String(page), String(limit), search ?? '', departmentId ?? '', branchId ?? '', employeeType ?? ''],
+    () => fetchEmployees(includeInactive, page, limit, search, departmentId, branchId, employeeType, allowedBranchIds),
+    ['employees', String(includeInactive), String(page), String(limit), search ?? '', departmentId ?? '', branchId ?? '', employeeType ?? '', `scope:${allowedBranchIds ? allowedBranchIds.join(',') : 'all'}`],
     { revalidate: 60, tags: ['employees'] }
   )();
 }
@@ -59,8 +89,21 @@ export async function GET(req: NextRequest) {
     const departmentId = searchParams.get('departmentId') || undefined;
     const branchId = searchParams.get('branchId') || undefined;
     const employeeType = searchParams.get('employeeType') || undefined;
+    const scope = await getUserBranchScope(user);
+    if (scope.isRestricted && branchId && !scope.allowedBranchIds.includes(branchId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    const result = await getCachedEmployees(includeInactive, page, limit, search, departmentId, branchId, employeeType);
+    const result = await getCachedEmployees(
+      includeInactive,
+      page,
+      limit,
+      search,
+      departmentId,
+      branchId,
+      employeeType,
+      scope.isRestricted ? scope.allowedBranchIds : undefined
+    );
     const { employees, total, page: p, limit: l } = result;
     const hasMore = limit < 10000 && p * l < total;
     return NextResponse.json({
@@ -129,6 +172,11 @@ export async function POST(req: NextRequest) {
     }
 
     await connectDB();
+    const scope = await getUserBranchScope(user);
+    const inputBranchIds = Array.isArray(branches) ? branches.map((id: unknown) => String(id)) : [];
+    if (!areBranchesAllowed(scope, inputBranchIds)) {
+      return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+    }
 
     const existingByEmail = await Employee.findOne({ email });
     if (existingByEmail) {
@@ -172,7 +220,7 @@ export async function POST(req: NextRequest) {
       accountNumber: accountNumber || '',
       upiId: upiId || '',
       employeeType: employeeType || 'full_time',
-      branches: branches || [],
+      branches: inputBranchIds,
       department: department || undefined,
       pfOpted: pfOpted ?? false,
       monthlyPfAmount: monthlyPfAmount || 0,

@@ -11,16 +11,20 @@ export async function GET() {
 
   let displayName: string | undefined;
   let photo: string | undefined;
+  let branchIds: string[] = [];
 
   let employeeType: 'contractor' | 'full_time' | undefined;
   if (user.employeeId) {
     try {
       await connectDB();
-      const emp = await Employee.findById(user.employeeId).select('name photo employeeType').lean();
+      const emp = await Employee.findById(user.employeeId).select('name photo employeeType branches').lean();
       if (emp) {
         displayName = emp.name;
         photo = emp.photo || undefined;
         employeeType = (emp as { employeeType?: string }).employeeType as 'contractor' | 'full_time' | undefined;
+        branchIds = (((emp as { branches?: unknown[] }).branches || []) as unknown[]).map((b) =>
+          b && typeof b === 'object' && '_id' in (b as Record<string, unknown>) ? String((b as { _id: unknown })._id) : String(b)
+        );
       }
     } catch {
       // ignore
@@ -36,6 +40,7 @@ export async function GET() {
       employeeType,
       displayName,
       photo,
+      branchIds,
     },
   });
 }

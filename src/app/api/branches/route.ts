@@ -3,6 +3,7 @@ import { unstable_cache, revalidateTag } from 'next/cache';
 import connectDB from '@/lib/db';
 import Branch from '@/lib/models/Branch';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { getUserBranchScope } from '@/lib/branchAccess';
 import { logAudit } from '@/lib/audit';
 
 async function fetchBranches(includeInactive: boolean) {
@@ -25,8 +26,12 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const includeInactive = searchParams.get('includeInactive') === 'true';
+    const scope = await getUserBranchScope(user);
     const branches = await getCachedBranches(includeInactive);
-    return NextResponse.json(branches);
+    const filtered = scope.isRestricted
+      ? (branches as { _id: unknown }[]).filter((b) => scope.allowedBranchIds.includes(String(b._id)))
+      : branches;
+    return NextResponse.json(filtered);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { applySingleBranchScope, canAccessBranch, getUserBranchScope } from '@/lib/branchAccess';
 import { roundAmount } from '@/lib/utils';
 
 function getWorkingDaysInMonth(monthStr: string): number {
@@ -28,10 +29,13 @@ export async function GET(req: NextRequest) {
     const employeeId = searchParams.get('employeeId');
     const branchId = searchParams.get('branchId');
     const month = searchParams.get('month');
+    const scope = await getUserBranchScope(user);
 
     const filter: Record<string, unknown> = {};
     if (employeeId) filter.employee = employeeId;
-    if (branchId) filter.branch = branchId;
+    const scoped = applySingleBranchScope(filter, 'branch', scope, branchId);
+    if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    Object.assign(filter, scoped.filter);
     if (month) filter.month = String(month).slice(0, 7);
 
     const records = await FullTimeWorkRecord.find(filter)
@@ -66,6 +70,10 @@ export async function POST(req: NextRequest) {
     const otH = Math.max(0, Number(otHours) || 0);
 
     await connectDB();
+    const scope = await getUserBranchScope(user);
+    if (!canAccessBranch(scope, branchId)) {
+      return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+    }
 
     const employee = await Employee.findById(employeeId).lean();
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });

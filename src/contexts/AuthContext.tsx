@@ -11,6 +11,7 @@ interface AuthUser {
   employeeType?: 'contractor' | 'full_time';
   displayName?: string;
   photo?: string;
+  branchIds?: string[];
 }
 
 interface AuthContextType {

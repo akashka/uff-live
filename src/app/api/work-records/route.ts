@@ -7,6 +7,7 @@ import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { applySingleBranchScope, canAccessBranch, getUserBranchScope } from '@/lib/branchAccess';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     const month = searchParams.get('month');
 
     let filter: Record<string, unknown> = {};
+    const scope = await getUserBranchScope(user);
 
     if (employeeId) {
       if (hasRole(user, ['admin', 'finance', 'accountancy', 'hr'])) {
@@ -41,7 +43,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (branchId) filter = { ...filter, branch: branchId };
+    const scoped = applySingleBranchScope(filter, 'branch', scope, branchId);
+    if (scoped.forbidden) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    filter = scoped.filter;
     if (month) filter = { ...filter, month: String(month).slice(0, 7) };
 
     if (departmentId && hasRole(user, ['admin', 'finance', 'accountancy', 'hr']) && !employeeId && !user.employeeId) {
@@ -140,6 +144,10 @@ export async function POST(req: NextRequest) {
     const monthStr = String(month).slice(0, 7);
 
     await connectDB();
+    const scope = await getUserBranchScope(user);
+    if (!canAccessBranch(scope, branchId)) {
+      return NextResponse.json({ error: 'Forbidden: branch access denied' }, { status: 403 });
+    }
 
     const employee = await Employee.findById(employeeId).lean();
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });

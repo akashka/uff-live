@@ -185,6 +185,10 @@ export default function EmployeesPage() {
 
   const openCreate = () => {
     setPhotoFile(null);
+    const defaultBranchIds =
+      Array.isArray(branches) && branches.length === 1
+        ? [String((branches[0] as Branch)._id)]
+        : [];
     setForm({
       employeeId: '',
       name: '',
@@ -205,7 +209,7 @@ export default function EmployeesPage() {
       accountNumber: '',
       upiId: '',
       employeeType: 'full_time',
-      branches: [],
+      branches: defaultBranchIds,
       department: '',
       monthlySalary: 0,
       dailySalary: 0,
@@ -504,6 +508,7 @@ export default function EmployeesPage() {
               {modal === 'view' ? t('close') : t('cancel')}
             </button>
           </div>
+        </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-1">
