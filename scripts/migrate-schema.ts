@@ -47,7 +47,7 @@ async function migrate() {
   const employees = await Employee.find().lean();
   for (const emp of employees) {
     const updates: Record<string, unknown> = {};
-    const empObj = emp as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+    const empObj = emp as unknown as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
 
     // Migrate salaryBreakup.other → otherDeductions
     const breakup = empObj.salaryBreakup as { pf?: number; esi?: number; other?: number } | undefined;
@@ -96,7 +96,7 @@ async function migrate() {
   const payments = await Payment.find().lean();
   for (const p of payments) {
     const updates: Record<string, unknown> = {};
-    const pObj = p as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+    const pObj = p as unknown as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
 
     if (pObj.otherDeducted == null) {
       updates.otherDeducted = 0;
