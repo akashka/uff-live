@@ -181,15 +181,15 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const hasPayments = canAccessPayments || isEmployee;
 
-  const canAccessMaster = canAccessBranches || canAccessRates;
+  const canAccessMaster = canAccessBranches || canAccessRates || canAccessStyleOrders;
   const masterNavItem = canAccessMaster
     ? {
         label: t('master'),
         icon: <MasterIcon />,
         children: [
           ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
-          ...(canAccessBranches ? [{ href: '/branches?tab=departments', label: t('department') }] : []),
           ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
+          ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders') }] : []),
         ].filter((c) => c.href && c.label) as { href: string; label: string }[],
       }
     : null;
@@ -234,7 +234,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     ...(canAccessEmployees ? [{ href: '/employees', label: t('employees'), icon: <EmployeesIcon /> }] : []),
     ...(canAccessUsers ? [{ href: '/users', label: t('users'), icon: <UsersIcon /> }] : []),
     ...(canAccessVendors ? [{ href: '/vendors', label: t('vendors'), icon: <VendorsIcon /> }] : []),
-    ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders'), icon: <StyleOrderIcon /> }] : []),
     ...(workRecordsNavItem ? [workRecordsNavItem] : []),
     ...(paymentsNavItem ? [paymentsNavItem] : []),
     ...(canAccessReports ? [{ href: '/reports', label: t('reports'), icon: <ReportsIcon /> }] : []),
@@ -258,7 +257,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 const isActive =
                   pathname === childPath &&
                   (Object.keys(childQuery).length === 0
-                    ? !searchParams?.get('tab') || searchParams.get('tab') !== 'departments'
+                    ? true
                     : searchParams && Object.entries(childQuery).every(([k, v]) => searchParams.get(k) === v));
                 return (
                   <Link

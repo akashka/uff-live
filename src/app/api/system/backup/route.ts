@@ -3,27 +3,41 @@ import connectDB from '@/lib/db';
 import mongoose from 'mongoose';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import Branch from '@/lib/models/Branch';
+import Department from '@/lib/models/Department';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
 import StyleOrder from '@/lib/models/StyleOrder';
 import RateMaster from '@/lib/models/RateMaster';
+import Vendor from '@/lib/models/Vendor';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
+import VendorPayment from '@/lib/models/VendorPayment';
 import Notification from '@/lib/models/Notification';
 import AuditLog from '@/lib/models/AuditLog';
 import SystemConfig from '@/lib/models/SystemConfig';
+import SalaryPayment from '@/lib/models/SalaryPayment';
+import PaymentHistory from '@/lib/models/PaymentHistory';
+import WorkMaster from '@/lib/models/WorkMaster';
 
 const COLLECTIONS: { name: string; model: mongoose.Model<mongoose.Document> }[] = [
   { name: 'branches', model: Branch },
+  { name: 'departments', model: Department },
   { name: 'employees', model: Employee },
   { name: 'users', model: User },
   { name: 'payments', model: Payment },
   { name: 'workrecords', model: WorkRecord },
   { name: 'styleorders', model: StyleOrder },
   { name: 'ratemasters', model: RateMaster },
+  { name: 'vendors', model: Vendor },
+  { name: 'vendorworkorders', model: VendorWorkOrder },
+  { name: 'vendorpayments', model: VendorPayment },
   { name: 'notifications', model: Notification },
   { name: 'auditlogs', model: AuditLog },
   { name: 'systemconfigs', model: SystemConfig },
+  { name: 'salarypayments', model: SalaryPayment },
+  { name: 'paymenthistories', model: PaymentHistory },
+  { name: 'workmasters', model: WorkMaster },
 ];
 
 /** POST - Create a full backup. Admin only. */

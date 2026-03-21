@@ -3,6 +3,7 @@ export type Locale = 'en' | 'kn' | 'hi';
 export const translations: Record<Locale, Record<string, string>> = {
   en: {
     login: 'Login',
+    loginSuccess: 'Logged in successfully',
     logout: 'Logout',
     email: 'Email',
     password: 'Password',
@@ -757,6 +758,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   },
   hi: {
     login: 'लॉगिन',
+    loginSuccess: 'सफलतापूर्वक लॉग इन हुआ',
     logout: 'लॉग आउट',
     email: 'ईमेल',
     password: 'पासवर्ड',

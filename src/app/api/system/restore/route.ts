@@ -3,27 +3,41 @@ import connectDB from '@/lib/db';
 import mongoose from 'mongoose';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import Branch from '@/lib/models/Branch';
+import Department from '@/lib/models/Department';
 import Employee from '@/lib/models/Employee';
 import User from '@/lib/models/User';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
 import StyleOrder from '@/lib/models/StyleOrder';
 import RateMaster from '@/lib/models/RateMaster';
+import Vendor from '@/lib/models/Vendor';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
+import VendorPayment from '@/lib/models/VendorPayment';
 import Notification from '@/lib/models/Notification';
 import AuditLog from '@/lib/models/AuditLog';
 import SystemConfig from '@/lib/models/SystemConfig';
+import SalaryPayment from '@/lib/models/SalaryPayment';
+import PaymentHistory from '@/lib/models/PaymentHistory';
+import WorkMaster from '@/lib/models/WorkMaster';
 
 const COLLECTION_MAP: Record<string, mongoose.Model<mongoose.Document>> = {
   branches: Branch,
+  departments: Department,
   employees: Employee,
   users: User,
   payments: Payment,
   workrecords: WorkRecord,
   styleorders: StyleOrder,
   ratemasters: RateMaster,
+  vendors: Vendor,
+  vendorworkorders: VendorWorkOrder,
+  vendorpayments: VendorPayment,
   notifications: Notification,
   auditlogs: AuditLog,
   systemconfigs: SystemConfig,
+  salarypayments: SalaryPayment,
+  paymenthistories: PaymentHistory,
+  workmasters: WorkMaster,
 };
 
 /** POST - Restore from backup. Admin only. DESTRUCTIVE - replaces all data. */

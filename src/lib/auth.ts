@@ -2,7 +2,13 @@ import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import type { UserRole } from '@/lib/models/User';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!secret || secret.trim() === '')) {
+    throw new Error('JWT_SECRET is required in production. Set it in your environment variables.');
+  }
+  return secret?.trim() || 'your-secret-key-change-in-production';
+})();
 
 export interface JWTPayload {
   userId: string;

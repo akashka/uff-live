@@ -30,8 +30,6 @@ export function middleware(request: NextRequest) {
 
   // For page requests (dashboard, etc.), redirect to maintenance page
   return NextResponse.redirect(new URL('/maintenance', request.url));
-
-  return NextResponse.next();
 }
 
 export const config = {

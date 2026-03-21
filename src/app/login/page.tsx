@@ -29,7 +29,7 @@ function LoginContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('invalidCredentials'));
-      toast.success(t('login'));
+      toast.success(t('loginSuccess'));
       router.push('/');
       router.refresh();
     } catch (err) {
