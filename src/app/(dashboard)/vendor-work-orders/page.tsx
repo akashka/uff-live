@@ -54,7 +54,8 @@ interface VendorWorkOrder {
   vendor: { name: string };
   branch: { name: string };
   month: string;
-  styleOrder?: { styleCode: string } | null;
+  styleOrder?: { styleCode: string; brand?: string } | null;
+  colour?: string;
   workItems: WorkItem[];
   extraAmount?: number;
   reasons?: string;
@@ -100,6 +101,7 @@ export default function VendorWorkOrdersPage() {
     month: '',
     styleOrderId: '',
     styleOrderCode: '',
+    colour: '',
     workItems: {} as Record<string, { quantity: number; defaultQuantity: number; ratePerUnit: number; defaultRatePerUnit: number; remarks: string }>,
     extraAmount: 0,
     reasons: '',
@@ -107,6 +109,7 @@ export default function VendorWorkOrdersPage() {
 
   const { items: vendorWorkItems } = useVendorWorkItems();
   const { styleOrders: stylesForForm } = useStyleOrdersByBranchMonth(form.branchId || undefined, form.month || undefined, !!(form.branchId && form.month));
+  const selectedStyle = stylesForForm?.find((s: { _id: string }) => s._id === form.styleOrderId) as { _id: string; colours?: string[] } | undefined;
 
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -128,6 +131,7 @@ export default function VendorWorkOrdersPage() {
       month: getCurrentMonth(),
       styleOrderId: '',
       styleOrderCode: '',
+      colour: '',
       workItems: {},
       extraAmount: 0,
       reasons: '',
@@ -140,6 +144,7 @@ export default function VendorWorkOrdersPage() {
     const ven = r.vendor as { _id?: string; name?: string };
     const br = r.branch as { _id?: string; name?: string };
     const style = r.styleOrder as { _id?: string; styleCode?: string } | undefined;
+    const recColour = (r as { colour?: string }).colour || '';
     setForm({
       vendorId: ven?._id || String(r.vendor) || '',
       vendorName: typeof ven === 'object' && ven?.name ? ven.name : '',
@@ -148,6 +153,7 @@ export default function VendorWorkOrdersPage() {
       month: (r as { month?: string }).month || '',
       styleOrderId: style?._id || '',
       styleOrderCode: (style as { brand?: string })?.brand ? `${(style as { styleCode?: string })?.styleCode || ''} - ${(style as { brand?: string })?.brand}` : style?.styleCode || '',
+      colour: recColour,
       workItems: (() => {
         const rec: Record<string, { quantity: number; defaultQuantity: number; ratePerUnit: number; defaultRatePerUnit: number; remarks: string }> = {};
         for (const wi of r.workItems || []) {
@@ -175,7 +181,7 @@ export default function VendorWorkOrdersPage() {
     const brs = Array.isArray(branches) ? branches : [];
     if (brs.length === 1 && !form.branchId) {
       const b = brs[0];
-      setForm((f) => ({ ...f, branchId: b._id, branchName: b.name, vendorId: '', vendorName: '', styleOrderId: '', styleOrderCode: '', workItems: {} }));
+      setForm((f) => ({ ...f, branchId: b._id, branchName: b.name, vendorId: '', vendorName: '', styleOrderId: '', styleOrderCode: '', colour: '', workItems: {} }));
     }
   }, [modal, branches, form.branchId]);
 
@@ -193,7 +199,7 @@ export default function VendorWorkOrdersPage() {
     if (styles.length === 1 && !form.styleOrderId) {
       const s = styles[0];
       const display = (s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || '';
-      setForm((f) => ({ ...f, styleOrderId: s._id, styleOrderCode: display, workItems: {} }));
+      setForm((f) => ({ ...f, styleOrderId: s._id, styleOrderCode: display, colour: '', workItems: {} }));
     }
   }, [modal, form.branchId, form.month, form.styleOrderId, stylesForForm]);
 
@@ -295,6 +301,7 @@ export default function VendorWorkOrdersPage() {
           branchId: form.branchId,
           month: form.month,
           styleOrderId: form.styleOrderId,
+          colour: form.colour || undefined,
           workItems: workItemsArray,
           extraAmount: form.extraAmount ?? 0,
           reasons: form.reasons ?? '',
@@ -452,7 +459,9 @@ export default function VendorWorkOrdersPage() {
                         <td className="px-4 py-3 text-slate-700">
                           {(() => {
                             const so = r.styleOrder as { styleCode?: string; brand?: string } | undefined;
-                            return so ? (so.brand ? `${so.styleCode || ''} - ${so.brand}` : so.styleCode || '') || '–' : '–';
+                            const styleStr = so ? (so.brand ? `${so.styleCode || ''} - ${so.brand}` : so.styleCode || '') || '–' : '–';
+                            const col = (r as { colour?: string }).colour;
+                            return col ? `${styleStr} (${col})` : styleStr;
                           })()}
                         </td>
                         <td className="px-4 py-3 text-right font-medium">₹{formatAmount(r.totalAmount)}</td>
@@ -493,7 +502,12 @@ export default function VendorWorkOrdersPage() {
               <div key={r._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{(r.vendor as { name?: string })?.name}</h3>
                 <p className="text-sm text-slate-600">{(r.branch as { name?: string })?.name}</p>
-                <p className="text-sm text-slate-600">{formatMonth((r as { month?: string }).month)} • {(r.styleOrder as { styleCode?: string })?.styleCode || '–'}</p>
+                <p className="text-sm text-slate-600">{formatMonth((r as { month?: string }).month)} • {(() => {
+                  const so = r.styleOrder as { styleCode?: string; brand?: string } | undefined;
+                  const styleStr = so ? (so.brand ? `${so.styleCode || ''} - ${so.brand}` : so.styleCode || '') || '–' : '–';
+                  const col = (r as { colour?: string }).colour;
+                  return col ? `${styleStr} (${col})` : styleStr;
+                })()}</p>
                 <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(r.totalAmount)}</p>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <ActionButtons
@@ -582,7 +596,7 @@ export default function VendorWorkOrdersPage() {
                   value={form.branchId}
                   onChange={(e) => {
                     const b = (Array.isArray(branches) ? branches : []).find((x: { _id: string; name: string }) => x._id === e.target.value);
-                    setForm((f) => ({ ...f, branchId: e.target.value, branchName: b?.name || '', styleOrderId: '', styleOrderCode: '', workItems: {} }));
+                    setForm((f) => ({ ...f, branchId: e.target.value, branchName: b?.name || '', styleOrderId: '', styleOrderCode: '', colour: '', workItems: {} }));
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   required
@@ -615,9 +629,9 @@ export default function VendorWorkOrdersPage() {
                 <select
                   value={form.styleOrderId}
                   onChange={(e) => {
-                    const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string }) => x._id === e.target.value);
+                    const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string; colours?: string[] }) => x._id === e.target.value);
                     const display = s ? ((s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || '') : '';
-                    setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, workItems: {} }));
+                    setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: '', workItems: {} }));
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   disabled={!form.branchId || !form.month}
@@ -631,6 +645,25 @@ export default function VendorWorkOrdersPage() {
                 </select>
               )}
             </div>
+                {selectedStyle && Array.isArray(selectedStyle.colours) && selectedStyle.colours.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('colours')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
+                    {modal === 'view' ? (
+                      <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.colour || '–'}</p>
+                    ) : (
+                      <select
+                        value={form.colour}
+                        onChange={(e) => setForm((f) => ({ ...f, colour: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                      >
+                        <option value="">–</option>
+                        {selectedStyle.colours.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
           </div>
 
           <div>

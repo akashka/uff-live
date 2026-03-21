@@ -65,7 +65,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const record = await VendorWorkOrder.findById(id)
       .populate('vendor', 'name vendorId serviceType _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(record);
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const body = await req.json();
-    const { branchId, month, styleOrderId, workItems, extraAmount, reasons } = body;
+    const { branchId, month, styleOrderId, colour, workItems, extraAmount, reasons } = body;
 
     await connectDB();
     const existing = await VendorWorkOrder.findById(id).lean();
@@ -177,7 +177,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     )
       .populate('vendor', 'name vendorId serviceType _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
 
     logAudit({

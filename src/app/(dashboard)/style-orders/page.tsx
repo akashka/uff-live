@@ -24,6 +24,7 @@ interface StyleOrder {
   _id: string;
   styleCode: string;
   brand: string;
+  colours?: string[];
   details?: string;
   branches: (Branch | string)[];
   month: string;
@@ -49,9 +50,11 @@ export default function StyleOrdersPage() {
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
+  const [colourInput, setColourInput] = useState('');
   const [form, setForm] = useState({
-    styleCode: '',
     brand: '',
+    styleCode: '',
+    colours: [] as string[],
     details: '',
     branchIds: [] as string[],
     month: '',
@@ -72,9 +75,11 @@ export default function StyleOrdersPage() {
   const openCreate = () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    setColourInput('');
     setForm({
-      styleCode: '',
       brand: '',
+      styleCode: '',
+      colours: [],
       details: '',
       branchIds: [], // Create defaults to all branches in backend
       month: currentMonth,
@@ -89,8 +94,9 @@ export default function StyleOrdersPage() {
   const openEdit = (s: StyleOrder) => {
     const branchIds = (s.branches || []).map((b) => (typeof b === 'object' && b._id ? b._id : String(b)));
     setForm({
-      styleCode: s.styleCode,
       brand: s.brand || '',
+      styleCode: s.styleCode,
+      colours: Array.isArray(s.colours) ? [...s.colours] : [],
       details: s.details || '',
       branchIds,
       month: s.month || '',
@@ -105,6 +111,17 @@ export default function StyleOrdersPage() {
   const openView = (s: StyleOrder) => {
     openEdit(s);
     setModal('view');
+  };
+
+  const addColour = () => {
+    const c = colourInput.trim();
+    if (c && !(form.colours || []).includes(c)) {
+      setForm((f) => ({ ...f, colours: [...(f.colours || []), c] }));
+      setColourInput('');
+    }
+  };
+  const removeColour = (i: number) => {
+    setForm((f) => ({ ...f, colours: (f.colours || []).filter((_, idx) => idx !== i) }));
   };
 
   const formatCodeInput = (v: string) => {
@@ -144,8 +161,9 @@ export default function StyleOrdersPage() {
       const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const monthVal = form.month && String(form.month).length >= 7 ? String(form.month).slice(0, 7) : defaultMonth;
       const payload = {
-        styleCode: codeStr,
         brand: String(form.brand || '').trim(),
+        styleCode: codeStr,
+        colours: (form.colours || []).filter((c) => c.trim()),
         details: form.details || '',
         branches: modal === 'create' ? [] : form.branchIds, // Create: backend maps to all branches
         month: monthVal,
@@ -297,13 +315,14 @@ export default function StyleOrdersPage() {
               <tbody className="divide-y divide-slate-200">
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                   </tr>
                 ) : (
                   sorted.map((s) => (
                     <tr key={s._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
                       <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">{Array.isArray(s.colours) && s.colours.length > 0 ? s.colours.join(', ') : '–'}</td>
                       <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{s.details || '–'}</td>
                       <td className="px-4 py-3 text-slate-700">{getBranchNames(s)}</td>
                       <td className="px-4 py-3">
@@ -395,6 +414,17 @@ export default function StyleOrdersPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">{t('brand')} <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={form.brand}
+                onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                readOnly={modal === 'view'}
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50' : ''}`}
+                placeholder="e.g. Montecarlo, Puma"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-slate-800 mb-1">{t('styleOrderCode')} <span className="text-red-500">*</span></label>
               <ValidatedInput
                 type="text"
@@ -409,17 +439,67 @@ export default function StyleOrdersPage() {
               />
               <p className="text-xs text-slate-500 mt-0.5">{t('styleCode4DigitHint')}</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1">{t('brand')} <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                value={form.brand}
-                onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-                readOnly={modal === 'view'}
-                className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50' : ''}`}
-                placeholder="e.g. Montecarlo, Puma"
-              />
-            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('colours')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
+            <p className="text-xs text-slate-500 mb-2">Add colours for this style/order. Leave empty if not applicable.</p>
+            {modal === 'view' ? (
+              <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg min-h-[40px]">
+                {(form.colours || []).length === 0 ? (
+                  <span className="text-slate-500">–</span>
+                ) : (
+                  (form.colours || []).map((c, i) => (
+                    <span key={i} className="px-2 py-1 bg-slate-200 rounded text-sm text-slate-800">{c}</span>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={colourInput}
+                    onChange={(e) => setColourInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addColour();
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg"
+                    placeholder="e.g. Red, Navy, White"
+                  />
+                  <button
+                    type="button"
+                    onClick={addColour}
+                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium"
+                  >
+                    {t('add')}
+                  </button>
+                </div>
+                {(form.colours || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {(form.colours || []).map((c, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-uff-surface rounded text-sm text-slate-800"
+                      >
+                        {c}
+                        <button
+                          type="button"
+                          onClick={() => removeColour(i)}
+                          className="text-slate-500 hover:text-red-600"
+                          aria-label="Remove"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

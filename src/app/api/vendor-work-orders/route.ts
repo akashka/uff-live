@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       VendorWorkOrder.find(filter)
         .populate('vendor', 'name vendorId serviceType _id')
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand _id')
+        .populate('styleOrder', 'styleCode brand colours _id')
         .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { vendorId, branchId, month, styleOrderId, workItems, extraAmount, reasons } = body;
+    const { vendorId, branchId, month, styleOrderId, colour, workItems, extraAmount, reasons } = body;
 
     if (!vendorId || !branchId || !month || !styleOrderId || !Array.isArray(workItems)) {
       return NextResponse.json({ error: 'Vendor, branch, month, style/order and work items required' }, { status: 400 });
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
     const populated = await VendorWorkOrder.findById(record._id)
       .populate('vendor', 'name vendorId serviceType _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
 
     const vendorName = (populated?.vendor as { name?: string })?.name || 'Vendor';

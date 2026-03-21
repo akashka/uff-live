@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       WorkRecord.find(filter)
         .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand _id')
+        .populate('styleOrder', 'styleCode brand colours _id')
         .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { employeeId, branchId, month, styleOrderId, workItems, notes, otHours, otAmount } = body;
+    const { employeeId, branchId, month, styleOrderId, colour, workItems, notes, otHours, otAmount } = body;
 
     if (!employeeId || !branchId || !month || !Array.isArray(workItems)) {
       return NextResponse.json({ error: 'Employee, branch, month and work items required' }, { status: 400 });
@@ -210,6 +210,7 @@ export async function POST(req: NextRequest) {
       branch: branchId,
       month: monthStr,
       styleOrder: styleOrderId,
+      colour: colour ? String(colour).trim() : undefined,
       workItems: workItemsWithAmounts,
       otHours: Number(otHours) || 0,
       otAmount: otAmt,
@@ -220,7 +221,7 @@ export async function POST(req: NextRequest) {
     const populated = await WorkRecord.findById(record._id)
       .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
 
     const empName = (populated?.employee as { name?: string })?.name || 'Employee';

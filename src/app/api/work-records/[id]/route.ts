@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const record = await WorkRecord.findById(id)
       .populate('employee', 'name _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -81,7 +81,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const record = await WorkRecord.findById(id);
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { employeeId, branchId, month, styleOrderId, workItems, notes, otHours, otAmount } = body;
+    const { employeeId, branchId, month, styleOrderId, colour, workItems, notes, otHours, otAmount } = body;
 
     if (month !== undefined) record.month = String(month).slice(0, 7);
     if (notes !== undefined) record.notes = notes;
@@ -166,7 +166,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await WorkRecord.findById(id)
       .populate('employee', 'name')
       .populate('branch', 'name')
-      .populate('styleOrder', 'styleCode brand _id')
+      .populate('styleOrder', 'styleCode brand colours _id')
       .lean();
 
     const empId = String(record.employee);

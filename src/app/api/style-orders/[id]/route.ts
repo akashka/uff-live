@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const doc = await StyleOrder.findById(id);
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { styleCode, brand, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
+    const { styleCode, brand, colours: coloursInput, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
 
     const newCode = styleCode !== undefined ? String(styleCode).trim() : doc.styleCode;
     const newBrand = brand !== undefined ? String(brand).trim() : doc.brand;
@@ -64,6 +64,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
     if (details !== undefined) doc.details = details;
+    if (coloursInput !== undefined) {
+      doc.colours = Array.isArray(coloursInput)
+        ? coloursInput.map((c: unknown) => String(c).trim()).filter(Boolean)
+        : [];
+      doc.markModified('colours');
+    }
     if (Array.isArray(branchesInput) && branchesInput.length > 0) {
       doc.branches = branchesInput.map((b: string) => new mongoose.Types.ObjectId(b));
     }

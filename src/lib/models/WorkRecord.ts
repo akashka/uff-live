@@ -17,6 +17,7 @@ export interface IWorkRecord extends Document {
   branch: mongoose.Types.ObjectId;
   month: string; // YYYY-MM
   styleOrder?: mongoose.Types.ObjectId;
+  colour?: string; // Optional - from style order colours when selected
   workItems: IWorkItem[];
   otHours?: number;
   otAmount?: number;
@@ -46,6 +47,7 @@ const WorkRecordSchema = new Schema<IWorkRecord>(
     branch: { type: Schema.Types.ObjectId, ref: 'Branch', required: true },
     month: { type: String, required: true }, // YYYY-MM
     styleOrder: { type: Schema.Types.ObjectId, ref: 'StyleOrder', default: null },
+    colour: { type: String, default: '' },
     workItems: [WorkItemSchema],
     otHours: { type: Number, default: 0, min: 0 },
     otAmount: { type: Number, default: 0, min: 0 },

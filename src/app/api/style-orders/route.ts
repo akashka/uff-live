@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     const {
       styleCode,
       brand,
+      colours: coloursInput,
       details,
       branches: branchesInput,
       month,
@@ -89,9 +90,13 @@ export async function POST(req: NextRequest) {
     const totalCostRaw = Math.max(0, Number(clientCostTotalAmount) || 0);
     const totalCost = totalCostRaw > 0 ? totalCostRaw : (qty > 0 && perPiece > 0 ? qty * perPiece : 0);
 
+    const coloursArr = Array.isArray(coloursInput)
+      ? coloursInput.map((c: unknown) => String(c).trim()).filter(Boolean)
+      : [];
     const doc = await StyleOrder.create({
       styleCode: codeStr,
       brand: brandStr,
+      colours: coloursArr,
       details: details || '',
       branches: branchIds.map((id: string) => new mongoose.Types.ObjectId(id)),
       rateMasterItems: [],

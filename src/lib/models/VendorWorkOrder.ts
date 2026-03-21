@@ -19,6 +19,7 @@ export interface IVendorWorkOrder extends Document {
   branch: mongoose.Types.ObjectId;
   month: string; // YYYY-MM
   styleOrder?: mongoose.Types.ObjectId;
+  colour?: string; // Optional - from style order colours when selected
   workItems: IVendorWorkItem[];
   extraAmount?: number;
   reasons?: string;
@@ -48,6 +49,7 @@ const VendorWorkOrderSchema = new Schema<IVendorWorkOrder>(
     branch: { type: Schema.Types.ObjectId, ref: 'Branch', required: true },
     month: { type: String, required: true },
     styleOrder: { type: Schema.Types.ObjectId, ref: 'StyleOrder', default: null },
+    colour: { type: String, default: '' },
     workItems: [VendorWorkItemSchema],
     extraAmount: { type: Number, default: 0, min: 0 },
     reasons: { type: String, default: '' },
