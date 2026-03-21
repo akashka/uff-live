@@ -248,42 +248,42 @@ export default function RatesPage() {
     });
   };
 
-  const formatRate = (r: RateMaster) => {
+  const formatBranches = (r: RateMaster) => {
     const bdr = r.branchDepartmentRates || [];
     const br = r.branchRates || [];
-    if (bdr.length > 0) {
-      return bdr.map((e) => {
-        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
-        const deptName = typeof e.department === 'object' ? (e.department as { name: string }).name : '-';
-        return `${branchName} / ${deptName}: ₹${e.amount}`;
-      }).join(' | ');
-    }
-    if (br.length > 0) {
-      return br.map((e) => {
-        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
-        return `${branchName}: ₹${e.amount}`;
-      }).join(' | ');
-    }
-    return '-';
+    const names = new Set<string>();
+    bdr.forEach((e) => {
+      const n = typeof e.branch === 'object' ? (e.branch as Branch).name : null;
+      if (n) names.add(n);
+    });
+    br.forEach((e) => {
+      const n = typeof e.branch === 'object' ? (e.branch as Branch).name : null;
+      if (n) names.add(n);
+    });
+    return names.size > 0 ? [...names].join(', ') : '—';
   };
 
-  const formatBranchDepartment = (r: RateMaster) => {
+  const formatDepartments = (r: RateMaster) => {
+    const bdr = r.branchDepartmentRates || [];
+    if (bdr.length === 0) return '—';
+    const names = new Set<string>();
+    bdr.forEach((e) => {
+      const n = typeof e.department === 'object' ? (e.department as { name: string }).name : null;
+      if (n) names.add(n);
+    });
+    return names.size > 0 ? [...names].join(', ') : '—';
+  };
+
+  const formatRateWithUnit = (r: RateMaster) => {
     const bdr = r.branchDepartmentRates || [];
     const br = r.branchRates || [];
-    if (bdr.length > 0) {
-      return bdr.map((e) => {
-        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
-        const deptName = typeof e.department === 'object' ? (e.department as { name: string }).name : '-';
-        return `${branchName} / ${deptName}`;
-      }).join(', ');
-    }
-    if (br.length > 0) {
-      return br.map((e) => {
-        const branchName = typeof e.branch === 'object' ? (e.branch as Branch).name : '-';
-        return branchName;
-      }).join(', ');
-    }
-    return '-';
+    const amounts = new Set<number>();
+    bdr.forEach((e) => amounts.add(e.amount));
+    br.forEach((e) => amounts.add(e.amount));
+    const unit = r.unit || 'per piece';
+    if (amounts.size === 0) return '—';
+    const amtStr = [...amounts].sort((a, b) => a - b).map((a) => `₹${a}`).join(', ');
+    return `${amtStr} ${unit}`;
   };
 
   const filtered = (Array.isArray(rates) ? rates : []).filter((r) => {
@@ -374,8 +374,8 @@ export default function RatesPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rateName')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800 hidden md:table-cell">{t('branches')} / {t('department')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('unit')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rate')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
@@ -390,9 +390,9 @@ export default function RatesPage() {
                   sorted.map((r) => (
                     <tr key={r._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 text-slate-800">{r.name}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm hidden md:table-cell max-w-[200px]" title={formatBranchDepartment(r)}>{formatBranchDepartment(r)}</td>
-                      <td className="px-4 py-3 text-slate-700">{r.unit}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{formatRate(r)}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm max-w-[180px]" title={formatBranches(r)}>{formatBranches(r)}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm max-w-[140px]" title={formatDepartments(r)}>{formatDepartments(r)}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">{formatRateWithUnit(r)}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${r.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                           {r.isActive ? t('active') : t('inactive')}
@@ -416,8 +416,9 @@ export default function RatesPage() {
             sorted.map((r) => (
               <div key={r._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{r.name}</h3>
-                <p className="text-sm text-slate-600 mt-1">{t('branches')} / {t('department')}: {formatBranchDepartment(r)}</p>
-                <p className="text-sm text-slate-700 mt-1">{r.unit} • {formatRate(r)}</p>
+                <p className="text-sm text-slate-600 mt-1">{t('branches')}: {formatBranches(r)}</p>
+                <p className="text-sm text-slate-600 mt-0.5">{t('department')}: {formatDepartments(r)}</p>
+                <p className="text-sm text-slate-700 mt-1 font-medium">{formatRateWithUnit(r)}</p>
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${r.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>{r.isActive ? t('active') : t('inactive')}</span>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
                   <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onToggleActive={() => handleToggleActive(r)} isActive={r.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={r.isActive ? t('makeInactive') : t('makeActive')} />

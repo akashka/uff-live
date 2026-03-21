@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
+import Breadcrumb from '@/components/Breadcrumb';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
@@ -423,15 +423,6 @@ export default function VendorWorkOrdersPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <Link
-          href="/work-records"
-          className="text-sm text-uff-accent hover:text-uff-accent-hover font-medium inline-flex items-center gap-1"
-        >
-          ← {t('backToWorkRecords')}
-        </Link>
-      </div>
-
       <PageHeader title={t('vendorWorkOrders')}>
         <div className="flex flex-wrap gap-2">
           {canAdd && (
@@ -454,6 +445,14 @@ export default function VendorWorkOrdersPage() {
           )}
         </div>
       </PageHeader>
+      <div className="mb-4 -mt-2">
+        <Breadcrumb
+          items={[
+            { label: t('workRecords'), href: '/work-records' },
+            { label: t('vendorWorkOrders') },
+          ]}
+        />
+      </div>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-end">

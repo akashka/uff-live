@@ -12,7 +12,7 @@ import { logAudit } from '@/lib/audit';
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string) {
+async function fetchEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string, employeeType?: string) {
   await connectDB();
   const filter: Record<string, unknown> = includeInactive ? {} : { isActive: true };
   if (search && search.trim()) {
@@ -27,6 +27,7 @@ async function fetchEmployees(includeInactive: boolean, page: number, limit: num
   }
   if (departmentId) filter.department = departmentId;
   if (branchId) filter.branches = branchId;
+  if (employeeType && ['full_time', 'contractor'].includes(employeeType)) filter.employeeType = employeeType;
   const skip = (page - 1) * limit;
   const [employees, total] = await Promise.all([
     Employee.find(filter).populate('branches', 'name').populate('department', 'name').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -35,10 +36,10 @@ async function fetchEmployees(includeInactive: boolean, page: number, limit: num
   return { employees, total, page, limit };
 }
 
-function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string) {
+function getCachedEmployees(includeInactive: boolean, page: number, limit: number, search?: string, departmentId?: string, branchId?: string, employeeType?: string) {
   return unstable_cache(
-    () => fetchEmployees(includeInactive, page, limit, search, departmentId, branchId),
-    ['employees', String(includeInactive), String(page), String(limit), search ?? '', departmentId ?? '', branchId ?? ''],
+    () => fetchEmployees(includeInactive, page, limit, search, departmentId, branchId, employeeType),
+    ['employees', String(includeInactive), String(page), String(limit), search ?? '', departmentId ?? '', branchId ?? '', employeeType ?? ''],
     { revalidate: 60, tags: ['employees'] }
   )();
 }
@@ -57,8 +58,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || undefined;
     const departmentId = searchParams.get('departmentId') || undefined;
     const branchId = searchParams.get('branchId') || undefined;
+    const employeeType = searchParams.get('employeeType') || undefined;
 
-    const result = await getCachedEmployees(includeInactive, page, limit, search, departmentId, branchId);
+    const result = await getCachedEmployees(includeInactive, page, limit, search, departmentId, branchId, employeeType);
     const { employees, total, page: p, limit: l } = result;
     const hasMore = limit < 10000 && p * l < total;
     return NextResponse.json({

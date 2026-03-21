@@ -10,7 +10,7 @@ export function revalidate(key: string) {
 }
 
 /** Employees list - cached 60s, deduped. Use limit=0 for all (e.g. dropdowns). */
-export function useEmployees(includeInactive = false, options?: { page?: number; limit?: number; search?: string; departmentId?: string; branchId?: string }) {
+export function useEmployees(includeInactive = false, options?: { page?: number; limit?: number; search?: string; departmentId?: string; branchId?: string; employeeType?: 'full_time' | 'contractor' }) {
   const params = new URLSearchParams();
   params.set('includeInactive', String(includeInactive));
   if (options?.page) params.set('page', String(options.page));
@@ -18,6 +18,7 @@ export function useEmployees(includeInactive = false, options?: { page?: number;
   if (options?.search) params.set('search', options.search);
   if (options?.departmentId) params.set('departmentId', options.departmentId);
   if (options?.branchId) params.set('branchId', options.branchId);
+  if (options?.employeeType) params.set('employeeType', options.employeeType);
   const key = `/api/employees?${params.toString()}`;
   const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,

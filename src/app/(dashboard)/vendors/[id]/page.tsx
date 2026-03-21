@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
+import Breadcrumb from '@/components/Breadcrumb';
 import { formatDate, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
@@ -65,6 +66,9 @@ export default function VendorDetailPage() {
     return (
       <div>
         <PageHeader title={t('vendorPassbook')} />
+        <div className="mb-4 -mt-2">
+          <Breadcrumb items={[{ label: t('jobworkVendors'), href: '/vendors' }]} />
+        </div>
         <div className="rounded-xl bg-white border border-slate-200 p-8 text-center">
           <p className="text-slate-600">{t('accessDenied')}</p>
           <Link href="/vendors" className="mt-4 inline-block text-uff-accent hover:underline">
@@ -88,6 +92,9 @@ export default function VendorDetailPage() {
     return (
       <div>
         <PageHeader title={t('vendorPassbook')} />
+        <div className="mb-4 -mt-2">
+          <Breadcrumb items={[{ label: t('jobworkVendors'), href: '/vendors' }]} />
+        </div>
         <div className="rounded-xl bg-white border border-slate-200 p-8 text-center">
           <p className="text-slate-600">{error || t('noData')}</p>
           <Link href="/vendors" className="mt-4 inline-block text-uff-accent hover:underline">
@@ -102,20 +109,7 @@ export default function VendorDetailPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/vendors"
-            className="shrink-0 p-2 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center gap-2"
-            aria-label={t('backToVendors')}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span className="hidden sm:inline text-slate-700">{t('backToVendors')}</span>
-          </Link>
-          <PageHeader title={t('vendorPassbook')} />
-        </div>
+      <PageHeader title={t('vendorPassbook')}>
         {rowsWithBalance.length > 0 && (
           <a
             href={`/api/vendors/${vendorId}/passbook?format=excel`}
@@ -129,6 +123,14 @@ export default function VendorDetailPage() {
             {t('export')} Excel
           </a>
         )}
+      </PageHeader>
+      <div className="mb-4 -mt-2">
+        <Breadcrumb
+          items={[
+            { label: t('jobworkVendors'), href: '/vendors' },
+            { label: vendor?.name || t('vendorPassbook') },
+          ]}
+        />
       </div>
 
       <div className="rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm">

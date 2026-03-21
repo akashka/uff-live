@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
+import Breadcrumb from '@/components/Breadcrumb';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
 import { formatDate, formatAmount } from '@/lib/utils';
@@ -94,22 +95,11 @@ export default function EmployeePassbookPage() {
 
   const rowsWithBalance = entries;
 
+  const backHref = isOwnProfile ? '/profile' : '/employees';
+
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href={isOwnProfile ? '/profile' : '/employees'}
-            className="shrink-0 p-2 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center gap-2"
-            aria-label={isOwnProfile ? t('profile') : t('backToEmployees')}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span className="hidden sm:inline text-slate-700">{isOwnProfile ? t('profile') : t('backToEmployees')}</span>
-          </Link>
-          <PageHeader title={t('passbook')} />
-        </div>
+      <PageHeader title={t('passbook')}>
         {rowsWithBalance.length > 0 && (
           <div className="flex gap-2">
             <a
@@ -136,6 +126,14 @@ export default function EmployeePassbookPage() {
             </a>
           </div>
         )}
+      </PageHeader>
+      <div className="mb-4 -mt-2">
+        <Breadcrumb
+          items={[
+            { label: isOwnProfile ? t('profile') : t('employees'), href: backHref },
+            { label: employee?.name || t('passbook') },
+          ]}
+        />
       </div>
 
       <div className="rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm">

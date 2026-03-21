@@ -25,6 +25,7 @@ function FormField({ label, required, children }: { label: string; required?: bo
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
+import Breadcrumb from '@/components/Breadcrumb';
 import UserAvatar from '@/components/UserAvatar';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
@@ -97,10 +98,19 @@ export default function EmployeesPage() {
   const searchParams = useSearchParams();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterEmployeeType, setFilterEmployeeType] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
-  const { employees, total, limit, hasMore, loading, mutate: mutateEmployees } = useEmployees(includeInactive, { page, limit: PAGE_SIZE, search: search.trim() || undefined, departmentId: filterDepartment || undefined });
+  const { employees, total, limit, hasMore, loading, mutate: mutateEmployees } = useEmployees(includeInactive, {
+    page,
+    limit: PAGE_SIZE,
+    search: search.trim() || undefined,
+    departmentId: filterDepartment || undefined,
+    branchId: filterBranch || undefined,
+    employeeType: (filterEmployeeType as 'full_time' | 'contractor') || undefined,
+  });
   const { branches } = useBranches(true);
   const { departments } = useDepartments(true);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
@@ -459,24 +469,21 @@ export default function EmployeesPage() {
   if (modal) {
     return (
       <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
-        {/* Sticky header - always visible */}
-        <div className="sticky top-0 z-20 flex items-center justify-between gap-4 py-4 px-1 -mx-1 mb-4 bg-white border-b border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={closeForm}
-              className="shrink-0 p-2 rounded-lg hover:bg-slate-100 text-slate-600 flex items-center gap-2"
-              aria-label={t('backToEmployees')}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              <span className="hidden sm:inline text-slate-700">{t('backToEmployees')}</span>
-            </button>
+        {/* Sticky block: breadcrumb + form header — sticks below dashboard header (h-14) */}
+        <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm -mx-4 -mt-6 px-4 pt-6 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-8 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
+          <div className="pb-2">
+            <Breadcrumb
+              items={[
+                { label: t('employees'), onClick: closeForm },
+                { label: modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit') },
+              ]}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 py-4">
             <h1 className="text-xl font-semibold text-slate-900 truncate">
               {modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit')} {t('employees')}
             </h1>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
             {modal !== 'view' && (
               <button
                 onClick={handleSave}
@@ -500,7 +507,7 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-1">
           <div className="max-w-5xl space-y-8">
             <FormSection title={t('photo')}>
               <div className="flex items-center gap-6">
@@ -1021,7 +1028,20 @@ export default function EmployeesPage() {
         searchPlaceholder={t('search')}
       >
         <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByDepartment')}</label>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
+          <select
+            value={filterBranch}
+            onChange={(e) => setFilterBranch(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
+          >
+            <option value="">{t('all')}</option>
+            {(Array.isArray(branches) ? branches : []).map((b: Branch) => (
+              <option key={b._id} value={b._id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('department')}</label>
           <select
             value={filterDepartment}
             onChange={(e) => setFilterDepartment(e.target.value)}
@@ -1031,6 +1051,18 @@ export default function EmployeesPage() {
             {(Array.isArray(departments) ? departments : []).map((d: Department) => (
               <option key={d._id} value={d._id}>{d.name}</option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByType')}</label>
+          <select
+            value={filterEmployeeType}
+            onChange={(e) => setFilterEmployeeType(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
+          >
+            <option value="">{t('all')}</option>
+            <option value="full_time">{t('fullTime')}</option>
+            <option value="contractor">{t('contractor')}</option>
           </select>
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -1054,8 +1086,8 @@ export default function EmployeesPage() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeType')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('salaryBreakup')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                 </tr>
@@ -1081,20 +1113,13 @@ export default function EmployeesPage() {
                       <td className="px-4 py-3 text-slate-700">
                         {e.department && typeof e.department === 'object' && 'name' in e.department ? (e.department as Department).name : '—'}
                       </td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">
+                        {Array.isArray(e.branches) && e.branches.length > 0
+                          ? e.branches.map((b: Branch | string) => (typeof b === 'object' && b && 'name' in b ? (b as Branch).name : b)).join(', ')
+                          : '—'}
+                      </td>
                       <td className="px-4 py-3 text-slate-700">
                         {e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 text-sm">
-                        {e.employeeType === 'full_time' ? (
-                          (e as Employee).monthlySalary && (e as Employee).monthlySalary! > 0
-                            ? `₹${formatAmount((e as Employee).monthlySalary!)}/mo`
-                            : (e as Employee).dailySalary && (e as Employee).dailySalary! > 0
-                              ? `₹${formatAmount((e as Employee).dailySalary!)}/day`
-                              : '—'
-                        ) : '—'}
-                        {e.employeeType === 'full_time' && (e as Employee).overtimeCostPerHour && (e as Employee).overtimeCostPerHour! > 0 && (
-                          <span className="block text-xs text-slate-500">OT ₹{formatAmount((e as Employee).overtimeCostPerHour!)}/hr</span>
-                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${e.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
@@ -1149,6 +1174,11 @@ export default function EmployeesPage() {
                       {e.department && typeof e.department === 'object' && 'name' in e.department && (
                         <span className="text-xs text-slate-500">
                           • {(e.department as Department).name}
+                        </span>
+                      )}
+                      {Array.isArray(e.branches) && e.branches.length > 0 && (
+                        <span className="text-xs text-slate-500">
+                          • {e.branches.map((b: Branch | string) => (typeof b === 'object' && b && 'name' in b ? (b as Branch).name : b)).join(', ')}
                         </span>
                       )}
                     </div>

@@ -262,6 +262,14 @@ export default function StyleOrdersPage() {
     if (sortBy === 'brand-asc') return (a.brand || '').localeCompare(b.brand || '');
     return a.styleCode.localeCompare(b.styleCode);
   });
+  const formatMonthYear = (month: string) => {
+    if (!month || month.length < 7) return '—';
+    const [y, m] = month.split('-');
+    const mm = parseInt(m || '0', 10);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[mm - 1] || ''} ${y}`;
+  };
+
   const SORT_OPTIONS = [
     { value: 'code-asc', label: `${t('styleOrderCode')} (A-Z)` },
     { value: 'code-desc', label: `${t('styleOrderCode')} (Z-A)` },
@@ -330,6 +338,8 @@ export default function StyleOrdersPage() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrderCode')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('brand')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('colour')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('totalPieces')}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
                 </tr>
@@ -337,7 +347,7 @@ export default function StyleOrdersPage() {
               <tbody className="divide-y divide-slate-200">
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                   </tr>
                 ) : (
                   sorted.map((s) => (
@@ -345,6 +355,8 @@ export default function StyleOrdersPage() {
                       <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
                       <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
                       <td className="px-4 py-3 text-slate-700 text-sm">{getColour(s) || '–'}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">{formatMonthYear(s.month || '')}</td>
+                      <td className="px-4 py-3 text-slate-700">{s.totalOrderQuantity && s.totalOrderQuantity > 0 ? s.totalOrderQuantity : '–'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                           {s.isActive ? t('active') : t('inactive')}
@@ -376,8 +388,12 @@ export default function StyleOrdersPage() {
             sorted.map((s) => (
               <div key={s._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
                 <h3 className="font-semibold text-slate-900">{s.styleCode} {s.brand ? `— ${s.brand}` : ''}</h3>
+                <p className="text-sm text-slate-600 mt-1">{t('month')}: {formatMonthYear(s.month || '')}</p>
                 {getColour(s) && (
-                  <p className="text-sm text-slate-600 mt-1">{t('colour')}: {getColour(s)}</p>
+                  <p className="text-sm text-slate-600 mt-0.5">{t('colour')}: {getColour(s)}</p>
+                )}
+                {s.totalOrderQuantity != null && s.totalOrderQuantity > 0 && (
+                  <p className="text-sm text-slate-700 mt-1 font-medium">{t('totalPieces')}: {s.totalOrderQuantity}</p>
                 )}
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
                   {s.isActive ? t('active') : t('inactive')}
