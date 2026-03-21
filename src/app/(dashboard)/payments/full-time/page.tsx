@@ -1,8 +1,12 @@
 'use client';
 
-import React from 'react';
-import FullTimePayments from '@/components/payments/FullTimePayments';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function FullTimePaymentsPage() {
-  return <FullTimePayments />;
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/payments');
+  }, [router]);
+  return null;
 }

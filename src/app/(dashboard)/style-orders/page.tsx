@@ -14,6 +14,7 @@ import Modal from '@/components/Modal';
 import { toast } from '@/lib/toast';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
 import SaveOverlay from '@/components/SaveOverlay';
+import ImportModal from '@/components/ImportModal';
 
 interface Branch {
   _id: string;
@@ -24,7 +25,7 @@ interface StyleOrder {
   _id: string;
   styleCode: string;
   brand: string;
-  colours?: string[];
+  colour?: string;
   details?: string;
   branches: (Branch | string)[];
   month: string;
@@ -49,12 +50,14 @@ export default function StyleOrdersPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
-  const [colourInput, setColourInput] = useState('');
   const [form, setForm] = useState({
     brand: '',
     styleCode: '',
-    colours: [] as string[],
+    colour: '',
     details: '',
     branchIds: [] as string[],
     month: '',
@@ -75,11 +78,10 @@ export default function StyleOrdersPage() {
   const openCreate = () => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    setColourInput('');
     setForm({
       brand: '',
       styleCode: '',
-      colours: [],
+      colour: '',
       details: '',
       branchIds: [], // Create defaults to all branches in backend
       month: currentMonth,
@@ -96,7 +98,7 @@ export default function StyleOrdersPage() {
     setForm({
       brand: s.brand || '',
       styleCode: s.styleCode,
-      colours: Array.isArray(s.colours) ? [...s.colours] : [],
+      colour: s.colour ?? (Array.isArray((s as { colours?: string[] }).colours) ? (s as { colours?: string[] }).colours?.[0] ?? '' : ''),
       details: s.details || '',
       branchIds,
       month: s.month || '',
@@ -111,17 +113,6 @@ export default function StyleOrdersPage() {
   const openView = (s: StyleOrder) => {
     openEdit(s);
     setModal('view');
-  };
-
-  const addColour = () => {
-    const c = colourInput.trim();
-    if (c && !(form.colours || []).includes(c)) {
-      setForm((f) => ({ ...f, colours: [...(f.colours || []), c] }));
-      setColourInput('');
-    }
-  };
-  const removeColour = (i: number) => {
-    setForm((f) => ({ ...f, colours: (f.colours || []).filter((_, idx) => idx !== i) }));
   };
 
   const formatCodeInput = (v: string) => {
@@ -163,7 +154,7 @@ export default function StyleOrdersPage() {
       const payload = {
         brand: String(form.brand || '').trim(),
         styleCode: codeStr,
-        colours: (form.colours || []).filter((c) => c.trim()),
+        colour: String(form.colour || '').trim(),
         details: form.details || '',
         branches: modal === 'create' ? [] : form.branchIds, // Create: backend maps to all branches
         month: monthVal,
@@ -200,6 +191,44 @@ export default function StyleOrdersPage() {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/style-orders/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'style_orders_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/style-orders/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} ${t('styleOrder')} imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -272,16 +301,26 @@ export default function StyleOrdersPage() {
   return (
     <div>
       <PageHeader title={t('styleOrders')}>
-        {canAdd && (
-          <button
-            onClick={openCreate}
-            disabled={!Array.isArray(branches) || branches.length === 0}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
-          >
-            {t('add')} {t('styleOrder')}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <>
+              <button
+                onClick={() => setImportModal(true)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium"
+              >
+                {t('importFromExcel')}
+              </button>
+              <button
+                onClick={openCreate}
+                disabled={!Array.isArray(branches) || branches.length === 0}
+                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
+              >
+                {t('add')} {t('styleOrder')}
+              </button>
+            </>
+          )}
+        </div>
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
@@ -322,7 +361,7 @@ export default function StyleOrdersPage() {
                     <tr key={s._id} className="hover:bg-uff-surface">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
                       <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{Array.isArray(s.colours) && s.colours.length > 0 ? s.colours.join(', ') : '–'}</td>
+                      <td className="px-4 py-3 text-slate-700 text-sm">{(s.colour ?? (Array.isArray((s as { colours?: string[] }).colours) ? (s as { colours?: string[] }).colours?.join(', ') : '')) || '–'}</td>
                       <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{s.details || '–'}</td>
                       <td className="px-4 py-3 text-slate-700">{getBranchNames(s)}</td>
                       <td className="px-4 py-3">
@@ -442,63 +481,24 @@ export default function StyleOrdersPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-800 mb-1">{t('colours')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
-            <p className="text-xs text-slate-500 mb-2">Add colours for this style/order. Leave empty if not applicable.</p>
+            <label className="block text-sm font-medium text-slate-800 mb-1">{t('colour')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
+            <p className="text-xs text-slate-500 mb-2">Select one colour for this style/order. Leave empty if not applicable. Same brand+order in a month can have different colours.</p>
             {modal === 'view' ? (
               <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-lg min-h-[40px]">
-                {(form.colours || []).length === 0 ? (
-                  <span className="text-slate-500">–</span>
+                {form.colour ? (
+                  <span className="px-2 py-1 bg-slate-200 rounded text-sm text-slate-800">{form.colour}</span>
                 ) : (
-                  (form.colours || []).map((c, i) => (
-                    <span key={i} className="px-2 py-1 bg-slate-200 rounded text-sm text-slate-800">{c}</span>
-                  ))
+                  <span className="text-slate-500">–</span>
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={colourInput}
-                    onChange={(e) => setColourInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addColour();
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg"
-                    placeholder="e.g. Red, Navy, White"
-                  />
-                  <button
-                    type="button"
-                    onClick={addColour}
-                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    {t('add')}
-                  </button>
-                </div>
-                {(form.colours || []).length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {(form.colours || []).map((c, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-uff-surface rounded text-sm text-slate-800"
-                      >
-                        {c}
-                        <button
-                          type="button"
-                          onClick={() => removeColour(i)}
-                          className="text-slate-500 hover:text-red-600"
-                          aria-label="Remove"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <input
+                type="text"
+                value={form.colour}
+                onChange={(e) => setForm((f) => ({ ...f, colour: e.target.value }))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                placeholder="e.g. Red, Navy, White"
+              />
             )}
           </div>
 
@@ -594,6 +594,22 @@ export default function StyleOrdersPage() {
           </div>
         </div>
       </Modal>
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('styleOrders')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={
+          <p>Columns: Style Code (4 digits), Brand, Colour (single), Month (YYYY-MM), Total Pieces, Client Cost/Piece, Client Cost Total, Branches. Same brand+code in a month can have different colours. See &quot;Valid Values&quot; sheet for branch names.</p>
+        }
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

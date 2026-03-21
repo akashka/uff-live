@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
       month: monthStr,
     })
       .populate('branch', 'name')
+      .populate('styleOrder', 'styleCode brand')
       .sort({ month: 1 })
       .lean();
 

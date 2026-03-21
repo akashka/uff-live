@@ -13,6 +13,7 @@ import { useVendors } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import SaveOverlay from '@/components/SaveOverlay';
 import Modal from '@/components/Modal';
+import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 
 interface Vendor {
@@ -44,6 +45,9 @@ export default function VendorsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -140,6 +144,44 @@ export default function VendorsPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/vendors/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vendors_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/vendors/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} ${t('vendor')} imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleToggleActive = (v: Vendor) => {
     setConfirmModal({
       message: v.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
@@ -199,11 +241,18 @@ export default function VendorsPage() {
   return (
     <div>
       <PageHeader title={t('vendors')}>
-        {canAdd && (
-          <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium">
-            {t('add')} {t('vendor')}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <>
+              <button onClick={() => setImportModal(true)} className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium">
+                {t('importFromExcel')}
+              </button>
+              <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium">
+                {t('add')} {t('vendor')}
+              </button>
+            </>
+          )}
+        </div>
       </PageHeader>
 
       <ListToolbar
@@ -398,6 +447,20 @@ export default function VendorsPage() {
           </div>
         </div>
       </Modal>
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('vendors')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>Columns: Vendor ID, Name, Contact, Email, Service Type (dropdown), Address, Bank details, Notes. Service Type uses dropdown validation.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

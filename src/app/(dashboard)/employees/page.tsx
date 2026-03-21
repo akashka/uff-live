@@ -34,6 +34,7 @@ import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import SaveOverlay from '@/components/SaveOverlay';
+import ImportModal from '@/components/ImportModal';
 import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 import { toast } from '@/lib/toast';
 import { formatAmount } from '@/lib/utils';
@@ -102,6 +103,9 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || ''); // accountancy is read-only
 
@@ -326,6 +330,44 @@ export default function EmployeesPage() {
       toast.error(err instanceof Error ? err.message : t('error'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/employees/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'employees_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/employees/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} ${t('employees')} imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutateEmployees();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -877,7 +919,15 @@ export default function EmployeesPage() {
   return (
     <div>
       <PageHeader title={t('employees')}>
-        {canAdd && (
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <>
+              <button
+                onClick={() => setImportModal(true)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium"
+              >
+                {t('importFromExcel')}
+              </button>
           <button
             onClick={openCreate}
             disabled={branches.length === 0}
@@ -886,7 +936,9 @@ export default function EmployeesPage() {
           >
             {t('add')} {t('employees')}
           </button>
-        )}
+            </>
+          )}
+        </div>
       </PageHeader>
 
       <ListToolbar
@@ -1094,6 +1146,20 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('employees')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>Columns: Employee ID, Name, Contact, Email, Emergency, DOB, Gender, Marital Status, Employee Type, Branch, Department, Salary, PF/ESI Opted, Bank details. Use dropdowns for Gender, Type, Branch, Department.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

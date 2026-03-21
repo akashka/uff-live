@@ -40,10 +40,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const doc = await StyleOrder.findById(id);
     if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const { styleCode, brand, colours: coloursInput, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
+    const { styleCode, brand, colour: colourInput, details, branches: branchesInput, totalOrderQuantity, clientCostPerPiece, clientCostTotalAmount, isActive } = body;
 
     const newCode = styleCode !== undefined ? String(styleCode).trim() : doc.styleCode;
     const newBrand = brand !== undefined ? String(brand).trim() : doc.brand;
+    const newColour = colourInput !== undefined ? String(colourInput).trim() : (doc.colour ?? '');
+    const monthVal = doc.month ?? '';
 
     if (styleCode !== undefined) {
       if (!/^\d{4}$/.test(newCode)) {
@@ -56,19 +58,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       doc.markModified('brand');
     }
 
-    // Check unique brand+code when either changed
-    if (styleCode !== undefined || brand !== undefined) {
-      const existing = await StyleOrder.findOne({ brand: newBrand, styleCode: newCode, _id: { $ne: id } });
+    // Check unique brand+code+month+colour when any changed (month is never editable)
+    if (styleCode !== undefined || brand !== undefined || colourInput !== undefined) {
+      const existing = await StyleOrder.findOne({ brand: newBrand, styleCode: newCode, month: monthVal, colour: newColour, _id: { $ne: id } });
       if (existing) {
-        return NextResponse.json({ error: `Style code ${newCode} with brand "${newBrand}" already exists` }, { status: 400 });
+        return NextResponse.json({ error: `Style code ${newCode} with brand "${newBrand}", month ${monthVal} and colour "${newColour || '(none)'}" already exists` }, { status: 400 });
       }
     }
     if (details !== undefined) doc.details = details;
-    if (coloursInput !== undefined) {
-      doc.colours = Array.isArray(coloursInput)
-        ? coloursInput.map((c: unknown) => String(c).trim()).filter(Boolean)
-        : [];
-      doc.markModified('colours');
+    if (colourInput !== undefined) {
+      doc.colour = String(colourInput).trim();
+      doc.markModified('colour');
     }
     if (Array.isArray(branchesInput) && branchesInput.length > 0) {
       doc.branches = branchesInput.map((b: string) => new mongoose.Types.ObjectId(b));

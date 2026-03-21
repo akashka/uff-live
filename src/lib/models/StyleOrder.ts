@@ -4,7 +4,7 @@ export interface IStyleOrder extends Document {
   _id: mongoose.Types.ObjectId;
   styleCode: string; // Fixed 4-digit number e.g. "0001"
   brand: string;
-  colours?: string[]; // Optional multi-entry colours
+  colour?: string; // Optional single colour - uniqueness is brand+styleCode+month+colour
   details?: string;
   branches: mongoose.Types.ObjectId[];
   rateMasterItems: mongoose.Types.ObjectId[];
@@ -21,7 +21,7 @@ const StyleOrderSchema = new Schema<IStyleOrder>(
   {
     styleCode: { type: String, required: true },
     brand: { type: String, required: true },
-    colours: { type: [String], default: [] },
+    colour: { type: String, default: '' },
     details: { type: String, default: '' },
     branches: [{ type: Schema.Types.ObjectId, ref: 'Branch', required: true }],
     rateMasterItems: [{ type: Schema.Types.ObjectId, ref: 'RateMaster' }],
@@ -35,7 +35,7 @@ const StyleOrderSchema = new Schema<IStyleOrder>(
 );
 
 StyleOrderSchema.index({ branches: 1, isActive: 1 });
-StyleOrderSchema.index({ brand: 1, styleCode: 1 }, { unique: true });
+StyleOrderSchema.index({ brand: 1, styleCode: 1, month: 1, colour: 1 }, { unique: true });
 StyleOrderSchema.index({ month: 1 });
 
 export default (mongoose.models.StyleOrder as Model<IStyleOrder>) ||

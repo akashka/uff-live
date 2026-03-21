@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import ExcelJS from 'exceljs';
-import { addListValidation } from '@/lib/excel-utils';
 
-const UNIT_OPTIONS = ['per piece', 'per meter', 'per kg', 'per dozen', 'per unit'];
-
-/** GET - Download Excel template for rate import with UNIT dropdown validation */
+/** GET - Download Excel template for branches import */
 export async function GET() {
   try {
     const user = await getAuthUser();
@@ -13,29 +10,21 @@ export async function GET() {
     if (!hasRole(user, ['admin'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Rate List', { views: [{ showGridLines: true }] });
+    const ws = wb.addWorksheet('Branches', { views: [{ showGridLines: true }] });
 
-    const headers = ['SL NO', 'DESCRIPTION', 'UNIT', 'RATE'];
+    const headers = ['Name', 'Address', 'Phone Number', 'Email'];
     ws.addRow(headers);
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4E8' } };
+    ws.addRow(['Sample Branch', '123 Main St', '9876543210', 'branch@example.com']);
 
-    const sampleRows = [
-      [1, 'Stitching - Jeans', 'per piece', 15],
-      [2, 'Cutting - Shirt', 'per piece', 8],
-      [3, 'Finishing - Button', 'per piece', 2],
-    ];
-    sampleRows.forEach((row) => ws.addRow(row));
-
-    ws.columns = [{ width: 8 }, { width: 30 }, { width: 14 }, { width: 12 }];
-
-    addListValidation(ws, 'C2:C1000', UNIT_OPTIONS, false);
+    ws.columns = [{ width: 25 }, { width: 35 }, { width: 18 }, { width: 28 }];
 
     const buf = await wb.xlsx.writeBuffer();
     return new NextResponse(buf, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': 'attachment; filename="rate_import_template.xlsx"',
+        'Content-Disposition': 'attachment; filename="branches_import_template.xlsx"',
       },
     });
   } catch (e) {

@@ -14,6 +14,7 @@ import { formatMonth, formatAmount } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
 import SaveOverlay from '@/components/SaveOverlay';
+import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -67,6 +68,9 @@ export default function VendorWorkOrdersPage() {
   const { user } = useAuth();
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const [filterVendor, setFilterVendor] = useState('');
   const [filterBranch, setFilterBranch] = useState('');
@@ -324,6 +328,44 @@ export default function VendorWorkOrdersPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/vendor-work-orders/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vendor_work_orders_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/vendor-work-orders/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} vendor work order imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutateRecords();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = (id: string) => {
     setConfirmModal({
       message: t('confirmDelete'),
@@ -391,16 +433,26 @@ export default function VendorWorkOrdersPage() {
       </div>
 
       <PageHeader title={t('vendorWorkOrders')}>
-        {canAdd && (
-          <button
-            onClick={openCreate}
-            disabled={!Array.isArray(vendors) || vendors.length === 0}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={vendors.length === 0 ? t('noVendors') : ''}
-          >
-            {t('addVendorWorkOrder')}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <>
+              <button
+                onClick={() => setImportModal(true)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium"
+              >
+                {t('importFromExcel')}
+              </button>
+              <button
+                onClick={openCreate}
+                disabled={!Array.isArray(vendors) || vendors.length === 0}
+                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={vendors.length === 0 ? t('noVendors') : ''}
+              >
+                {t('addVendorWorkOrder')}
+              </button>
+            </>
+          )}
+        </div>
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
@@ -629,9 +681,10 @@ export default function VendorWorkOrdersPage() {
                 <select
                   value={form.styleOrderId}
                   onChange={(e) => {
-                    const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string; colours?: string[] }) => x._id === e.target.value);
+                    const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string; colour?: string; colours?: string[] }) => x._id === e.target.value);
                     const display = s ? ((s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || '') : '';
-                    setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: '', workItems: {} }));
+                    const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
+                    setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: styleColour, workItems: {} }));
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   disabled={!form.branchId || !form.month}
@@ -645,25 +698,15 @@ export default function VendorWorkOrdersPage() {
                 </select>
               )}
             </div>
-                {selectedStyle && Array.isArray(selectedStyle.colours) && selectedStyle.colours.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('colours')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
-                    {modal === 'view' ? (
+                {selectedStyle && (() => {
+                  const c = (selectedStyle as { colour?: string }).colour ?? (Array.isArray((selectedStyle as { colours?: string[] }).colours) ? (selectedStyle as { colours?: string[] }).colours?.[0] : '') ?? '';
+                  return c ? (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('colour')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
                       <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.colour || '–'}</p>
-                    ) : (
-                      <select
-                        value={form.colour}
-                        onChange={(e) => setForm((f) => ({ ...f, colour: e.target.value }))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                      >
-                        <option value="">–</option>
-                        {selectedStyle.colours.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  ) : null;
+                })()}
           </div>
 
           <div>
@@ -802,6 +845,20 @@ export default function VendorWorkOrdersPage() {
           </div>
         </div>
       </Modal>
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('vendorWorkOrders')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>One row per work item. Rows with same Vendor+Branch+Month are grouped. Columns: Vendor, Branch, Month, Style, Colour, Rate/Work Item (Stitching, Cutting, or rate name), Qty, Rate/Unit, Extra Amount, Reasons.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

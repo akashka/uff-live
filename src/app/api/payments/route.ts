@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
       type: 'payment_created',
       title: 'Payment recorded',
       message: `${user.role} recorded a payment of ₹${paymentAmount.toLocaleString()} for ${empName} for ${monthStr}.`,
-      link: paymentType === 'contractor' ? '/payments/contractors' : '/payments/full-time',
+      link: '/payments',
       metadata: { entityId: String(payment._id), entityType: 'payment', actorId: user.userId, actorRole: user.role, employeeId, employeeName: empName, month: monthStr, amount: paymentAmount },
     }).catch(() => {});
 

@@ -1,10 +1,12 @@
 'use client';
 
-import React from 'react';
-import { useApp } from '@/contexts/AppContext';
-import VendorPayments from '@/components/payments/VendorPayments';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function VendorPaymentsPage() {
-  const { t } = useApp();
-  return <VendorPayments />;
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/payments');
+  }, [router]);
+  return null;
 }

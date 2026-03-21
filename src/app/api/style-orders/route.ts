@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const {
       styleCode,
       brand,
-      colours: coloursInput,
+      colour: colourInput,
       details,
       branches: branchesInput,
       month,
@@ -77,26 +77,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Brand is required' }, { status: 400 });
     }
 
-    const existing = await StyleOrder.findOne({ brand: brandStr, styleCode: codeStr });
-    if (existing) {
-      return NextResponse.json({ error: `Style code ${codeStr} with brand "${brandStr}" already exists` }, { status: 400 });
-    }
-
     const now = new Date();
     const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const monthStr = (typeof month === 'string' && month.length >= 7) ? String(month).slice(0, 7) : defaultMonth;
+    const colourStr = typeof colourInput === 'string' ? String(colourInput).trim() : '';
+
+    const existing = await StyleOrder.findOne({ brand: brandStr, styleCode: codeStr, month: monthStr, colour: colourStr });
+    if (existing) {
+      return NextResponse.json({ error: `Style code ${codeStr} with brand "${brandStr}", month ${monthStr} and colour "${colourStr || '(none)'}" already exists` }, { status: 400 });
+    }
+
     const qty = Math.max(0, Number(totalOrderQuantity) || 0);
     const perPiece = Math.max(0, Number(clientCostPerPiece) || 0);
     const totalCostRaw = Math.max(0, Number(clientCostTotalAmount) || 0);
     const totalCost = totalCostRaw > 0 ? totalCostRaw : (qty > 0 && perPiece > 0 ? qty * perPiece : 0);
 
-    const coloursArr = Array.isArray(coloursInput)
-      ? coloursInput.map((c: unknown) => String(c).trim()).filter(Boolean)
-      : [];
     const doc = await StyleOrder.create({
       styleCode: codeStr,
       brand: brandStr,
-      colours: coloursArr,
+      colour: colourStr,
       details: details || '',
       branches: branchIds.map((id: string) => new mongoose.Types.ObjectId(id)),
       rateMasterItems: [],

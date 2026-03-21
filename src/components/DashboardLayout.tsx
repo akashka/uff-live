@@ -210,23 +210,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         ? { href: '/work-records', label: t('workRecords'), icon: <WorkRecordsIcon /> }
         : null;
 
-  const paymentsNavItem = canAccessPayments
+  const paymentsNavItem = (canAccessPayments || isEmployee)
     ? {
         label: t('payments'),
         icon: <PaymentsIcon />,
-        children: [
-          { href: '/payments/contractors', label: t('contractors') },
-          { href: '/payments/full-time', label: t('fullTime') },
-          { href: '/payments/vendors', label: t('vendors') },
-        ],
+        href: '/payments',
       }
-    : isEmployee
-      ? {
-          href: user?.employeeType === 'full_time' ? '/payments/full-time' : '/payments/contractors',
-          label: t('payments'),
-          icon: <PaymentsIcon />,
-        }
-      : null;
+    : null;
 
   const profileNavItem = {
     label: t('profile'),
@@ -288,11 +278,14 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         const href = item.href!;
         const isPassbook = href.includes('/passbook');
         const isAnalytics = href.includes('/analytics');
+        const isPayments = href === '/payments';
         const isActive = isPassbook
           ? pathname.includes('/passbook') && pathname.startsWith('/employees/')
           : isAnalytics
             ? pathname.startsWith('/style-orders/analytics')
-            : pathname === href;
+            : isPayments
+              ? pathname.startsWith('/payments')
+              : pathname === href;
         const badge = 'badge' in item ? (item as { badge?: number }).badge : undefined;
         return (
           <Link

@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       VendorWorkOrder.find(filter)
         .populate('vendor', 'name vendorId serviceType _id')
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand colours _id')
+        .populate('styleOrder', 'styleCode brand colour _id')
         .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
     const populated = await VendorWorkOrder.findById(record._id)
       .populate('vendor', 'name vendorId serviceType _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand colours _id')
+      .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
 
     const vendorName = (populated?.vendor as { name?: string })?.name || 'Vendor';

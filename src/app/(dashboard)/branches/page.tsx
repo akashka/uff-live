@@ -11,6 +11,7 @@ import { useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import SaveOverlay from '@/components/SaveOverlay';
 import Modal from '@/components/Modal';
+import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 import { useSearchParams } from 'next/navigation';
 
@@ -56,6 +57,9 @@ export default function BranchesPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const loading = activeTab === 'branches' ? branchesLoading : departmentsLoading;
 
@@ -102,6 +106,44 @@ export default function BranchesPage() {
       setSaving(false);
     }
   };
+  const handleBranchDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/branches/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'branches_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleBranchImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/branches/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} ${t('branches')} imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutateBranches();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleBranchToggleActive = (b: Branch) => {
     setConfirmModal({
       message: b.isActive ? t('confirmMakeInactive') : t('confirmMakeActive'),
@@ -223,12 +265,20 @@ export default function BranchesPage() {
     <div>
       <PageHeader title={activeTab === 'departments' ? t('departments') : t('branches')}>
         {activeTab === 'branches' ? (
-          <button
-            onClick={openBranchCreate}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
-          >
-            {t('add')} {t('branches')}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setImportModal(true)}
+              className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium"
+            >
+              {t('importFromExcel')}
+            </button>
+            <button
+              onClick={openBranchCreate}
+              className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+            >
+              {t('add')} {t('branches')}
+            </button>
+          </div>
         ) : (
           <button
             onClick={openDeptCreate}
@@ -448,6 +498,20 @@ export default function BranchesPage() {
           </div>
         </div>
       </Modal>
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('branches')}`}
+        onDownloadTemplate={handleBranchDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>Columns: Name, Address, Phone Number, Email. All required except Email.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleBranchImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

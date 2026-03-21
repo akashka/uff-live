@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       WorkRecord.find(filter)
         .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand colours _id')
+        .populate('styleOrder', 'styleCode brand colour _id')
         .sort({ month: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -184,6 +184,16 @@ export async function POST(req: NextRequest) {
       const quantity = Math.max(1, Number(item.quantity) || 1);
       const multiplier = Number(item.multiplier) || 1;
 
+      if (styleOrderId) {
+        const available = await getAvailableQuantity(styleOrderId, branchId, monthStr, item.rateMasterId);
+        if (quantity > available) {
+          return NextResponse.json(
+            { error: `Quantity ${quantity} exceeds available ${available} for ${(rateMaster as { name: string }).name}. Reduce and try again.` },
+            { status: 400 }
+          );
+        }
+      }
+
       const amount = roundAmount(quantity * multiplier * ratePerUnit);
       workItemsWithAmounts.push({
         rateMaster: item.rateMasterId,
@@ -221,7 +231,7 @@ export async function POST(req: NextRequest) {
     const populated = await WorkRecord.findById(record._id)
       .populate({ path: 'employee', select: 'name _id department', populate: { path: 'department', select: 'name _id' } })
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand colours _id')
+      .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
 
     const empName = (populated?.employee as { name?: string })?.name || 'Employee';

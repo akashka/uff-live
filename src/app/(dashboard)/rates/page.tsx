@@ -11,6 +11,7 @@ import { useRates, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
 import SaveOverlay from '@/components/SaveOverlay';
 import Modal from '@/components/Modal';
+import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 import ValidatedInput from '@/components/ValidatedInput';
 
@@ -503,66 +504,34 @@ export default function RatesPage() {
         </div>
       </Modal>
 
-      {importModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold mb-4">{t('importFromExcel')}</h2>
-            <p className="text-sm text-slate-600 mb-4">
-              Upload an Excel file (.xls or .xlsx) with columns: SL NO, DESCRIPTION, RATE.
-            </p>
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-uff-accent bg-uff-accent/10 text-uff-accent hover:bg-uff-accent/20 font-medium text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                {t('downloadTemplate')}
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <input
-                  type="file"
-                  accept=".xls,.xlsx"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  className="w-full text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-2">Import mode</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input type="radio" checked={importMode === 'add'} onChange={() => setImportMode('add')} />
-                    <span className="text-sm">{t('addNew')}</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="radio" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} />
-                    <span className="text-sm">{t('replaceExisting')}</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button
-                onClick={handleImport}
-                disabled={importing || !importFile}
-                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50"
-              >
-                {importing ? '...' : t('importRates')}
-              </button>
-              <button
-                onClick={() => { setImportModal(false); setImportFile(null); }}
-                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface"
-              >
-                {t('cancel')}
-              </button>
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('rateMaster')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>Columns: SL NO, DESCRIPTION, UNIT (dropdown), RATE. Unit dropdown: per piece, per meter, per kg, per dozen, per unit.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('importRates')}
+        importModeSection={
+          <div>
+            <label className="block text-sm font-medium text-slate-800 mb-2">{t('import')} mode</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={importMode === 'add'} onChange={() => setImportMode('add')} />
+                <span className="text-sm">{t('addNew')}</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} />
+                <span className="text-sm">{t('replaceExisting')}</span>
+              </label>
             </div>
           </div>
-        </div>
-      )}
+        }
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 

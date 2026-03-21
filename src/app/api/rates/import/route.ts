@@ -31,7 +31,10 @@ export async function POST(req: NextRequest) {
     let headerRow = -1;
     let colSl = -1;
     let colDesc = -1;
+    let colUnit = -1;
     let colRate = -1;
+
+    const validUnits = ['per piece', 'per meter', 'per kg', 'per dozen', 'per unit'];
 
     for (let i = 0; i < Math.min(5, rows.length); i++) {
       const row = rows[i] as (string | number)[];
@@ -39,6 +42,7 @@ export async function POST(req: NextRequest) {
         const val = String(row[j] || '').toUpperCase();
         if (val.includes('SL') && (val.includes('NO') || val === 'SL.NO')) colSl = j;
         if (val.includes('DESCRIPTION') || val === 'DESC') colDesc = j;
+        if (val === 'UNIT') colUnit = j;
         if (val.includes('RATE')) colRate = j;
       }
       if (colDesc >= 0 && colRate >= 0) {
@@ -52,17 +56,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Could not find DESCRIPTION and RATE columns in Excel' }, { status: 400 });
     }
 
-    const items: { name: string; description: string; rate: number }[] = [];
+    const items: { name: string; description: string; unit: string; rate: number }[] = [];
     for (let i = (headerRow >= 0 ? headerRow + 1 : 1); i < rows.length; i++) {
       const row = rows[i] as (string | number)[];
       const desc = String(row[colDesc] ?? '').trim();
+      const unitVal = colUnit >= 0 ? String(row[colUnit] ?? '').trim().toLowerCase() : 'per piece';
+      const unit = validUnits.includes(unitVal) ? unitVal : 'per piece';
       const rateVal = row[colRate];
       const rate = typeof rateVal === 'number' ? rateVal : parseFloat(String(rateVal || '0'));
       if (!desc || isNaN(rate) || rate < 0) continue;
       // Skip "TOTAL" or empty rows
       if (desc.toUpperCase() === 'TOTAL' || desc === '') continue;
       const name = desc.length > 60 ? desc.slice(0, 60) : desc;
-      items.push({ name, description: desc, rate });
+      items.push({ name, description: desc, unit, rate });
     }
 
     if (items.length === 0) {
@@ -94,7 +100,7 @@ export async function POST(req: NextRequest) {
       await RateMaster.create({
         name: item.name,
         description: item.description,
-        unit: 'per piece',
+        unit: item.unit,
         branchRates,
         isActive: true,
       });

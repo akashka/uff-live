@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import WorkRecord from '@/lib/models/WorkRecord';
+import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
 import Employee from '@/lib/models/Employee';
 import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
@@ -29,15 +30,29 @@ async function getAvailableQuantity(
     branch: branchId,
     month: monthStr,
   };
-  if (excludeWorkRecordId) producedFilter._id = { $ne: excludeWorkRecordId };
+  if (excludeWorkRecordId) producedFilter._id = { $ne: new mongoose.Types.ObjectId(excludeWorkRecordId) };
 
-  const produced = await WorkRecord.aggregate([
-    { $match: producedFilter },
-    { $unwind: '$workItems' },
-    { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
-    { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+  const [producedFromWorkRecords, producedFromVendorOrders] = await Promise.all([
+    WorkRecord.aggregate([
+      { $match: producedFilter },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
+    VendorWorkOrder.aggregate([
+      {
+        $match: {
+          styleOrder: new mongoose.Types.ObjectId(styleOrderId),
+          branch: new mongoose.Types.ObjectId(branchId),
+          month: monthStr,
+        },
+      },
+      { $unwind: '$workItems' },
+      { $match: { 'workItems.rateMaster': { $eq: new mongoose.Types.ObjectId(rateMasterId) } } },
+      { $group: { _id: null, total: { $sum: '$workItems.quantity' } } },
+    ]),
   ]);
-  const producedQty = produced[0]?.total ?? 0;
+  const producedQty = (producedFromWorkRecords[0]?.total ?? 0) + (producedFromVendorOrders[0]?.total ?? 0);
   return Math.max(0, totalOrderQty - producedQty);
 }
 
@@ -51,7 +66,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const record = await WorkRecord.findById(id)
       .populate('employee', 'name _id')
       .populate('branch', 'name _id')
-      .populate('styleOrder', 'styleCode brand colours _id')
+      .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -140,6 +155,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const quantity = Math.max(1, Number(item.quantity) || 1);
         const multiplier = Number(item.multiplier) || 1;
 
+        if (styleId) {
+          const available = await getAvailableQuantity(styleId, branch, monthStr, item.rateMasterId, id);
+          if (quantity > available) {
+            return NextResponse.json(
+              { error: `Quantity ${quantity} exceeds available ${available} for ${(rateMaster as { name: string }).name}. Reduce and try again.` },
+              { status: 400 }
+            );
+          }
+        }
+
         const amount = roundAmount(quantity * multiplier * ratePerUnit);
         workItemsWithAmounts.push({
           rateMaster: item.rateMasterId,
@@ -166,7 +191,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await WorkRecord.findById(id)
       .populate('employee', 'name')
       .populate('branch', 'name')
-      .populate('styleOrder', 'styleCode brand colours _id')
+      .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
 
     const empId = String(record.employee);

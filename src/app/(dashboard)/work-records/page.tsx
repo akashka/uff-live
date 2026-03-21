@@ -13,6 +13,7 @@ import { formatMonth, formatAmount } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
 import SaveOverlay from '@/components/SaveOverlay';
+import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -43,7 +44,8 @@ interface RateMaster {
 interface StyleOrderWithAvailability {
   _id: string;
   styleCode: string;
-  colours?: string[];
+  colour?: string;
+  colours?: string[]; // backward compat
   monthData?: {
     entries: { rateMasterId: string; totalOrderQuantity: number; availableQuantity: number; sellingPricePerQuantity?: number }[];
   } | null;
@@ -115,6 +117,9 @@ export default function WorkRecordsPage() {
   );
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (isEmployee && user?.employeeId) {
@@ -138,7 +143,13 @@ export default function WorkRecordsPage() {
     setPage(1);
   }, [filterEmployee, filterBranch, filterDepartment, filterMonth]);
 
-  const { rates } = useRates(true, form.branchId || undefined, form.departmentId || undefined);
+  const selectedEmployee = form.employeeId
+    ? employeesForBranchAndDepartment.find((e: Employee) => e._id === form.employeeId)
+    : null;
+  const effectiveDepartmentId = form.departmentId || (selectedEmployee?.department && typeof selectedEmployee.department === 'object' && '_id' in selectedEmployee.department
+    ? (selectedEmployee.department as { _id: string })._id
+    : undefined);
+  const { rates } = useRates(true, form.branchId || undefined, effectiveDepartmentId);
   const { styleOrders: stylesForForm } = useStyleOrdersByBranchMonth(form.branchId || undefined, form.month || undefined, !!(form.branchId && form.month));
 
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
@@ -245,8 +256,19 @@ export default function WorkRecordsPage() {
     }
   }, [modal, form.branchId, form.month, form.styleOrderId, stylesForForm]);
 
+  useEffect(() => {
+    if (!modal || modal === 'view' || !form.employeeId || form.departmentId) return;
+    const emp = employeesForBranchAndDepartment.find((e: Employee) => e._id === form.employeeId);
+    const dept = emp?.department;
+    const deptId = dept && typeof dept === 'object' && '_id' in dept ? (dept as { _id: string })._id : '';
+    const deptName = dept && typeof dept === 'object' && 'name' in dept ? (dept as { name: string }).name : '';
+    if (deptId) {
+      setForm((f) => ({ ...f, departmentId: deptId, departmentName: deptName, workItems: {} }));
+    }
+  }, [modal, form.employeeId, form.departmentId, employeesForBranchAndDepartment]);
+
   const toggleRateChecked = (rateMasterId: string, checked: boolean) => {
-    if (!rates?.length || !form.branchId) return;
+    if (!rates?.length || !form.branchId || !effectiveDepartmentId) return;
     const rate = rates.find((r: RateMaster) => r._id === rateMasterId);
     if (!rate) return;
     if (checked) {
@@ -272,8 +294,12 @@ export default function WorkRecordsPage() {
       const item = f.workItems[rateMasterId];
       if (!item) return f;
       const next = { ...f.workItems };
-      if (field === 'quantity') next[rateMasterId] = { ...item, quantity: Math.max(1, Number(value) || 1) };
-      else if (field === 'ratePerUnit') next[rateMasterId] = { ...item, ratePerUnit: Math.max(0, Number(value) || 0) };
+      if (field === 'quantity') {
+        const maxAllowed = getDefaultQuantity(rateMasterId);
+        const raw = Math.max(1, Number(value) || 1);
+        const capped = typeof maxAllowed === 'number' && maxAllowed >= 0 ? Math.min(raw, maxAllowed) : raw;
+        next[rateMasterId] = { ...item, quantity: capped };
+      } else if (field === 'ratePerUnit') next[rateMasterId] = { ...item, ratePerUnit: Math.max(0, Number(value) || 0) };
       else next[rateMasterId] = { ...item, remarks: String(value ?? '') };
       return { ...f, workItems: next };
     });
@@ -340,6 +366,44 @@ export default function WorkRecordsPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/work-records/import-template');
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'work_records_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t('downloadTemplate'));
+    } catch {
+      toast.error(t('error'));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await fetch('/api/work-records/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      const msg = `${data.created} ${t('workRecord')} imported`;
+      toast.success(data.errors?.length ? `${msg} (${data.errors.length} errors)` : msg);
+      setImportModal(false);
+      setImportFile(null);
+      await mutateRecords();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = (id: string) => {
     setConfirmModal({
       message: t('confirmDelete'),
@@ -398,16 +462,26 @@ export default function WorkRecordsPage() {
   return (
     <div>
       <PageHeader title={t('workRecords')}>
-        {canAdd && (
-          <button
-            onClick={openCreate}
-            disabled={!Array.isArray(employees) || employees.length === 0}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={employees.length === 0 ? t('noContractors') : ''}
-          >
-            {t('add')} {t('workRecord')}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <>
+              <button
+                onClick={() => setImportModal(true)}
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-uff-surface font-medium"
+              >
+                {t('importFromExcel')}
+              </button>
+              <button
+                onClick={openCreate}
+                disabled={!Array.isArray(employees) || employees.length === 0}
+                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={employees.length === 0 ? t('noContractors') : ''}
+              >
+                {t('add')} {t('workRecord')}
+              </button>
+            </>
+          )}
+        </div>
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
@@ -669,9 +743,10 @@ export default function WorkRecordsPage() {
                     <select
                       value={form.styleOrderId}
                       onChange={(e) => {
-                        const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string; colours?: string[] }) => x._id === e.target.value);
+                        const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string; styleCode?: string; brand?: string; colour?: string; colours?: string[] }) => x._id === e.target.value);
                         const display = s ? ((s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || '') : '';
-                        setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: '', workItems: {} }));
+                        const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
+                        setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: styleColour, workItems: {} }));
                       }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                       disabled={!form.branchId || !form.month}
@@ -685,31 +760,27 @@ export default function WorkRecordsPage() {
                     </select>
                   )}
                 </div>
-                {selectedStyle && Array.isArray(selectedStyle.colours) && selectedStyle.colours.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-800 mb-1">{t('colours')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
-                    {modal === 'view' ? (
+                {selectedStyle && (() => {
+                  const c = (selectedStyle as { colour?: string }).colour ?? (Array.isArray((selectedStyle as { colours?: string[] }).colours) ? (selectedStyle as { colours?: string[] }).colours?.[0] : '') ?? '';
+                  return c ? (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-800 mb-1">{t('colour')} <span className="text-slate-400 text-xs">({t('optional') || 'Optional'})</span></label>
                       <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.colour || '–'}</p>
-                    ) : (
-                      <select
-                        value={form.colour}
-                        onChange={(e) => setForm((f) => ({ ...f, colour: e.target.value }))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                      >
-                        <option value="">–</option>
-                        {selectedStyle.colours.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-2">{t('workItems')} <span className="text-red-500" aria-hidden="true">*</span></label>
-                <p className="text-xs text-slate-600 mb-2">{!form.branchId ? 'Select branch first to load rates' : 'Check the rates that apply. Enter quantity and adjust pricing if needed.'}</p>
-                {form.branchId && rates && rates.length > 0 && (
+                <p className="text-xs text-slate-600 mb-2">
+                  {!form.branchId
+                    ? 'Select branch first to load rates'
+                    : !effectiveDepartmentId
+                      ? 'Select department or employee to load rates for this branch & department'
+                      : 'Check the rates that apply. Enter quantity and adjust pricing if needed.'}
+                </p>
+                {form.branchId && effectiveDepartmentId && rates && rates.length > 0 && (
                   <div className="border border-slate-200 rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 bg-uff-surface text-sm font-medium text-slate-800 border-b border-slate-200">
                       <span className="w-8" />
@@ -742,7 +813,7 @@ export default function WorkRecordsPage() {
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={(e) => toggleRateChecked(r._id, e.target.checked)}
-                                  disabled={!form.branchId}
+                                  disabled={!form.branchId || !effectiveDepartmentId}
                                   className="w-4 h-4 rounded border-slate-300"
                                 />
                                 <span className="text-slate-800">{r.name} ({r.unit})</span>
@@ -751,10 +822,18 @@ export default function WorkRecordsPage() {
                                     <input
                                       type="number"
                                       min={1}
+                                      max={(() => {
+                                        const maxQty = getDefaultQuantity(r._id);
+                                        return typeof maxQty === 'number' && maxQty > 0 ? maxQty : undefined;
+                                      })()}
                                       value={wi.quantity || ''}
                                       onChange={(e) => updateWorkItemField(r._id, 'quantity', parseFloat(e.target.value) || 1)}
                                       className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
                                       placeholder="1"
+                                      title={(() => {
+                                        const maxQty = getDefaultQuantity(r._id);
+                                        return typeof maxQty === 'number' && maxQty > 0 ? `Max: ${maxQty}` : undefined;
+                                      })()}
                                     />
                                     <input
                                       type="number"
@@ -795,8 +874,8 @@ export default function WorkRecordsPage() {
                     </div>
                   </div>
                 )}
-                {form.branchId && (!rates || rates.length === 0) && (
-                  <p className="text-sm text-slate-500 py-4">No rates configured for this branch.</p>
+                {form.branchId && effectiveDepartmentId && (!rates || rates.length === 0) && (
+                  <p className="text-sm text-slate-500 py-4">No rates configured for this branch and department.</p>
                 )}
               </div>
 
@@ -839,6 +918,20 @@ export default function WorkRecordsPage() {
               </div>
             </div>
       </Modal>
+
+      <ImportModal
+        open={importModal}
+        onClose={() => { setImportModal(false); setImportFile(null); }}
+        title={`${t('importFromExcel')} - ${t('workRecords')}`}
+        onDownloadTemplate={handleDownloadTemplate}
+        downloadLabel={t('downloadTemplate')}
+        instructions={<p>One row per work item. Rows with same Employee+Branch+Month are grouped. Columns: Employee, Branch, Month, Style, Colour, Rate Name, Qty, Rate/Unit, OT Hours, OT Amount, Notes.</p>}
+        file={importFile}
+        onFileChange={setImportFile}
+        onImport={handleImport}
+        importing={importing}
+        importLabel={t('import')}
+      />
 
       <SaveOverlay show={saving} label={t('saving')} />
 
