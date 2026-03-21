@@ -12,6 +12,7 @@
     "seed:dummy": "tsx scripts/seed-dummy-data.ts",
     "seed:fresh": "tsx scripts/seed-fresh.ts",
     "migrate": "tsx scripts/migrate-to-month-based.ts",
+    "migrate:schema": "tsx scripts/migrate-schema.ts",
     "migrate:style-order": "tsx scripts/migrate-style-order-to-multi-branch.ts",
     "backup": "tsx scripts/backup.ts"
   },

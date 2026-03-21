@@ -61,6 +61,7 @@ async function seedFresh() {
   // 3. Create employees
   const employees = await Employee.insertMany([
     {
+      employeeId: 'REC001',
       name: 'Ramesh Kumar',
       contactNumber: '+91 9000111111',
       email: 'ramesh@uff.com',
@@ -70,11 +71,15 @@ async function seedFresh() {
       employeeType: 'contractor',
       branches: [branchIds[0], branchIds[1]],
       pfOpted: true,
+      pfNumber: 'KA/BLR/12345',
       monthlyPfAmount: 500,
       esiOpted: true,
+      esiNumber: '52-12345-67',
       monthlyEsiAmount: 200,
+      otherDeductions: [{ reason: 'Loan recovery', amount: 500 }],
     },
     {
+      employeeId: 'REC002',
       name: 'Priya Sharma',
       contactNumber: '+91 9000222222',
       email: 'priya@uff.com',
@@ -85,6 +90,7 @@ async function seedFresh() {
       branches: [branchIds[0]],
     },
     {
+      employeeId: 'REC003',
       name: 'Suresh Reddy',
       contactNumber: '+91 9000333333',
       email: 'suresh@uff.com',
@@ -94,9 +100,12 @@ async function seedFresh() {
       employeeType: 'full_time',
       branches: [branchIds[0]],
       monthlySalary: 35000,
-      salaryBreakup: { pf: 2100, esi: 525, other: 0 },
+      overtimeCostPerHour: 80,
+      salaryBreakup: { pf: 2100, esi: 525 },
+      otherDeductions: [],
     },
     {
+      employeeId: 'REC004',
       name: 'Lakshmi Nair',
       contactNumber: '+91 9000444444',
       email: 'lakshmi@uff.com',
@@ -106,7 +115,9 @@ async function seedFresh() {
       employeeType: 'full_time',
       branches: [branchIds[1]],
       monthlySalary: 28000,
-      salaryBreakup: { pf: 1680, esi: 420, other: 0 },
+      overtimeCostPerHour: 75,
+      salaryBreakup: { pf: 1680, esi: 420 },
+      otherDeductions: [],
     },
   ]);
   console.log('✓ Employees created (4)');
@@ -140,6 +151,7 @@ async function seedFresh() {
     {
       styleCode: '0001',
       brand: 'Montecarlo',
+      colour: 'Red',
       details: 'Summer T-Shirt Order - stitching at Main, cutting at North',
       branches: [branchIds[0], branchIds[1]],
       rateMasterItems: [rates[0]._id, rates[1]._id, rates[2]._id],
@@ -152,6 +164,7 @@ async function seedFresh() {
     {
       styleCode: '0002',
       brand: 'Globus',
+      colour: 'Blue',
       details: 'Formal Shirt Batch',
       branches: [branchIds[0]],
       rateMasterItems: [rates[0]._id, rates[2]._id, rates[3]._id],
@@ -164,6 +177,7 @@ async function seedFresh() {
     {
       styleCode: '0001',
       brand: 'Puma',
+      colour: 'Black',
       details: 'Kurti Export Order - cutting at North, finishing at South',
       branches: [branchIds[1], branchIds[2]],
       rateMasterItems: [rates[0]._id, rates[1]._id, rates[4]._id],
@@ -214,7 +228,14 @@ async function seedFresh() {
   let paidCount = 0;
   for (const wr of workRecs) {
     const totalAmount = wr.totalAmount ?? 0;
-    const paidAmount = Math.floor(totalAmount * (0.9 + Math.random() * 0.1));
+    const emp = employees.find((e) => String(e._id) === String(wr.employee));
+    const pfDeduct = emp && (emp as { pfOpted?: boolean; monthlyPfAmount?: number }).pfOpted ? (emp as { monthlyPfAmount?: number }).monthlyPfAmount ?? 0 : 0;
+    const esiDeduct = emp && (emp as { esiOpted?: boolean; monthlyEsiAmount?: number }).esiOpted ? (emp as { monthlyEsiAmount?: number }).monthlyEsiAmount ?? 0 : 0;
+    const otherDeduct = emp && Array.isArray((emp as { otherDeductions?: { amount: number }[] }).otherDeductions)
+      ? (emp as { otherDeductions: { amount: number }[] }).otherDeductions.reduce((s, d) => s + (d.amount || 0), 0)
+      : 0;
+    const netTotal = Math.max(0, totalAmount - pfDeduct - esiDeduct - otherDeduct);
+    const paidAmount = Math.floor(netTotal * (0.9 + Math.random() * 0.1));
     await Payment.create({
       employee: wr.employee,
       paymentType: 'contractor',
@@ -222,14 +243,15 @@ async function seedFresh() {
       baseAmount: totalAmount,
       addDeductAmount: 0,
       addDeductRemarks: '',
-      pfDeducted: 0,
-      esiDeducted: 0,
+      pfDeducted: pfDeduct,
+      esiDeducted: esiDeduct,
+      otherDeducted: otherDeduct,
       advanceDeducted: 0,
-      totalPayable: totalAmount,
+      totalPayable: netTotal,
       paymentAmount: paidAmount,
       paymentMode: ['upi', 'bank_transfer', 'cash'][Math.floor(Math.random() * 3)] as 'upi' | 'bank_transfer' | 'cash',
       transactionRef: `TXN${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
-      remainingAmount: totalAmount - paidAmount,
+      remainingAmount: netTotal - paidAmount,
       carriedForward: 0,
       carriedForwardRemarks: '',
       isAdvance: false,
@@ -240,6 +262,46 @@ async function seedFresh() {
     paidCount++;
   }
   console.log(`✓ Payments created (${paidCount})`);
+
+  // 8b. Full-time salary payments
+  const fullTimers = employees.filter((e) => e.employeeType === 'full_time');
+  for (const emp of fullTimers) {
+    const salary = (emp as { monthlySalary?: number }).monthlySalary ?? 30000;
+    const pf = (emp as { salaryBreakup?: { pf?: number } }).salaryBreakup?.pf ?? 0;
+    const esi = (emp as { salaryBreakup?: { esi?: number } }).salaryBreakup?.esi ?? 0;
+    const otCost = (emp as { overtimeCostPerHour?: number }).overtimeCostPerHour ?? 0;
+    const otHours = 6;
+    const otAmount = otCost * otHours;
+    const netPay = salary - pf - esi + otAmount;
+    await Payment.create({
+      employee: emp._id,
+      paymentType: 'full_time',
+      month: currentMonth,
+      baseAmount: salary,
+      addDeductAmount: 0,
+      addDeductRemarks: '',
+      pfDeducted: pf,
+      esiDeducted: esi,
+      otherDeducted: 0,
+      advanceDeducted: 0,
+      otHours,
+      otAmount,
+      daysWorked: 26,
+      totalWorkingDays: 26,
+      totalPayable: netPay,
+      paymentAmount: netPay,
+      paymentMode: 'bank_transfer',
+      transactionRef: `SAL${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+      remainingAmount: 0,
+      carriedForward: 0,
+      carriedForwardRemarks: '',
+      isAdvance: false,
+      workRecordRefs: [],
+      paidAt: new Date(),
+      createdBy: adminUser._id,
+    });
+  }
+  if (fullTimers.length > 0) console.log(`✓ Full-time salary payments created (${fullTimers.length})`);
 
   // 9. Create employee users
   const { generatePassword } = await import('../src/lib/utils');

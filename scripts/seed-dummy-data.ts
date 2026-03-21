@@ -54,6 +54,7 @@ async function seed() {
   if (employees.length === 0) {
     employees = await Employee.insertMany([
       {
+        employeeId: 'REC001',
         name: 'Ramesh Kumar',
         contactNumber: '+91 9000111111',
         email: 'ramesh@uff.com',
@@ -63,11 +64,15 @@ async function seed() {
         employeeType: 'contractor',
         branches: [branchIds[0], branchIds[1]],
         pfOpted: true,
+        pfNumber: 'KA/BLR/12345',
         monthlyPfAmount: 500,
         esiOpted: true,
+        esiNumber: '52-12345-67',
         monthlyEsiAmount: 200,
+        otherDeductions: [{ reason: 'Loan recovery', amount: 500 }],
       },
       {
+        employeeId: 'REC002',
         name: 'Priya Sharma',
         contactNumber: '+91 9000222222',
         email: 'priya@uff.com',
@@ -78,6 +83,7 @@ async function seed() {
         branches: [branchIds[0]],
       },
       {
+        employeeId: 'REC003',
         name: 'Suresh Reddy',
         contactNumber: '+91 9000333333',
         email: 'suresh@uff.com',
@@ -87,9 +93,12 @@ async function seed() {
         employeeType: 'full_time',
         branches: [branchIds[0]],
         monthlySalary: 35000,
-        salaryBreakup: { pf: 2100, esi: 525, other: 0 },
+        overtimeCostPerHour: 80,
+        salaryBreakup: { pf: 2100, esi: 525 },
+        otherDeductions: [],
       },
       {
+        employeeId: 'REC004',
         name: 'Lakshmi Nair',
         contactNumber: '+91 9000444444',
         email: 'lakshmi@uff.com',
@@ -99,7 +108,9 @@ async function seed() {
         employeeType: 'full_time',
         branches: [branchIds[1]],
         monthlySalary: 28000,
-        salaryBreakup: { pf: 1680, esi: 420, other: 0 },
+        overtimeCostPerHour: 75,
+        salaryBreakup: { pf: 1680, esi: 420 },
+        otherDeductions: [],
       },
     ]);
     console.log('✓ Employees created (4)');
@@ -238,8 +249,15 @@ async function seed() {
       if (existingPeriods.has(key)) continue;
 
       const totalAmount = wr.totalAmount ?? 0;
-      const paidAmount = Math.floor(totalAmount * (0.85 + Math.random() * 0.15));
-      const remaining = totalAmount - paidAmount;
+      const emp = employees.find((e) => String(e._id) === String(wr.employee));
+      const pfDeduct = emp && (emp as { pfOpted?: boolean; monthlyPfAmount?: number }).pfOpted ? (emp as { monthlyPfAmount?: number }).monthlyPfAmount ?? 0 : 0;
+      const esiDeduct = emp && (emp as { esiOpted?: boolean; monthlyEsiAmount?: number }).esiOpted ? (emp as { monthlyEsiAmount?: number }).monthlyEsiAmount ?? 0 : 0;
+      const otherDeduct = emp && Array.isArray((emp as { otherDeductions?: { amount: number }[] }).otherDeductions)
+        ? (emp as { otherDeductions: { amount: number }[] }).otherDeductions.reduce((s, d) => s + (d.amount || 0), 0)
+        : 0;
+      const netTotal = Math.max(0, totalAmount - pfDeduct - esiDeduct - otherDeduct);
+      const paidAmount = Math.floor(netTotal * (0.85 + Math.random() * 0.15));
+      const remaining = netTotal - paidAmount;
 
       await Payment.create({
         employee: wr.employee,
@@ -248,10 +266,11 @@ async function seed() {
         baseAmount: totalAmount,
         addDeductAmount: 0,
         addDeductRemarks: '',
-        pfDeducted: 0,
-        esiDeducted: 0,
+        pfDeducted: pfDeduct,
+        esiDeducted: esiDeduct,
+        otherDeducted: otherDeduct,
         advanceDeducted: 0,
-        totalPayable: totalAmount,
+        totalPayable: netTotal,
         paymentAmount: paidAmount,
         paymentMode: ['upi', 'bank_transfer', 'cash'][Math.floor(Math.random() * 3)] as 'upi' | 'bank_transfer' | 'cash',
         transactionRef: `TXN${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
@@ -285,7 +304,13 @@ async function seed() {
       const salary = (emp as { monthlySalary?: number }).monthlySalary ?? 30000;
       const pf = (emp as { salaryBreakup?: { pf?: number } }).salaryBreakup?.pf ?? 0;
       const esi = (emp as { salaryBreakup?: { esi?: number } }).salaryBreakup?.esi ?? 0;
-      const netPay = salary - pf - esi;
+      const otherDeduct = Array.isArray((emp as { otherDeductions?: { amount: number }[] }).otherDeductions)
+        ? (emp as { otherDeductions: { amount: number }[] }).otherDeductions.reduce((s, d) => s + (d.amount || 0), 0)
+        : 0;
+      const otCost = (emp as { overtimeCostPerHour?: number }).overtimeCostPerHour ?? 0;
+      const otHours = 4 + Math.floor(Math.random() * 8); // 4–11 hrs dummy OT
+      const otAmount = otCost * otHours;
+      const netPay = salary - pf - esi - otherDeduct + otAmount;
 
       await Payment.create({
         employee: emp._id,
@@ -296,7 +321,12 @@ async function seed() {
         addDeductRemarks: '',
         pfDeducted: pf,
         esiDeducted: esi,
+        otherDeducted: otherDeduct,
         advanceDeducted: 0,
+        otHours,
+        otAmount,
+        daysWorked: 26,
+        totalWorkingDays: 26,
         totalPayable: netPay,
         paymentAmount: netPay,
         paymentMode: 'bank_transfer',

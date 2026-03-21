@@ -292,12 +292,12 @@ export default function RatesPage() {
     if (filterBranch) {
       const bdr = r.branchDepartmentRates || [];
       const br = r.branchRates || [];
-      const branchIds = [...bdr.map((e) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch), ...br.map((e) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch)];
+      const branchIds = [...bdr.map((e: BranchDepartmentRate) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch), ...br.map((e: BranchRate) => typeof e.branch === 'object' ? (e.branch as Branch)._id : e.branch)];
       if (!branchIds.includes(filterBranch)) return false;
     }
     if (filterDepartment) {
       const bdr = r.branchDepartmentRates || [];
-      const deptIds = bdr.map((e) => typeof e.department === 'object' ? (e.department as { _id: string })._id : e.department);
+      const deptIds = bdr.map((e: BranchDepartmentRate) => typeof e.department === 'object' ? (e.department as { _id: string })._id : e.department);
       if (!deptIds.includes(filterDepartment)) return false;
     }
     return true;

@@ -102,9 +102,12 @@ async function seed() {
         branches: [branchIds[0], branchIds[1]],
         department: deptIds[0],
         pfOpted: true,
+        pfNumber: 'KA/BLR/12345',
         monthlyPfAmount: 500,
         esiOpted: true,
+        esiNumber: '52-12345-67',
         monthlyEsiAmount: 200,
+        otherDeductions: [{ reason: 'Loan recovery', amount: 500 }],
         bankName: 'SBI',
         accountNumber: '123456789012',
         ifscCode: 'SBIN0001234',
@@ -138,7 +141,9 @@ async function seed() {
         branches: [branchIds[0]],
         department: deptIds[0],
         monthlySalary: 35000,
-        salaryBreakup: { pf: 2100, esi: 525, other: 0 },
+        overtimeCostPerHour: 80,
+        salaryBreakup: { pf: 2100, esi: 525 },
+        otherDeductions: [],
       },
       {
         employeeId: 'REC004',
@@ -152,7 +157,9 @@ async function seed() {
         branches: [branchIds[1]],
         department: deptIds[2],
         monthlySalary: 28000,
-        salaryBreakup: { pf: 1680, esi: 420, other: 0 },
+        overtimeCostPerHour: 75,
+        salaryBreakup: { pf: 1680, esi: 420 },
+        otherDeductions: [],
       },
     ]);
     console.log('✓ Employees created (4)');
@@ -260,8 +267,15 @@ async function seed() {
     for (const wr of workRecords) {
       const empId = wr.employee as mongoose.Types.ObjectId;
       const totalAmount = wr.totalAmount ?? 0;
-      const paidAmount = Math.floor(totalAmount * 0.8);
-      const remaining = totalAmount - paidAmount;
+      const emp = employees.find((e) => String(e._id) === String(empId));
+      const pfDeduct = emp && (emp as { pfOpted?: boolean; monthlyPfAmount?: number }).pfOpted ? (emp as { monthlyPfAmount?: number }).monthlyPfAmount ?? 0 : 0;
+      const esiDeduct = emp && (emp as { esiOpted?: boolean; monthlyEsiAmount?: number }).esiOpted ? (emp as { monthlyEsiAmount?: number }).monthlyEsiAmount ?? 0 : 0;
+      const otherDeduct = emp && Array.isArray((emp as { otherDeductions?: { amount: number }[] }).otherDeductions)
+        ? (emp as { otherDeductions: { amount: number }[] }).otherDeductions.reduce((s, d) => s + (d.amount || 0), 0)
+        : 0;
+      const netTotal = Math.max(0, totalAmount - pfDeduct - esiDeduct - otherDeduct);
+      const paidAmount = Math.floor(netTotal * 0.8);
+      const remaining = netTotal - paidAmount;
       const month = (wr as { month?: string }).month || '2025-01';
       await Payment.create({
         employee: empId,
@@ -270,10 +284,11 @@ async function seed() {
         baseAmount: totalAmount,
         addDeductAmount: 0,
         addDeductRemarks: '',
-        pfDeducted: 0,
-        esiDeducted: 0,
+        pfDeducted: pfDeduct,
+        esiDeducted: esiDeduct,
+        otherDeducted: otherDeduct,
         advanceDeducted: 0,
-        totalPayable: totalAmount,
+        totalPayable: netTotal,
         paymentAmount: paidAmount,
         paymentMode: 'upi',
         transactionRef: `TXN${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
