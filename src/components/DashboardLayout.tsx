@@ -466,9 +466,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-slate-600">
                 <Link href="/about" className="hover:text-uff-accent">{t('aboutUs')}</Link>
                 <Link href="/contact" className="hover:text-uff-accent">{t('contactUs')}</Link>
-                <Link href="/faq" className="hover:text-uff-accent">{t('faq')}</Link>
-                <Link href="/privacy" className="hover:text-uff-accent">{t('privacyPolicy')}</Link>
-                <Link href="/terms" className="hover:text-uff-accent">{t('termsAndConditions')}</Link>
+                <Link href="/infrastructure" className="hover:text-uff-accent">{t('infrastructure')}</Link>
+                <Link href="/glossary" className="hover:text-uff-accent">{t('denimGlossary')}</Link>
+                <Link href="/products" className="hover:text-uff-accent">{t('products')}</Link>
+                <Link href="/responsibility" className="hover:text-uff-accent">{t('responsibility')}</Link>
               </div>
               <p className="text-center text-slate-600 text-xs mt-2">
                 © {new Date().getFullYear()} URBAN FASHION FACTORY (UFF)
