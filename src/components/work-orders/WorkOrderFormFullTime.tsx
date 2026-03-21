@@ -56,6 +56,7 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
 
   const [saving, setSaving] = useState(false);
   const [daysAlreadyUsed, setDaysAlreadyUsed] = useState(0);
+  const [departmentId, setDepartmentId] = useState('');
 
   const workingDays = getWorkingDaysInMonth(form.month);
   const maxDaysAllowed = Math.max(0, workingDays - daysAlreadyUsed);
@@ -68,7 +69,6 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
     departmentId: departmentId || undefined,
     employeeType: 'full_time',
   });
-  const [departmentId, setDepartmentId] = useState('');
   const employeesForBranch = (Array.isArray(formEmpList) ? formEmpList : []).filter(
     (e: Employee) => e.employeeType === 'full_time'
   );

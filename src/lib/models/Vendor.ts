@@ -5,6 +5,7 @@ export interface IVendor extends Document {
   vendorId: string; // Unique identifier, e.g. VEN001
   name: string;
   contactNumber: string;
+  serviceType: string;
   email?: string;
   address?: string;
   /** Banking details for payments */

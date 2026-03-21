@@ -59,10 +59,10 @@ export async function POST(req: NextRequest) {
     if (!hasRole(user, ['admin', 'finance', 'hr'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { name, contactNumber, email, address, bankName, bankBranch, ifscCode, accountNumber, upiId, panNumber, gstNumber, notes } = body;
+    const { name, contactNumber, serviceType, email, address, bankName, bankBranch, ifscCode, accountNumber, upiId, panNumber, gstNumber, notes } = body;
 
-    if (!name || !contactNumber) {
-      return NextResponse.json({ error: 'Name and contact number are required' }, { status: 400 });
+    if (!name || !contactNumber || !serviceType) {
+      return NextResponse.json({ error: 'Name, contact number and service type are required' }, { status: 400 });
     }
 
     await connectDB();

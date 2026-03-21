@@ -72,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const scope = await getUserBranchScope(user);
     const recordBranchId =
-      record.branch && typeof record.branch === 'object' && '_id' in (record.branch as Record<string, unknown>)
+      record.branch && typeof record.branch === 'object' && '_id' in (record.branch as unknown as Record<string, unknown>)
         ? String((record.branch as { _id: unknown })._id)
         : String(record.branch ?? '');
     if (!canAccessBranch(scope, recordBranchId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

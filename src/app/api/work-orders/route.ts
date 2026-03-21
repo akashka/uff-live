@@ -22,13 +22,18 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const canAccessAll = hasRole(user, ['admin', 'finance', 'accountancy', 'hr']);
-    const isContractorEmployee = !!user.employeeId && user.employeeType === 'contractor';
+    let isContractorEmployee = false;
+    if (user.employeeId && !canAccessAll) {
+      await connectDB();
+      const emp = await Employee.findById(user.employeeId).select('employeeType').lean();
+      isContractorEmployee = (emp as { employeeType?: string })?.employeeType === 'contractor';
+    }
 
     if (!canAccessAll && !isContractorEmployee) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    await connectDB();
+    if (canAccessAll) await connectDB();
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') as WorkOrderType | null; // contractor | full_time | vendor
     const employeeId = searchParams.get('employeeId');
@@ -83,7 +88,7 @@ export async function GET(req: NextRequest) {
         .limit(fetchLimit)
         .lean();
 
-      const wrRecords = workRecords.map((r: Record<string, unknown>) => {
+      const wrRecords = workRecords.map((r) => {
         const emp = r.employee as { name?: string } | null;
         const br = r.branch as { name?: string } | null;
         const so = r.styleOrder as { styleCode?: string; brand?: string } | null;
@@ -96,7 +101,7 @@ export async function GET(req: NextRequest) {
           subjectName: emp?.name || '',
           branchName: br?.name || '',
           styleCode: styleStr,
-          raw: r,
+          raw: r as unknown as Record<string, unknown>,
         };
       });
 
@@ -127,7 +132,7 @@ export async function GET(req: NextRequest) {
         .limit(fetchLimit)
         .lean();
 
-      const ftMapped = ftRecords.map((r: Record<string, unknown>) => {
+      const ftMapped = ftRecords.map((r) => {
         const emp = r.employee as { name?: string } | null;
         const br = r.branch as { name?: string } | null;
         return {
@@ -138,7 +143,7 @@ export async function GET(req: NextRequest) {
           subjectName: emp?.name || '',
           branchName: br?.name || '',
           styleCode: '',
-          raw: r,
+          raw: r as unknown as Record<string, unknown>,
         };
       });
 
@@ -164,7 +169,7 @@ export async function GET(req: NextRequest) {
         .limit(fetchLimit)
         .lean();
 
-      const vwoMapped = vendorOrders.map((r: Record<string, unknown>) => {
+      const vwoMapped = vendorOrders.map((r) => {
         const ven = r.vendor as { name?: string } | null;
         const br = r.branch as { name?: string } | null;
         const so = r.styleOrder as { styleCode?: string; brand?: string } | null;
@@ -177,7 +182,7 @@ export async function GET(req: NextRequest) {
           subjectName: ven?.name || '',
           branchName: br?.name || '',
           styleCode: styleStr,
-          raw: r,
+          raw: r as unknown as Record<string, unknown>,
         };
       });
 

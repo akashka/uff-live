@@ -45,7 +45,7 @@ interface StyleOrderWithAvailability {
   } | null;
 }
 
-export default function WorkOrderFormContractor({ mode, record, onClose, onSaved }: WorkOrderFormContractorProps) {
+export default function WorkOrderFormContractor({ mode, record, onClose, onSaved, onSwitchToEdit }: WorkOrderFormContractorProps) {
   const { t } = useApp();
   const { user } = useAuth();
   const isEmployee = !!user?.employeeId;
