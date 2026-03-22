@@ -10,6 +10,10 @@ export interface IVendorWorkItem {
   multiplier?: number;
   remarks?: string;
   ratePerUnit: number;
+  /** Default rate at time of creation. Used when rateOverrideApproved is false. */
+  defaultRatePerUnit?: number;
+  /** True when ratePerUnit equals default, or when admin has approved the override. */
+  rateOverrideApproved?: boolean;
   amount: number;
 }
 
@@ -38,6 +42,8 @@ const VendorWorkItemSchema = new Schema<IVendorWorkItem>(
     multiplier: { type: Number, default: 1, min: 0 },
     remarks: { type: String, default: '' },
     ratePerUnit: { type: Number, required: true, min: 0 },
+    defaultRatePerUnit: { type: Number, default: undefined },
+    rateOverrideApproved: { type: Boolean, default: true },
     amount: { type: Number, required: true, min: 0 },
   },
   { _id: false }

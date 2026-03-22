@@ -7,6 +7,7 @@ import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { applySingleBranchScope, getUserBranchScope } from '@/lib/branchAccess';
+import { formatStyleOrderDisplay } from '@/lib/utils';
 
 export type WorkOrderType = 'contractor' | 'full_time' | 'vendor';
 
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
       const workRecords = await WorkRecord.find(wrFilter)
         .populate({ path: 'employee', select: 'name _id' })
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand _id')
+        .populate('styleOrder', 'styleCode brand colour _id')
         .sort({ month: -1, createdAt: -1 })
         .limit(fetchLimit)
         .lean();
@@ -91,8 +92,8 @@ export async function GET(req: NextRequest) {
       const wrRecords = workRecords.map((r) => {
         const emp = r.employee as { name?: string } | null;
         const br = r.branch as { name?: string } | null;
-        const so = r.styleOrder as { styleCode?: string; brand?: string } | null;
-        const styleStr = so ? (so.brand ? `${so.styleCode || ''} - ${so.brand}` : so.styleCode || '') : '';
+        const so = r.styleOrder as { styleCode?: string; brand?: string; colour?: string } | null;
+        const styleStr = so ? formatStyleOrderDisplay(so.styleCode, so.brand, so.colour) : '';
         return {
           _id: String(r._id),
           type: 'contractor' as const,
@@ -164,7 +165,7 @@ export async function GET(req: NextRequest) {
       const vendorOrders = await VendorWorkOrder.find(vwoFilter)
         .populate('vendor', 'name _id')
         .populate('branch', 'name _id')
-        .populate('styleOrder', 'styleCode brand _id')
+        .populate('styleOrder', 'styleCode brand colour _id')
         .sort({ month: -1, createdAt: -1 })
         .limit(fetchLimit)
         .lean();
@@ -172,8 +173,8 @@ export async function GET(req: NextRequest) {
       const vwoMapped = vendorOrders.map((r) => {
         const ven = r.vendor as { name?: string } | null;
         const br = r.branch as { name?: string } | null;
-        const so = r.styleOrder as { styleCode?: string; brand?: string } | null;
-        const styleStr = so ? (so.brand ? `${so.styleCode || ''} - ${so.brand}` : so.styleCode || '') : '';
+        const so = r.styleOrder as { styleCode?: string; brand?: string; colour?: string } | null;
+        const styleStr = so ? formatStyleOrderDisplay(so.styleCode, so.brand, so.colour) : '';
         return {
           _id: String(r._id),
           type: 'vendor' as const,

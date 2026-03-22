@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import Payment from '@/lib/models/Payment';
 import WorkRecord from '@/lib/models/WorkRecord';
+import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Employee from '@/lib/models/Employee';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
       carriedForwardRemarks,
       isAdvance,
       workRecordIds,
+      fullTimeWorkRecordIds,
       daysWorked,
       totalWorkingDays,
       otHours,
@@ -140,11 +142,21 @@ export async function POST(req: NextRequest) {
     if (!emp) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
     let workRecordRefs: { workRecord: mongoose.Types.ObjectId; totalAmount: number }[] = [];
+    let fullTimeWorkRecordRefs: { fullTimeWorkRecord: mongoose.Types.ObjectId; daysWorked: number; otHours: number; otAmount: number }[] = [];
     if (paymentType === 'contractor' && Array.isArray(workRecordIds) && workRecordIds.length > 0) {
       const records = await WorkRecord.find({ _id: { $in: workRecordIds }, employee: employeeId }).lean();
       workRecordRefs = (records || []).map((r) => ({
         workRecord: r._id instanceof mongoose.Types.ObjectId ? r._id : new mongoose.Types.ObjectId(r._id),
         totalAmount: roundAmount(r.totalAmount || 0),
+      }));
+    }
+    if (paymentType === 'full_time' && Array.isArray(fullTimeWorkRecordIds) && fullTimeWorkRecordIds.length > 0) {
+      const ftRecords = await FullTimeWorkRecord.find({ _id: { $in: fullTimeWorkRecordIds }, employee: employeeId }).lean();
+      fullTimeWorkRecordRefs = (ftRecords || []).map((r) => ({
+        fullTimeWorkRecord: r._id instanceof mongoose.Types.ObjectId ? r._id : new mongoose.Types.ObjectId(r._id),
+        daysWorked: roundDays(r.daysWorked ?? 0),
+        otHours: roundAmount(r.otHours ?? 0),
+        otAmount: roundAmount(r.otAmount ?? 0),
       }));
     }
 
@@ -205,6 +217,7 @@ export async function POST(req: NextRequest) {
       carriedForwardRemarks: carriedForwardRemarks || '',
       isAdvance: isAdvance ?? false,
       workRecordRefs,
+      fullTimeWorkRecordRefs,
       paidAt: new Date(),
       createdBy: new mongoose.Types.ObjectId(user.userId),
       createdAt: new Date(),

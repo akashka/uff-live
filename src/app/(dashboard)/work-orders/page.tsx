@@ -82,6 +82,57 @@ export default function WorkOrdersPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [confirmModal, setConfirmModal] = useState<{ message: string; confirmLabel: string; variant: 'danger' | 'warning'; onConfirm: () => Promise<void> } | null>(null);
 
+  const recordIdFromUrl = searchParams.get('recordId');
+  const vendorWorkOrderIdFromUrl = searchParams.get('vendorWorkOrderId');
+
+  useEffect(() => {
+    if (recordIdFromUrl && canAccessAll) {
+      const found = (Array.isArray(records) ? records : []).find((r: WorkOrderRow) => r._id === recordIdFromUrl && r.type === 'contractor');
+      if (found) {
+        setCreateType('contractor');
+        setCreateStep('form');
+        setEditingRecord(found);
+        setModal('view');
+      } else if (!loading) {
+        fetch(`/api/work-records/${recordIdFromUrl}`)
+          .then((res) => res.ok ? res.json() : null)
+          .then((raw) => {
+            if (raw) {
+              setCreateType('contractor');
+              setCreateStep('form');
+              setEditingRecord({ _id: raw._id, type: 'contractor', month: raw.month, totalAmount: raw.totalAmount, subjectName: (raw.employee as { name?: string })?.name || '', raw });
+              setModal('view');
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [recordIdFromUrl, records, loading, canAccessAll]);
+
+  useEffect(() => {
+    if (vendorWorkOrderIdFromUrl && canAccessAll) {
+      const found = (Array.isArray(records) ? records : []).find((r: WorkOrderRow) => r._id === vendorWorkOrderIdFromUrl && r.type === 'vendor');
+      if (found) {
+        setCreateType('vendor');
+        setCreateStep('form');
+        setEditingRecord(found);
+        setModal('view');
+      } else if (!loading) {
+        fetch(`/api/vendor-work-orders/${vendorWorkOrderIdFromUrl}`)
+          .then((res) => res.ok ? res.json() : null)
+          .then((raw) => {
+            if (raw) {
+              setCreateType('vendor');
+              setCreateStep('form');
+              setEditingRecord({ _id: raw._id, type: 'vendor', month: raw.month, totalAmount: raw.totalAmount, subjectName: (raw.vendor as { name?: string })?.name || '', raw });
+              setModal('view');
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [vendorWorkOrderIdFromUrl, records, loading, canAccessAll]);
+
   const filtered = (Array.isArray(records) ? records : []).filter((r: WorkOrderRow) => {
     const q = search.toLowerCase();
     if (!q) return true;

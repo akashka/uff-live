@@ -7,6 +7,13 @@ export interface IWorkRecordRef {
   totalAmount: number;
 }
 
+export interface IFullTimeWorkRecordRef {
+  fullTimeWorkRecord: mongoose.Types.ObjectId;
+  daysWorked: number;
+  otHours: number;
+  otAmount: number;
+}
+
 export interface IPayment extends Document {
   _id: mongoose.Types.ObjectId;
   employee: mongoose.Types.ObjectId;
@@ -28,6 +35,8 @@ export interface IPayment extends Document {
   carriedForwardRemarks: string;
   isAdvance: boolean;
   workRecordRefs: IWorkRecordRef[];
+  /** For full_time: which work orders this payment was against */
+  fullTimeWorkRecordRefs: IFullTimeWorkRecordRef[];
   /** For full_time salary: days worked in the month (used for proration) */
   daysWorked?: number;
   /** For full_time salary: total working days in the month */
@@ -52,6 +61,16 @@ const WorkRecordRefSchema = new Schema<IWorkRecordRef>(
   { _id: false }
 );
 
+const FullTimeWorkRecordRefSchema = new Schema<IFullTimeWorkRecordRef>(
+  {
+    fullTimeWorkRecord: { type: Schema.Types.ObjectId, ref: 'FullTimeWorkRecord', required: true },
+    daysWorked: { type: Number, required: true },
+    otHours: { type: Number, default: 0 },
+    otAmount: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const PaymentSchema = new Schema<IPayment>(
   {
     employee: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
@@ -72,6 +91,7 @@ const PaymentSchema = new Schema<IPayment>(
     carriedForwardRemarks: { type: String, default: '' },
     isAdvance: { type: Boolean, default: false },
     workRecordRefs: [WorkRecordRefSchema],
+    fullTimeWorkRecordRefs: [FullTimeWorkRecordRefSchema],
     daysWorked: { type: Number },
     totalWorkingDays: { type: Number },
     virtualDaysAttended: { type: Number },

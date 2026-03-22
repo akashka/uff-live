@@ -22,7 +22,7 @@ export async function GET(
       .populate({
         path: 'vendorWorkOrderRefs.vendorWorkOrder',
         populate: [
-          { path: 'styleOrder', select: 'styleCode brand' },
+          { path: 'styleOrder', select: 'styleCode brand colour' },
           { path: 'branch', select: 'name' },
         ],
       })

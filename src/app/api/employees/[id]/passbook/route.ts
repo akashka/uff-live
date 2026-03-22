@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 const XLSX = require('xlsx');
 import connectDB from '@/lib/db';
 import WorkRecord from '@/lib/models/WorkRecord';
+import FullTimeWorkRecord from '@/lib/models/FullTimeWorkRecord';
 import Payment from '@/lib/models/Payment';
 import Employee from '@/lib/models/Employee';
 import Branch from '@/lib/models/Branch';
@@ -13,6 +14,8 @@ import { getAuthUser, hasRole } from '@/lib/auth';
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const MAX_FETCH = 5000;
+
+type Entry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; paymentId?: string; workRecordId?: string };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -46,44 +49,82 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       paymentFilter.paymentType = empType;
     }
 
-    const [workRecords, payments] = await Promise.all([
-      WorkRecord.find({ employee: empObjId })
+    let workEntries: Entry[] = [];
+
+    if (empType === 'full_time') {
+      const fullTimeRecords = await FullTimeWorkRecord.find({ employee: empObjId })
+        .select('_id month totalAmount branch daysWorked otHours otAmount createdAt')
+        .sort({ month: 1, createdAt: 1 })
+        .limit(MAX_FETCH)
+        .lean();
+
+      const branchIds = [...new Set((fullTimeRecords || []).map((r) => String((r as { branch?: unknown }).branch)).filter(Boolean))];
+      const branchMap = new Map<string, string>();
+      if (branchIds.length > 0) {
+        const branches = await Branch.find({ _id: { $in: branchIds } }).select('name').lean();
+        for (const b of branches || []) {
+          branchMap.set(String(b._id), (b as { name?: string }).name || '');
+        }
+      }
+
+      workEntries = (fullTimeRecords || []).map((r) => {
+        const branchName = branchMap.get(String((r as { branch?: unknown }).branch)) || 'Branch';
+        const month = (r as { month?: string }).month;
+        const daysWorked = (r as { daysWorked?: number }).daysWorked ?? 0;
+        const otHours = (r as { otHours?: number }).otHours ?? 0;
+        const createdAt = (r as { createdAt?: Date }).createdAt;
+        const d = createdAt ? new Date(createdAt) : (month ? (() => { const [y, m] = month.split('-').map(Number); return y && m ? new Date(y, m - 1, 1) : new Date(); })() : new Date());
+        const otStr = otHours > 0 ? `, ${otHours}h OT` : '';
+        return {
+          type: 'work',
+          id: `ft-${(r as { _id?: unknown })._id}`,
+          date: d.toISOString(),
+          particulars: `Work Order – ${branchName} (${formatMonth(month) || '–'}) ${daysWorked}d${otStr}`,
+          credit: (r as { totalAmount?: number }).totalAmount ?? 0,
+          debit: 0,
+          workRecordId: String((r as { _id?: unknown })._id),
+        };
+      });
+    } else {
+      const workRecords = await WorkRecord.find({ employee: empObjId })
         .select('_id month totalAmount branch')
         .sort({ month: 1, createdAt: 1 })
         .limit(MAX_FETCH)
-        .lean(),
-      Payment.find(paymentFilter)
-        .select('_id paidAt paymentAmount paymentMode month totalPayable isAdvance paymentType')
-        .sort({ paidAt: 1 })
-        .limit(MAX_FETCH)
-        .lean(),
-    ]);
+        .lean();
 
-    const branchIds = [...new Set((workRecords || []).map((r) => String((r as { branch?: unknown }).branch)).filter(Boolean))];
-    const branchMap = new Map<string, string>();
-    if (branchIds.length > 0) {
-      const branches = await Branch.find({ _id: { $in: branchIds } }).select('name').lean();
-      for (const b of branches || []) {
-        branchMap.set(String(b._id), (b as { name?: string }).name || '');
+      const branchIds = [...new Set((workRecords || []).map((r) => String((r as { branch?: unknown }).branch)).filter(Boolean))];
+      const branchMap = new Map<string, string>();
+      if (branchIds.length > 0) {
+        const branches = await Branch.find({ _id: { $in: branchIds } }).select('name').lean();
+        for (const b of branches || []) {
+          branchMap.set(String(b._id), (b as { name?: string }).name || '');
+        }
       }
+
+      workEntries = (workRecords || []).map((r) => {
+        const branchName = branchMap.get(String((r as { branch?: unknown }).branch)) || 'Branch';
+        const month = (r as { month?: string }).month;
+        const [y, m] = (month || '').split('-').map(Number);
+        const d = y && m ? new Date(y, m - 1, 1) : new Date();
+        return {
+          type: 'work',
+          id: `w-${(r as { _id?: unknown })._id}`,
+          date: d.toISOString(),
+          particulars: `Work Record – ${branchName} (${formatMonth(month) || '–'})`,
+          credit: (r as { totalAmount?: number }).totalAmount ?? 0,
+          debit: 0,
+          workRecordId: String((r as { _id?: unknown })._id),
+        };
+      });
     }
 
-    const workEntries = (workRecords || []).map((r) => {
-      const branchName = branchMap.get(String((r as { branch?: unknown }).branch)) || 'Branch';
-      const month = (r as { month?: string }).month;
-      const [y, m] = (month || '').split('-').map(Number);
-      const d = y && m ? new Date(y, m - 1, 1) : new Date();
-      return {
-        type: 'work',
-        id: `w-${(r as { _id?: unknown })._id}`,
-        date: d.toISOString(),
-        particulars: `Work Record – ${branchName} (${formatMonth(month) || '–'})`,
-        credit: (r as { totalAmount?: number }).totalAmount ?? 0,
-        debit: 0,
-      };
-    });
+    const payments = await Payment.find(paymentFilter)
+      .select('_id paidAt paymentAmount paymentMode month totalPayable isAdvance paymentType pfDeducted esiDeducted otherDeducted advanceDeducted')
+      .sort({ paidAt: 1 })
+      .limit(MAX_FETCH)
+      .lean();
 
-    let paymentEntries: { type: string; id: string; date: string; particulars: string; credit: number; debit: number }[] = [];
+    let paymentEntries: Entry[] = [];
 
     if (empType === 'full_time') {
       for (const p of payments || []) {
@@ -91,37 +132,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const monthStr = formatMonth(month) || '–';
         const isAdv = (p as { isAdvance?: boolean }).isAdvance ?? false;
         const paymentAmount = (p as { paymentAmount?: number }).paymentAmount ?? 0;
-        const totalPayable = (p as { totalPayable?: number }).totalPayable ?? 0;
         const paidAt = (p as { paidAt?: Date }).paidAt;
         const paymentMode = (p as { paymentMode?: string }).paymentMode || '';
+        const paymentId = String((p as { _id?: unknown })._id);
 
         if (isAdv) {
           paymentEntries.push({
             type: 'advance',
-            id: `p-adv-${(p as { _id?: unknown })._id}`,
+            id: `p-adv-${paymentId}`,
             date: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(),
             particulars: `Advance – ${monthStr}`,
             credit: 0,
             debit: paymentAmount,
+            paymentId,
           });
         } else {
-          const [y, m] = (month || '').split('-').map(Number);
-          const monthFirst = y && m ? new Date(y, m - 1, 1) : new Date();
-          paymentEntries.push({
-            type: 'salary_credit',
-            id: `p-sal-${(p as { _id?: unknown })._id}`,
-            date: monthFirst.toISOString(),
-            particulars: `Salary – ${monthStr}`,
-            credit: totalPayable,
-            debit: 0,
-          });
+          const totalPayable = (p as { totalPayable?: number }).totalPayable ?? 0;
+          const pfDeducted = (p as { pfDeducted?: number }).pfDeducted ?? 0;
+          const esiDeducted = (p as { esiDeducted?: number }).esiDeducted ?? 0;
+          const otherDeducted = (p as { otherDeducted?: number }).otherDeducted ?? 0;
+          const advanceDeducted = (p as { advanceDeducted?: number }).advanceDeducted ?? 0;
+          const debitAmount = totalPayable + pfDeducted + esiDeducted + otherDeducted + advanceDeducted;
           paymentEntries.push({
             type: 'payment',
-            id: `p-${(p as { _id?: unknown })._id}`,
+            id: `p-${paymentId}`,
             date: paidAt ? new Date(paidAt).toISOString() : new Date().toISOString(),
             particulars: `Salary Payment – ${monthStr} (${paymentMode})`,
             credit: 0,
-            debit: paymentAmount,
+            debit: debitAmount,
+            paymentId,
           });
         }
       }
@@ -137,6 +176,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           particulars: `Payment – ${(p as { paymentMode?: string }).paymentMode || ''} (${formatMonth(month) || '–'})`,
           credit: 0,
           debit: (p as { paymentAmount?: number }).paymentAmount ?? 0,
+          paymentId: String((p as { _id?: unknown })._id),
         };
       });
     }

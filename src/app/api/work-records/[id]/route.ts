@@ -8,7 +8,7 @@ import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { canAccessBranch, getUserBranchScope } from '@/lib/branchAccess';
-import { notifyAdminsIfNeeded, notifyEmployee } from '@/lib/notifications';
+import { notifyAdminsIfNeeded, notifyEmployee, getAdminUserIds, createNotifications } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
 
@@ -170,6 +170,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const ratePerUnit = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
         const quantity = Math.max(1, Number(item.quantity) || 1);
         const multiplier = Number(item.multiplier) || 1;
+        const rateOverrideApproved = ratePerUnit === defaultRate;
+        const effectiveRate = rateOverrideApproved ? ratePerUnit : defaultRate;
+        const amount = roundAmount(quantity * multiplier * effectiveRate);
 
         if (styleId) {
           const available = await getAvailableQuantity(styleId, branch, monthStr, item.rateMasterId, id);
@@ -181,7 +184,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }
         }
 
-        const amount = roundAmount(quantity * multiplier * ratePerUnit);
         workItemsWithAmounts.push({
           rateMaster: item.rateMasterId,
           rateName: (rateMaster as { name: string }).name,
@@ -190,6 +192,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           multiplier,
           remarks: item.remarks || '',
           ratePerUnit,
+          defaultRatePerUnit: defaultRate,
+          rateOverrideApproved,
           amount,
         });
         totalAmount += amount;
@@ -226,6 +230,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       link: '/work-orders',
       metadata: { entityId: id, entityType: 'work_record', actorId: user.userId, actorRole: user.role, employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
     }).catch(() => {});
+
+    const hasRateOverride = (record.workItems || []).some((wi: { rateOverrideApproved?: boolean }) => wi.rateOverrideApproved === false);
+    if (hasRateOverride) {
+      const adminIds = await getAdminUserIds();
+      createNotifications({
+        recipientIds: adminIds,
+        type: 'work_record_rate_override_pending',
+        title: 'Rate override pending approval',
+        message: `Work record for ${empName} (${record.month}) has rate(s) changed from default. Approve to apply entered price. Until then, default price is used.`,
+        link: `/work-orders?recordId=${id}`,
+        metadata: { entityId: id, entityType: 'work_record', employeeId: empId, employeeName: empName, month: record.month, amount: record.totalAmount },
+      }).catch(() => {});
+    }
 
     logAudit({
       user,

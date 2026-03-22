@@ -138,6 +138,8 @@ export default function FullTimePayments() {
   const [advanceModal, setAdvanceModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
   const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
+  const [detailPaymentFull, setDetailPaymentFull] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -174,11 +176,24 @@ export default function FullTimePayments() {
     setPage(1);
   }, [filterBranch, filterDepartment, filterEmployee, filterMonth, filterType]);
 
+  useEffect(() => {
+    if (!detailPayment) {
+      setDetailPaymentFull(null);
+      return;
+    }
+    setDetailLoading(true);
+    setDetailPaymentFull(null);
+    fetch(`/api/payments/${detailPayment._id}`)
+      .then((r) => r.json())
+      .then((data) => { if (!data.error) setDetailPaymentFull(data); })
+      .finally(() => setDetailLoading(false));
+  }, [detailPayment]);
+
   const loadCalcAndAdvance = async (empId: string, month: string) => {
     if (!empId || !month) return;
     const [calcRes, advRes] = await Promise.all([
       fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=full_time`).then((r) => r.json()),
-      fetch(`/api/payments/advance-outstanding?employeeId=${empId}`).then((r) => r.json()),
+      fetch(`/api/payments/advance-outstanding?employeeId=${empId}&month=${month}`).then((r) => r.json()),
     ]);
     const outstanding = advRes.error ? 0 : (advRes.outstanding ?? 0);
     setAdvanceOutstanding(outstanding);
@@ -259,22 +274,17 @@ export default function FullTimePayments() {
   const otHours = roundAmount(Math.max(0, salaryForm.otHours ?? calc?.otHours ?? 0));
   const otAmount = roundAmount(calc?.otAmount ?? (otHours * otCostPerHour));
 
+  // PF, ESI, Other are monthly fixed amounts - deduct once per month. Use API's "remaining to deduct" as-is (no proration).
+  // After first payment in month, API returns 0 for these; subsequent payments get 0.
+  const pfDeducted = roundAmount(pf);
+  const esiDeducted = roundAmount(esi);
+  const otherDeducted = roundAmount(other);
   let proratedAmount: number;
-  let pfDeducted: number;
-  let esiDeducted: number;
-  let otherDeducted: number;
   if (salaryBasis === 'daily' && dailySalary > 0) {
     const gross = roundAmount(dailySalary * daysWorked);
-    const prorate = totalWorkingDays > 0 ? daysWorked / totalWorkingDays : 0;
-    pfDeducted = roundAmount(pf * prorate);
-    esiDeducted = roundAmount(esi * prorate);
-    otherDeducted = roundAmount(other * prorate);
     proratedAmount = roundAmount(gross - pfDeducted - esiDeducted - otherDeducted);
   } else {
     proratedAmount = roundAmount(totalWorkingDays > 0 ? (baseAmount / totalWorkingDays) * daysWorked : 0);
-    pfDeducted = roundAmount(totalWorkingDays > 0 ? (pf / totalWorkingDays) * daysWorked : 0);
-    esiDeducted = roundAmount(totalWorkingDays > 0 ? (esi / totalWorkingDays) * daysWorked : 0);
-    otherDeducted = roundAmount(totalWorkingDays > 0 ? (other / totalWorkingDays) * daysWorked : 0);
   }
 
   const totalPayable = roundAmount(proratedAmount + otAmount + salaryForm.addDeductAmount - (salaryForm.advanceDeducted ?? 0));
@@ -855,42 +865,81 @@ export default function FullTimePayments() {
         </div>
       </Modal>
 
-      <Modal open={!!detailPayment} onClose={() => setDetailPayment(null)} title={t('paymentDetails')} size="lg" footer={
+      <Modal open={!!detailPayment} onClose={() => setDetailPayment(null)} title={t('paymentDetails')} size="3xl" footer={
         <button onClick={() => setDetailPayment(null)} className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-50 transition">
           {t('close')}
         </button>
       }>
         {detailPayment && (
-          <div className="space-y-3 text-sm">
-            <p><span className="font-medium text-slate-700">{t('employeeName')}:</span> {(detailPayment.employee as { name?: string })?.name}</p>
-            <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth(detailPayment.month)}</p>
+          <div className="space-y-5 text-sm max-h-[75vh] overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
+              <p><span className="font-medium text-slate-700">{t('employeeName')}:</span> {(detailPayment.employee as { name?: string })?.name}</p>
+              <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth(detailPayment.month)}</p>
+              <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode(detailPayment.paymentMode)}</p>
+              {detailPayment.transactionRef && <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {detailPayment.transactionRef}</p>}
+              {detailPayment.paidAt && <p><span className="font-medium text-slate-700">Paid At:</span> {new Date(detailPayment.paidAt).toLocaleString()}</p>}
+            </div>
             {detailPayment.isAdvance ? (
-              <p><span className="font-medium text-slate-700">{t('advance')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <p><span className="font-semibold text-slate-800">{t('advance')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
+                {detailPayment.addDeductRemarks && <p className="text-slate-600 mt-1">{detailPayment.addDeductRemarks}</p>}
+              </div>
             ) : (
               <>
-                {(() => {
-                  const d = getDisplayDays(detailPayment);
-                  if (d) return <p><span className="font-medium text-slate-700">{t('daysWorked')}:</span> {d.days}{d.total != null ? ` / ${d.total} ${t('totalWorkingDays')}` : ''}{isAccountancy ? ` (${t('virtualDays')})` : ''}</p>;
-                  return null;
-                })()}
-                <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{formatAmount(detailPayment.baseAmount)}</p>
-                {detailPayment.otHours != null && detailPayment.otHours > 0 && (
-                  <p><span className="font-medium text-slate-700">{t('otHours')}:</span> {detailPayment.otHours} → ₹{formatAmount(detailPayment.otAmount ?? 0)}</p>
-                )}
-                {detailPayment.pfDeducted > 0 && <p><span className="font-medium text-slate-700">{t('pf')}:</span> -₹{formatAmount(detailPayment.pfDeducted)}</p>}
-                {detailPayment.esiDeducted > 0 && <p><span className="font-medium text-slate-700">{t('esi')}:</span> -₹{formatAmount(detailPayment.esiDeducted)}</p>}
-                {(detailPayment.otherDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('otherDeductions')}:</span> -₹{formatAmount(detailPayment.otherDeducted!)}</p>}
-                {detailPayment.addDeductAmount !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {detailPayment.addDeductAmount > 0 ? '+' : ''}₹{formatAmount(detailPayment.addDeductAmount)} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
-                {(detailPayment.advanceDeducted ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> -₹{formatAmount(detailPayment.advanceDeducted)}</p>}
+                {/* Work Orders - same as add form */}
+                <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                  <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+                  {detailLoading ? (
+                    <p className="text-slate-500">{t('loading')}</p>
+                  ) : detailPaymentFull && (detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[])?.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {(detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[]).map((ref: { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }, i: number) => {
+                        const ft = ref.fullTimeWorkRecord;
+                        if (!ft) return null;
+                        return (
+                          <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-700">{(ft.branch as { name?: string })?.name || t('branch')} – {ref.daysWorked ?? ft.daysWorked ?? 0} {t('daysWorked')}, {ref.otHours ?? ft.otHours ?? 0} {t('otHours')}</p>
+                              <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(ft.totalAmount ?? 0)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders.'}</p>
+                  )}
+                  {detailPayment.daysWorked != null && (
+                    <p className="text-xs text-slate-500 mt-1">{t('daysWorked')}: {detailPayment.daysWorked} / {detailPayment.totalWorkingDays ?? '—'} | OT: {detailPayment.otHours ?? 0}h = ₹{formatAmount(detailPayment.otAmount ?? 0)}</p>
+                  )}
+                </div>
+                {/* Calculation breakup - same as add form */}
+                <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+                  <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+                  {(() => {
+                    const d = getDisplayDays(detailPayment);
+                    if (d) return <p className="text-slate-700">{t('daysWorked')}: {d.days}{d.total != null ? ` / ${d.total} ${t('totalWorkingDays')}` : ''}{isAccountancy ? ` (${t('virtualDays')})` : ''}</p>;
+                    return null;
+                  })()}
+                  <p className="text-slate-700">{t('grossSalary') || 'Gross'}: ₹{formatAmount(roundAmount(detailPayment.baseAmount + detailPayment.pfDeducted + detailPayment.esiDeducted + (detailPayment.otherDeducted ?? 0)))}</p>
+                  {detailPayment.otHours != null && detailPayment.otHours > 0 && (
+                    <p className="text-slate-700">+ {t('otHours')} / OT: ₹{formatAmount(detailPayment.otAmount ?? 0)}</p>
+                  )}
+                  {detailPayment.pfDeducted > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(detailPayment.pfDeducted)}</p>}
+                  {detailPayment.esiDeducted > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(detailPayment.esiDeducted)}</p>}
+                  {(detailPayment.otherDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(detailPayment.otherDeducted!)}</p>}
+                  {detailPayment.addDeductAmount !== 0 && <p className="text-slate-700">{detailPayment.addDeductAmount > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(detailPayment.addDeductAmount)} {detailPayment.addDeductRemarks && `(${detailPayment.addDeductRemarks})`}</p>}
+                  {(detailPayment.advanceDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(detailPayment.advanceDeducted!)}</p>}
+                </div>
+                <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
+                  <p className="text-sm font-medium text-slate-700">{t('finalPayable')}</p>
+                  <p className="text-2xl font-bold text-slate-900">₹{formatAmount(detailPayment.totalPayable)}</p>
+                  <p className="text-slate-700 mt-1">{t('paymentAmount')}: ₹{formatAmount(detailPayment.paymentAmount)}</p>
+                  {detailPayment.remainingAmount > 0 && <p className="text-amber-700 mt-1"><span className="font-medium">{t('remainingDue')}:</span> ₹{formatAmount(detailPayment.remainingAmount)}</p>}
+                  {detailPayment.carriedForward > 0 && <p className="text-slate-600 mt-1">{t('carryForward')}: ₹{formatAmount(detailPayment.carriedForward)} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
+                </div>
               </>
             )}
-            <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{formatAmount(detailPayment.totalPayable)}</p>
-            <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
-            <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode(detailPayment.paymentMode)}</p>
-            {detailPayment.transactionRef && <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {detailPayment.transactionRef}</p>}
-            {detailPayment.remainingAmount > 0 && <p className="text-uff-accent"><span className="font-medium">{t('remainingDue')}:</span> ₹{formatAmount(detailPayment.remainingAmount)}</p>}
-            {detailPayment.carriedForward > 0 && <p><span className="font-medium text-slate-700">{t('carryForward')}:</span> ₹{formatAmount(detailPayment.carriedForward)} {detailPayment.carriedForwardRemarks && `(${detailPayment.carriedForwardRemarks})`}</p>}
-            {detailPayment.isAdvance && <p className="text-blue-600">{t('advance')}</p>}
           </div>
         )}
       </Modal>

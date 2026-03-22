@@ -376,7 +376,7 @@ export default function ReportsPage() {
                         ) : (
                           analyticsData.data.map((r) => (
                             <tr key={r.styleCode + r.month + r.rateName + (r.branch?.name || '')} className="hover:bg-slate-50">
-                              <td className="px-4 py-3 text-slate-800 font-medium">{r.styleCode}</td>
+                              <td className="px-4 py-3 text-slate-800 font-medium">{r.styleCode}{r.brand ? ` - ${r.brand}` : ''}{r.colour ? ` (${r.colour})` : ''}</td>
                               <td className="px-4 py-3 text-slate-700">{r.branch?.name || '-'}</td>
                               <td className="px-4 py-3 text-slate-700">{formatMonth(r.month)}</td>
                               <td className="px-4 py-3 text-slate-700">{r.rateName}</td>

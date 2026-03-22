@@ -9,10 +9,11 @@ import PageHeader from '@/components/PageHeader';
 import Breadcrumb from '@/components/Breadcrumb';
 import UserAvatar from '@/components/UserAvatar';
 import { PageLoader } from '@/components/Skeleton';
-import { formatDate, formatAmount } from '@/lib/utils';
+import Modal from '@/components/Modal';
+import { formatDate, formatAmount, formatMonth } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
-type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number };
+type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number; paymentId?: string; workRecordId?: string };
 
 export default function EmployeePassbookPage() {
   const { t } = useApp();
@@ -28,6 +29,11 @@ export default function EmployeePassbookPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [detailEntry, setDetailEntry] = useState<PassbookEntry | null>(null);
+  const [detailPaymentFull, setDetailPaymentFull] = useState<Record<string, unknown> | null>(null);
+  const [detailWorkRecord, setDetailWorkRecord] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const canAccessAny = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isOwnProfile = user?.employeeId === employeeId;
@@ -67,6 +73,81 @@ export default function EmployeePassbookPage() {
       })
       .finally(() => setLoading(false));
   }, [employeeId, canView, page, t]);
+
+  useEffect(() => {
+    if (!detailEntry) {
+      setDetailPaymentFull(null);
+      setDetailWorkRecord(null);
+      setDetailError(null);
+      return;
+    }
+    if (detailEntry.paymentId) {
+      setDetailLoading(true);
+      setDetailPaymentFull(null);
+      setDetailWorkRecord(null);
+      setDetailError(null);
+      fetch(`/api/payments/${detailEntry.paymentId}`)
+        .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && !data.error) {
+            setDetailPaymentFull(data);
+            setDetailError(null);
+          } else {
+            setDetailPaymentFull(null);
+            setDetailError(data?.error || t('error'));
+          }
+        })
+        .catch(() => {
+          setDetailPaymentFull(null);
+          setDetailError(t('error'));
+        })
+        .finally(() => setDetailLoading(false));
+    } else if (detailEntry.workRecordId && employee) {
+      setDetailLoading(true);
+      setDetailPaymentFull(null);
+      setDetailWorkRecord(null);
+      setDetailError(null);
+      const apiPath = employee.employeeType === 'full_time'
+        ? `/api/full-time-work-records/${detailEntry.workRecordId}`
+        : `/api/work-records/${detailEntry.workRecordId}`;
+      fetch(apiPath)
+        .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          if (ok && !data.error) {
+            setDetailWorkRecord(data);
+            setDetailError(null);
+          } else {
+            setDetailWorkRecord(null);
+            setDetailError(data?.error || t('error'));
+          }
+        })
+        .catch(() => {
+          setDetailWorkRecord(null);
+          setDetailError(t('error'));
+        })
+        .finally(() => setDetailLoading(false));
+    }
+  }, [detailEntry?.paymentId, detailEntry?.workRecordId, employee, t]);
+
+  const handleRowClick = (row: PassbookEntry) => {
+    if (row.paymentId || row.workRecordId) setDetailEntry(row);
+  };
+
+  const closeDetail = () => {
+    setDetailEntry(null);
+    setDetailPaymentFull(null);
+    setDetailWorkRecord(null);
+    setDetailError(null);
+  };
+
+  const PAYMENT_MODES = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'upi', label: 'UPI' },
+    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'cheque', label: 'Cheque' },
+    { value: 'other', label: 'Other' },
+  ];
+  const formatMode = (m: string) => PAYMENT_MODES.find((p) => p.value === m)?.label || m;
 
   if (loading) {
     return (
@@ -174,7 +255,11 @@ export default function EmployeePassbookPage() {
                 </tr>
               ) : (
                 rowsWithBalance.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/50">
+                  <tr
+                    key={row.id}
+                    onClick={() => handleRowClick(row)}
+                    className={`hover:bg-slate-50/50 ${(row.paymentId || row.workRecordId) ? 'cursor-pointer' : ''}`}
+                  >
                     <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                       {row.date ? formatDate(row.date) : '–'}
                     </td>
@@ -230,6 +315,113 @@ export default function EmployeePassbookPage() {
           </div>
         )}
       </div>
+
+      <Modal open={!!detailEntry} onClose={closeDetail} title={detailEntry?.paymentId ? t('paymentDetails') : t('workOrder')} size="2xl" footer={
+        <button onClick={closeDetail} className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-50 transition">
+          {t('close')}
+        </button>
+      }>
+        {detailEntry && (
+          <div className="space-y-4 text-sm">
+            {detailEntry.paymentId ? (
+              detailLoading ? (
+                <p className="text-slate-500">{t('loading')}</p>
+              ) : detailError ? (
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200">
+                  <p className="text-red-700 font-medium">{detailError}</p>
+                </div>
+              ) : detailPaymentFull ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
+                    <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth((detailPaymentFull.month as string) || '')}</p>
+                    <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode((detailPaymentFull.paymentMode as string) || '')}</p>
+                    <p><span className="font-medium text-slate-700">{t('baseAmount')}:</span> ₹{formatAmount((detailPaymentFull.baseAmount as number) ?? 0)}</p>
+                    {((detailPaymentFull.pfDeducted as number) ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('pf')}:</span> −₹{formatAmount(detailPaymentFull.pfDeducted as number)}</p>}
+                    {((detailPaymentFull.esiDeducted as number) ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('esi')}:</span> −₹{formatAmount(detailPaymentFull.esiDeducted as number)}</p>}
+                    {((detailPaymentFull.otherDeducted as number) ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('otherDeductions')}:</span> −₹{formatAmount(detailPaymentFull.otherDeducted as number)}</p>}
+                    {((detailPaymentFull.advanceDeducted as number) ?? 0) > 0 && <p><span className="font-medium text-slate-700">{t('advanceDeducted')}:</span> −₹{formatAmount(detailPaymentFull.advanceDeducted as number)}</p>}
+                    {((detailPaymentFull.addDeductAmount as number) ?? 0) !== 0 && <p><span className="font-medium text-slate-700">{t('addDeduct')}:</span> {((detailPaymentFull.addDeductAmount as number) ?? 0) > 0 ? '+' : ''}₹{formatAmount(detailPaymentFull.addDeductAmount as number)}</p>}
+                    <p className="sm:col-span-2 pt-2 border-t border-slate-200"><span className="font-semibold text-slate-800">{t('totalPayable')}:</span> ₹{formatAmount((detailPaymentFull.totalPayable as number) ?? 0)}</p>
+                    <p><span className="font-semibold text-slate-800">{t('paymentAmount')}:</span> ₹{formatAmount((detailPaymentFull.paymentAmount as number) ?? 0)}</p>
+                    {(detailPaymentFull.transactionRef as string) && <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {detailPaymentFull.transactionRef as string}</p>}
+                  </div>
+                  {(detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[])?.length > 0 && (
+                    <div className="p-4 bg-slate-50 rounded-xl">
+                      <p className="font-medium text-slate-800 mb-2">{t('workOrders')}</p>
+                      {(detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[]).map((ref: { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }, i: number) => {
+                        const ft = ref.fullTimeWorkRecord;
+                        if (!ft) return null;
+                        return (
+                          <div key={i} className="py-2 border-b border-slate-200 last:border-0">
+                            <p className="font-medium text-slate-700">{(ft.branch as { name?: string })?.name || t('branch')}</p>
+                            <p className="text-slate-600 text-sm">{t('daysWorked')}: {ref.daysWorked ?? ft.daysWorked ?? 0} | {t('otHours')}: {ref.otHours ?? ft.otHours ?? 0} → ₹{formatAmount(ref.otAmount ?? ft.otAmount ?? 0)}</p>
+                            <p className="font-medium">₹{formatAmount(ft.totalAmount ?? 0)}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: { rateName: string; quantity: number; ratePerUnit: number; amount: number }[]; totalAmount?: number }; totalAmount?: number }[])?.length > 0 && (
+                    <div className="p-4 bg-slate-50 rounded-xl">
+                      <p className="font-medium text-slate-800 mb-2">{t('workOrders')}</p>
+                      {(detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: { rateName: string; quantity: number; ratePerUnit: number; amount: number }[]; totalAmount?: number }; totalAmount?: number }[]).map((ref: { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: { rateName: string; quantity: number; ratePerUnit: number; amount: number }[]; totalAmount?: number }; totalAmount?: number }, i: number) => {
+                        const wr = ref.workRecord;
+                        if (!wr) return null;
+                        const styleStr = wr.styleOrder ? ` – ${wr.styleOrder.styleCode}` : '';
+                        return (
+                          <div key={i} className="py-2 border-b border-slate-200 last:border-0">
+                            <p className="font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{styleStr}</p>
+                            {(wr.workItems || []).map((item, j) => (
+                              <p key={j} className="text-slate-600 text-sm ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                            ))}
+                            <p className="font-medium">₹{formatAmount(wr.totalAmount ?? ref.totalAmount ?? 0)}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500">{t('loading')}</p>
+              )
+            ) : detailEntry.workRecordId ? (
+              detailLoading ? (
+                <p className="text-slate-500">{t('loading')}</p>
+              ) : detailError ? (
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200">
+                  <p className="text-red-700 font-medium">{detailError}</p>
+                </div>
+              ) : detailWorkRecord ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <p className="font-medium text-slate-800">{(detailWorkRecord.branch as { name?: string })?.name || t('branch')} – {formatMonth((detailWorkRecord.month as string) || '')}</p>
+                    {(detailWorkRecord as { daysWorked?: number }).daysWorked != null && (
+                      <p className="text-slate-700">{t('daysWorked')}: {(detailWorkRecord as { daysWorked: number }).daysWorked}</p>
+                    )}
+                    {((detailWorkRecord as { otHours?: number }).otHours ?? 0) > 0 && (
+                      <p className="text-slate-700">{t('otHours')}: {(detailWorkRecord as { otHours: number }).otHours} → ₹{formatAmount((detailWorkRecord as { otAmount?: number }).otAmount ?? 0)}</p>
+                    )}
+                    {(detailWorkRecord.workItems as { rateName: string; quantity: number; ratePerUnit: number; amount: number }[])?.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {(detailWorkRecord.workItems as { rateName: string; quantity: number; ratePerUnit: number; amount: number }[]).map((item, j) => (
+                          <p key={j} className="text-slate-600 text-sm">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                        ))}
+                      </div>
+                    )}
+                    <p className="font-semibold mt-2">{t('amount')}: ₹{formatAmount((detailWorkRecord.totalAmount as number) ?? 0)}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <p className="text-slate-700">{detailEntry.particulars}</p>
+                  <p className="font-semibold mt-2">{detailEntry.credit > 0 ? t('credit') : t('debit')}: ₹{formatAmount(detailEntry.credit || detailEntry.debit)}</p>
+                  <p className="text-slate-600 text-sm mt-1">{t('date')}: {detailEntry.date ? formatDate(detailEntry.date) : '–'}</p>
+                </div>
+              )
+            ) : null}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

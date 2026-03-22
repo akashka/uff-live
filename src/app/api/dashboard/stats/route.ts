@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
       // Style-wise stats for current month (aggregated by style)
       const styles = await StyleOrder.find({ isActive: true, month: currentMonth })
         .populate('branches', 'name _id')
-        .select('styleCode brand branches month totalOrderQuantity')
+        .select('styleCode brand colour branches month totalOrderQuantity')
         .lean();
 
       const byStyle: { styleCode: string; branchName: string; totalOrderQty: number; totalProduced: number; mfgCost: number; completionPct: number }[] = [];
@@ -275,9 +275,13 @@ export async function GET(req: NextRequest) {
         const completionPct = totalOrderQty > 0 ? Math.round((totalProduced / totalOrderQty) * 100) : 0;
         const branchesList = (s.branches || []) as { name?: string }[];
         const branchName = branchesList.map((b) => b?.name || '').filter(Boolean).join(', ') || '';
+        const sc = s.styleCode as string;
+        const br = (s as { brand?: string }).brand || '';
+        const col = (s as { colour?: string }).colour || '';
+        const styleDisplay = col ? `${sc}${br ? ` - ${br}` : ''} (${col})` : `${sc}${br ? ` - ${br}` : ''}`;
 
         byStyle.push({
-          styleCode: s.styleCode,
+          styleCode: styleDisplay,
           branchName,
           totalOrderQty,
           totalProduced,

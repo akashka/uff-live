@@ -19,7 +19,7 @@ interface ModalProps {
   onClose?: () => void;
   title?: string;
   size?: ModalSize;
-  /** If true, clicking backdrop closes modal. Default true when onClose provided. */
+  /** If true, clicking backdrop closes modal. Default false - close only via X or close button. */
   closeOnBackdrop?: boolean;
   /** If true, Escape key closes modal. Default true when onClose provided. */
   closeOnEscape?: boolean;
@@ -35,7 +35,7 @@ export default function Modal({
   onClose,
   title,
   size = 'lg',
-  closeOnBackdrop = !!onClose,
+  closeOnBackdrop = false,
   closeOnEscape = !!onClose,
   children,
   footer,

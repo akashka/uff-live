@@ -3,7 +3,6 @@ import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { generatePassword } from '@/lib/utils';
-import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
@@ -66,11 +65,10 @@ export async function POST(req: NextRequest) {
     }
 
     const pwd = password || generatePassword(12);
-    const hashedPassword = await bcrypt.hash(pwd, 12);
 
     const user = await User.create({
       email,
-      password: hashedPassword,
+      password: pwd, // User model pre-save hook hashes this
       role: userRole,
       isActive: true,
     });

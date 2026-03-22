@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
     const results: {
       _id: string;
       styleCode: string;
+      brand?: string;
+      colour?: string;
       branch: { name: string };
       month: string;
       rateMasterId: string;
@@ -123,6 +125,8 @@ export async function GET(req: NextRequest) {
             results.push({
               _id: `${s._id}_${monthForMatch}_${rateIdStr}_${String(branchIdForMatch)}`,
               styleCode: s.styleCode as string,
+              brand: (s as { brand?: string }).brand,
+              colour: (s as { colour?: string }).colour,
               branch: { name: branchName },
               month: monthForMatch,
               rateMasterId: rateIdStr,
@@ -160,7 +164,7 @@ export async function GET(req: NextRequest) {
         return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
       };
       const rows = results.map((r) => ({
-        'Style Code': r.styleCode,
+        'Style Code': r.colour ? `${r.styleCode}${r.brand ? ` - ${r.brand}` : ''} (${r.colour})` : `${r.styleCode}${r.brand ? ` - ${r.brand}` : ''}`,
         Branch: r.branch?.name || '-',
         Month: formatMonth(r.month),
         'Rate Name': r.rateName,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import Payment from '@/lib/models/Payment';
 import { getAuthUser, hasRole } from '@/lib/auth';
@@ -12,16 +13,26 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ error: 'Invalid payment ID' }, { status: 400 });
+    }
+
     await connectDB();
 
     const payment = await Payment.findById(id)
-      .populate('employee', 'name employeeType')
+      .populate('employee', 'name employeeType _id')
       .populate({
         path: 'workRecordRefs.workRecord',
         populate: [
-          { path: 'styleOrder', select: 'styleCode brand' },
+          { path: 'styleOrder', select: 'styleCode brand colour' },
           { path: 'branch', select: 'name' },
         ],
+        strictPopulate: false,
+      })
+      .populate({
+        path: 'fullTimeWorkRecordRefs.fullTimeWorkRecord',
+        populate: { path: 'branch', select: 'name' },
+        strictPopulate: false,
       })
       .lean();
 

@@ -10,7 +10,7 @@ import ListToolbar from '@/components/ListToolbar';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments, useVendorPayments, useBranches, useDepartments, useVendors } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
-import { formatMonth, formatAmount, roundAmount, roundDays } from '@/lib/utils';
+import { formatMonth, formatAmount, formatStyleOrderDisplay, roundAmount, roundDays } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 function getCurrentMonth() {
@@ -38,14 +38,26 @@ interface WorkItemRow {
   ratePerUnit: number;
   amount: number;
   unit?: string;
+  multiplier?: number;
 }
 
 interface WorkRecordCalc {
   _id: string;
-  branch: { name: string };
+  branch?: { name: string };
   month: string;
-  styleOrder?: { styleCode: string; brand?: string } | null;
-  workItems: WorkItemRow[];
+  styleOrder?: { styleCode: string; brand?: string; colour?: string } | null;
+  workItems?: WorkItemRow[];
+  totalAmount: number;
+  isPaid?: boolean;
+}
+
+interface FullTimeWorkRecordCalc {
+  _id: string;
+  branch?: { name: string };
+  month: string;
+  daysWorked: number;
+  otHours: number;
+  otAmount: number;
   totalAmount: number;
 }
 
@@ -55,15 +67,17 @@ interface VendorWorkItemRow {
   ratePerUnit: number;
   amount: number;
   unit?: string;
+  multiplier?: number;
 }
 
 interface VendorWorkOrderCalc {
   _id: string;
-  branch: { name: string };
+  branch?: { name: string };
   month: string;
-  styleOrder?: { styleCode: string; brand?: string } | null;
-  workItems: VendorWorkItemRow[];
+  styleOrder?: { styleCode: string; brand?: string; colour?: string } | null;
+  workItems?: VendorWorkItemRow[];
   totalAmount: number;
+  isPaid?: boolean;
 }
 
 interface EmployeePayment {
@@ -219,6 +233,7 @@ export default function AllPayments() {
     carriedForwardRemarks: '',
     isAdvance: false,
     workRecordIds: [] as string[],
+    fullTimeWorkRecordIds: [] as string[],
     daysWorked: 0,
     totalWorkingDays: 0,
     advanceAmount: 0,
@@ -245,7 +260,19 @@ export default function AllPayments() {
   });
 
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
-  const [calc, setCalc] = useState<{ baseAmount: number; grossSalary?: number; pf?: number; esi?: number; other?: number; totalWorkingDays?: number; workRecords?: WorkRecordCalc[] } | null>(null);
+  const [calc, setCalc] = useState<{
+    baseAmount: number;
+    grossSalary?: number;
+    pf?: number;
+    esi?: number;
+    other?: number;
+    totalWorkingDays?: number;
+    daysWorked?: number;
+    otHours?: number;
+    otAmount?: number;
+    workRecords?: WorkRecordCalc[];
+    fullTimeWorkRecords?: FullTimeWorkRecordCalc[];
+  } | null>(null);
   const [vendorCalc, setVendorCalc] = useState<{ baseAmount: number; workOrders?: VendorWorkOrderCalc[] } | null>(null);
   const [advanceOutstanding, setAdvanceOutstanding] = useState(0);
 
@@ -328,8 +355,8 @@ export default function AllPayments() {
   unifiedRows.sort((a, b) => {
     const paidA = (a.raw as { paidAt?: string }).paidAt || '';
     const paidB = (b.raw as { paidAt?: string }).paidAt || '';
-    if (sortBy === 'amount-desc') return b.paymentAmount - a.paymentAmount;
-    if (sortBy === 'amount-asc') return a.paymentAmount - b.paymentAmount;
+    if (sortBy === 'amount-desc') return b.totalPayable - a.totalPayable;
+    if (sortBy === 'amount-asc') return a.totalPayable - b.totalPayable;
     if (sortBy === 'date-asc') return paidA.localeCompare(paidB);
     return paidB.localeCompare(paidA);
   });
@@ -375,6 +402,7 @@ export default function AllPayments() {
       carriedForwardRemarks: '',
       isAdvance: false,
       workRecordIds: [],
+      fullTimeWorkRecordIds: [],
       daysWorked: 0,
       totalWorkingDays: 0,
       advanceAmount: 0,
@@ -404,32 +432,46 @@ export default function AllPayments() {
     setAddModal(true);
   };
 
-  const loadEmpCalculation = async (empId: string, month: string, pType: 'contractor' | 'full_time') => {
+  const loadEmpCalculation = async (empId: string, month: string, pType: 'contractor' | 'full_time', selectedWorkIds?: string[], selectedFtIds?: string[]) => {
     if (!empId || !month) return;
     if (pType === 'full_time') {
+      const ftParam = selectedFtIds?.length ? `&selectedFullTimeWorkRecordIds=${selectedFtIds.join(',')}` : '';
       const [calcRes, advRes] = await Promise.all([
-        fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=full_time`).then((r) => r.json()),
-        fetch(`/api/payments/advance-outstanding?employeeId=${empId}`).then((r) => r.json()),
+        fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=full_time${ftParam}`).then((r) => r.json()),
+        fetch(`/api/payments/advance-outstanding?employeeId=${empId}&month=${month}`).then((r) => r.json()),
       ]);
       const outstanding = advRes.error ? 0 : (advRes.outstanding ?? 0);
       setAdvanceOutstanding(outstanding);
       if (!calcRes.error) {
         setCalc(calcRes);
-        const twd = calcRes.totalWorkingDays ?? 0;
+        const ftRecords = calcRes.fullTimeWorkRecords || [];
+        const unpaidFtIds = ftRecords.filter((r: FullTimeWorkRecordCalc & { isPaid?: boolean }) => !r.isPaid).map((r: FullTimeWorkRecordCalc) => r._id);
+        const defaultSelected = selectedFtIds ?? unpaidFtIds;
         setEmpForm((f) => ({
           ...f,
-          daysWorked: twd > 0 ? twd : 0,
+          daysWorked: calcRes.daysWorked ?? 0,
           advanceDeducted: outstanding,
           baseAmount: calcRes.baseAmount ?? 0,
-          pfDeducted: 0,
-          esiDeducted: 0,
+          pfDeducted: calcRes.pf ?? 0,
+          esiDeducted: calcRes.esi ?? 0,
+          otherDeducted: calcRes.other ?? 0,
           workRecordIds: [],
+          fullTimeWorkRecordIds: defaultSelected,
         }));
       }
     } else {
-      const calcRes = await fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=contractor`).then((r) => r.json());
+      const wrParam = selectedWorkIds?.length ? `&selectedWorkRecordIds=${selectedWorkIds.join(',')}` : '';
+      const [calcRes, advRes] = await Promise.all([
+        fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=contractor${wrParam}`).then((r) => r.json()),
+        fetch(`/api/payments/advance-outstanding?employeeId=${empId}&paymentType=contractor&month=${month}`).then((r) => r.json()),
+      ]);
+      const outstanding = advRes.error ? 0 : (advRes.outstanding ?? 0);
+      setAdvanceOutstanding(outstanding);
       if (!calcRes.error) {
         setCalc(calcRes);
+        const workRecords = calcRes.workRecords || [];
+        const unpaidIds = workRecords.filter((r: WorkRecordCalc) => !r.isPaid).map((r: WorkRecordCalc) => r._id);
+        const defaultSelected = selectedWorkIds ?? unpaidIds;
         const base = calcRes.baseAmount ?? 0;
         const pf = calcRes.pfToDeduct ?? 0;
         const esi = calcRes.esiToDeduct ?? 0;
@@ -440,29 +482,33 @@ export default function AllPayments() {
           pfDeducted: pf,
           esiDeducted: esi,
           otherDeducted: other,
-          totalPayable: base - pf - esi - other + f.addDeductAmount - (f.advanceDeducted ?? 0),
-          workRecordIds: (calcRes.workRecords || []).map((r: WorkRecordCalc) => r._id),
+          advanceDeducted: outstanding,
+          workRecordIds: defaultSelected,
         }));
       }
     }
   };
 
-  const loadVendorCalculation = async (vendorId: string, month: string) => {
+  const loadVendorCalculation = async (vendorId: string, month: string, selectedIds?: string[]) => {
     if (!vendorId || !month) {
       setVendorCalc(null);
       return;
     }
-    const calcRes = await fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}`).then((r) => r.json());
+    const voParam = selectedIds?.length ? `&selectedVendorWorkOrderIds=${selectedIds.join(',')}` : '';
+    const calcRes = await fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}${voParam}`).then((r) => r.json());
     if (calcRes.error) {
       setVendorCalc(null);
     } else {
+      const workOrders = calcRes.workOrders || [];
+      const unpaidIds = workOrders.filter((r: VendorWorkOrderCalc) => !r.isPaid).map((r: VendorWorkOrderCalc) => r._id);
+      const defaultSelected = selectedIds ?? unpaidIds;
       const base = calcRes.baseAmount ?? 0;
-      setVendorCalc({ baseAmount: base, workOrders: calcRes.workOrders || [] });
+      setVendorCalc({ baseAmount: base, workOrders });
       setVendorForm((f) => ({
         ...f,
         baseAmount: base,
         totalPayable: base + f.addDeductAmount,
-        vendorWorkOrderIds: (calcRes.workOrders || []).map((r: { _id: string }) => r._id),
+        vendorWorkOrderIds: defaultSelected,
       }));
     }
   };
@@ -510,34 +556,27 @@ export default function AllPayments() {
 
   const totalPayableEmp =
     modalRecipientType === 'full_time'
-      ? roundAmount(
-          (calc?.totalWorkingDays ?? 0) > 0
-            ? (calc?.baseAmount ?? 0) / (calc?.totalWorkingDays ?? 1) * Math.min(empForm.daysWorked, calc?.totalWorkingDays ?? 999) + empForm.addDeductAmount - (empForm.advanceDeducted ?? 0)
-            : 0
-        )
-      : empForm.baseAmount + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0);
-  const remainingEmp = totalPayableEmp - empForm.paymentAmount;
+      ? roundAmount((calc?.baseAmount ?? 0) + (calc?.otAmount ?? 0) + empForm.addDeductAmount - (empForm.advanceDeducted ?? 0))
+      : roundAmount(empForm.baseAmount + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0));
+  const paymentAmountEmp = totalPayableEmp;
+  const remainingEmp = 0;
 
   const handleEmpJobOrderSubmit = async () => {
-    if (remainingEmp > 0 && !carryModal) {
-      setCarryModal({ remaining: remainingEmp, onConfirm: (amount, remarks) => { setCarryModal(null); doEmpSubmit(amount, remarks); } });
-      return;
-    }
-    doEmpSubmit(0, '');
+    doEmpSubmit();
   };
 
-  const doEmpSubmit = async (carryAmount?: number, carryRemarks?: string) => {
+  const doEmpSubmit = async () => {
     setSaving(true);
     try {
+      const total = totalPayableEmp;
+      const base = modalRecipientType === 'full_time' ? (calc?.baseAmount ?? 0) : empForm.baseAmount;
       const twd = roundDays(calc?.totalWorkingDays ?? 0);
-      const dw = roundDays(Math.min(Math.max(0, empForm.daysWorked), twd || 999));
-      const prorated = modalRecipientType === 'full_time' && twd > 0 ? roundAmount(((calc?.baseAmount ?? 0) / twd) * dw) : empForm.baseAmount;
-      const total = roundAmount(prorated + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0));
+      const dw = roundDays(empForm.daysWorked ?? calc?.daysWorked ?? 0);
       const payload: Record<string, unknown> = {
         employeeId: empForm.employeeId,
         paymentType: empForm.paymentType,
         month: empForm.month,
-        baseAmount: prorated,
+        baseAmount: base,
         addDeductAmount: empForm.addDeductAmount,
         addDeductRemarks: empForm.addDeductRemarks,
         pfDeducted: empForm.pfDeducted,
@@ -545,18 +584,21 @@ export default function AllPayments() {
         otherDeducted: empForm.otherDeducted ?? 0,
         advanceDeducted: empForm.advanceDeducted ?? 0,
         totalPayable: total,
-        paymentAmount: empForm.paymentAmount,
+        paymentAmount: paymentAmountEmp,
         paymentMode: empForm.paymentMode,
         transactionRef: empForm.transactionRef,
-        remainingAmount: remainingEmp,
-        carriedForward: carryAmount ?? 0,
-        carriedForwardRemarks: carryRemarks ?? '',
+        remainingAmount: 0,
+        carriedForward: 0,
+        carriedForwardRemarks: '',
         isAdvance: false,
         workRecordIds: empForm.paymentType === 'contractor' ? empForm.workRecordIds : [],
+        fullTimeWorkRecordIds: empForm.paymentType === 'full_time' ? empForm.fullTimeWorkRecordIds : [],
       };
       if (empForm.paymentType === 'full_time') {
         (payload as Record<string, unknown>).daysWorked = dw;
         (payload as Record<string, unknown>).totalWorkingDays = twd;
+        (payload as Record<string, unknown>).otHours = roundAmount(calc?.otHours ?? 0);
+        (payload as Record<string, unknown>).otAmount = roundAmount(calc?.otAmount ?? 0);
       }
       const res = await fetch('/api/payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -612,7 +654,6 @@ export default function AllPayments() {
   };
 
   const vendorTotalPayable = vendorForm.baseAmount + vendorForm.addDeductAmount;
-  const vendorRemaining = vendorTotalPayable - vendorForm.paymentAmount;
 
   const handleVendorJobOrderSubmit = async () => {
     setSaving(true);
@@ -624,9 +665,10 @@ export default function AllPayments() {
           ...vendorForm,
           paymentType: 'monthly',
           totalPayable: vendorTotalPayable,
-          remainingAmount: vendorRemaining,
-          carriedForward: vendorRemaining > 0 ? vendorRemaining : 0,
-          carriedForwardRemarks: vendorRemaining > 0 ? 'Carried forward' : '',
+          paymentAmount: vendorTotalPayable,
+          remainingAmount: 0,
+          carriedForward: 0,
+          carriedForwardRemarks: '',
           vendorWorkOrderIds: vendorForm.vendorWorkOrderIds,
         }),
       });
@@ -653,8 +695,8 @@ export default function AllPayments() {
   const SORT_OPTIONS = [
     { value: 'date-desc', label: `${t('period')} (newest)` },
     { value: 'date-asc', label: `${t('period')} (oldest)` },
-    { value: 'amount-desc', label: `${t('paymentAmount')} (high–low)` },
-    { value: 'amount-asc', label: `${t('paymentAmount')} (low–high)` },
+    { value: 'amount-desc', label: `${t('totalAmount')} (high–low)` },
+    { value: 'amount-asc', label: `${t('totalAmount')} (low–high)` },
   ];
 
   const canShowEmployeeForm = modalRecipientType === 'contractor' || modalRecipientType === 'full_time';
@@ -820,7 +862,6 @@ export default function AllPayments() {
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('daysWorked')}</th>
                     )}
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('paymentAmount')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('paymentMode')}</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
@@ -829,7 +870,7 @@ export default function AllPayments() {
                 <tbody className="divide-y divide-slate-200">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
                     </tr>
                   ) : (
                     filtered.map((row) => (
@@ -848,8 +889,7 @@ export default function AllPayments() {
                             })()}
                           </td>
                         )}
-                        <td className="px-4 py-3 text-right">₹{formatAmount(row.totalPayable)}</td>
-                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(row.paymentAmount)}</td>
+                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(row.totalPayable)}</td>
                         <td className="px-4 py-3 text-slate-800">{formatMode(row.paymentMode)}</td>
                         <td className="px-4 py-3">
                           {row.status === 'due' ? (
@@ -893,7 +933,7 @@ export default function AllPayments() {
                 <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-800">{getTypeLabel(row.type)}</span>
                 <h3 className="font-semibold text-slate-900 mt-1">{row.name}</h3>
                 <p className="text-sm text-slate-600">{formatMonth(row.month)}</p>
-                <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(row.paymentAmount)}</p>
+                <p className="mt-2 font-semibold text-slate-900">₹{formatAmount(row.totalPayable)}</p>
                 <p className="text-sm text-slate-600">{formatMode(row.paymentMode)}</p>
                 {row.status === 'due' ? (
                   <span className="inline-block mt-2 text-uff-accent text-sm">₹{formatAmount(row.remainingAmount)} {t('due')}</span>
@@ -938,7 +978,7 @@ export default function AllPayments() {
                 {canShowEmployeeForm && isJobOrderFlow && (
                   <button
                     onClick={handleEmpJobOrderSubmit}
-                    disabled={saving || !empForm.employeeId || !empForm.month || !empForm.paymentAmount}
+                    disabled={saving || !empForm.employeeId || !empForm.month || totalPayableEmp <= 0 || (empForm.addDeductAmount !== 0 && !empForm.addDeductRemarks?.trim())}
                     className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition"
                   >
                     {saving ? '...' : t('save')}
@@ -956,7 +996,7 @@ export default function AllPayments() {
                 {canShowVendorForm && isJobOrderFlow && (
                   <button
                     onClick={handleVendorJobOrderSubmit}
-                    disabled={saving || !vendorForm.vendorId || !vendorForm.month || !vendorForm.paymentAmount}
+                    disabled={saving || !vendorForm.vendorId || !vendorForm.month || vendorTotalPayable <= 0}
                     className="px-5 py-2.5 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 transition"
                   >
                     {saving ? '...' : t('save')}
@@ -1012,17 +1052,103 @@ export default function AllPayments() {
           ) : (
             /* Step 3: Form content based on selection */
             <>
+              {/* Dropdowns at top - changing either resets the form */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-slate-200">
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectRecipientType')}</label>
+                  <select
+                    value={modalRecipientType}
+                    onChange={(e) => {
+                      const val = e.target.value as RecipientType | '';
+                      if (!val) return;
+                      setModalRecipientType(val);
+                      setEmpForm((f) => ({ ...f, paymentType: val === 'full_time' || val === 'contractor' ? val : f.paymentType }));
+                      setCalc(null);
+                      setVendorCalc(null);
+                      setAdvanceOutstanding(0);
+                      setEmpForm((prev) => ({
+                        branchId: filterBranch,
+                        departmentId: filterDepartment,
+                        employeeId: '',
+                        paymentType: val === 'full_time' || val === 'contractor' ? val : prev.paymentType,
+                        month: getCurrentMonth(),
+                        baseAmount: 0,
+                        addDeductAmount: 0,
+                        addDeductRemarks: '',
+                        pfDeducted: 0,
+                        esiDeducted: 0,
+                        otherDeducted: 0,
+                        advanceDeducted: 0,
+                        totalPayable: 0,
+                        paymentAmount: 0,
+                        paymentMode: 'cash',
+                        transactionRef: '',
+                        remainingAmount: 0,
+                        carriedForward: 0,
+                        carriedForwardRemarks: '',
+                        isAdvance: false,
+                        workRecordIds: [],
+                        daysWorked: 0,
+                        totalWorkingDays: 0,
+                        advanceAmount: 0,
+                        advanceReasons: '',
+                      }));
+                      setVendorForm((prev) => ({
+                        ...prev,
+                        vendorId: '',
+                        baseAmount: 0,
+                        totalPayable: 0,
+                        paymentAmount: 0,
+                        vendorWorkOrderIds: [],
+                      }));
+                    }}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg"
+                  >
+                    <option value="full_time">{t('fullTime')}</option>
+                    <option value="contractor">{t('contractors')}</option>
+                    <option value="vendor">{t('jobworkVendors')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('payment')} {t('type')}</label>
+                  <select
+                    value={modalPaymentKind}
+                    onChange={(e) => {
+                      const val = e.target.value as PaymentKind | '';
+                      if (!val) return;
+                      setModalPaymentKind(val);
+                      setCalc(null);
+                      setVendorCalc(null);
+                      setAdvanceOutstanding(0);
+                      setEmpForm((prev) => ({
+                        ...prev,
+                        baseAmount: 0,
+                        addDeductAmount: 0,
+                        advanceDeducted: 0,
+                        totalPayable: 0,
+                        paymentAmount: 0,
+                        workRecordIds: [],
+                        daysWorked: 0,
+                        advanceAmount: 0,
+                      }));
+                      setVendorForm((prev) => ({
+                        ...prev,
+                        baseAmount: 0,
+                        totalPayable: 0,
+                        paymentAmount: 0,
+                        vendorWorkOrderIds: [],
+                        advanceAmount: 0,
+                      }));
+                    }}
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg"
+                  >
+                    <option value="advance">{t('advancePayment')}</option>
+                    <option value="job_order">{t('paymentAgainstJobOrder')}</option>
+                  </select>
+                </div>
+              </div>
               {canShowEmployeeForm && (
                 <>
-                  <div className="flex gap-2 text-sm">
-                    <button onClick={() => setModalRecipientType('')} className="text-uff-accent hover:underline">
-                      ← {t('selectRecipientType')}
-                    </button>
-                    <span className="text-slate-400">|</span>
-                    <button onClick={() => setModalPaymentKind('')} className="text-uff-accent hover:underline">
-                      ← {t('payment')}
-                    </button>
-                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
@@ -1048,7 +1174,7 @@ export default function AllPayments() {
                         value={empForm.employeeId}
                         onChange={(e) => {
                           const id = e.target.value;
-                          setEmpForm((f) => ({ ...f, employeeId: id, paymentType: modalRecipientType as 'contractor' | 'full_time' }));
+                          setEmpForm((f) => ({ ...f, employeeId: id, paymentType: modalRecipientType as 'contractor' | 'full_time', workRecordIds: [], fullTimeWorkRecordIds: [] }));
                           if (id && empForm.month) loadEmpCalculation(id, empForm.month, modalRecipientType as 'contractor' | 'full_time');
                         }}
                         className="w-full px-3 py-2.5 border border-slate-300 rounded-lg"
@@ -1063,7 +1189,7 @@ export default function AllPayments() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} *</label>
-                      <input type="month" value={empForm.month} onChange={(e) => setEmpForm((f) => ({ ...f, month: e.target.value }))} onBlur={() => empForm.employeeId && loadEmpCalculation(empForm.employeeId, empForm.month, modalRecipientType as 'contractor' | 'full_time')} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />
+                      <input type="month" value={empForm.month} onChange={(e) => { const m = e.target.value; setEmpForm((f) => ({ ...f, month: m })); if (empForm.employeeId) loadEmpCalculation(empForm.employeeId, m, modalRecipientType as 'contractor' | 'full_time', empForm.workRecordIds, empForm.fullTimeWorkRecordIds); }} onBlur={() => empForm.employeeId && loadEmpCalculation(empForm.employeeId, empForm.month, modalRecipientType as 'contractor' | 'full_time', empForm.workRecordIds, empForm.fullTimeWorkRecordIds)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />
                     </div>
                   </div>
                   {isAdvanceFlow ? (
@@ -1080,46 +1206,106 @@ export default function AllPayments() {
                   ) : (
                     <>
                       {modalRecipientType === 'full_time' && calc && (
-                        <div className="p-4 bg-slate-50 rounded-xl">
-                          <p className="text-sm">{t('baseAmount')}: ₹{formatAmount(calc.baseAmount ?? 0)}</p>
-                          <p className="text-sm">{t('daysWorked')}: <ValidatedInput type="number" value={empForm.daysWorked ? String(empForm.daysWorked) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, daysWorked: Math.min(Math.max(0, parseInt(v, 10) || 0), calc?.totalWorkingDays ?? 999) }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseInt(v, 10))} inline className="w-20 px-2 py-1" /> / {calc.totalWorkingDays ?? 0}</p>
+                        <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                          <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+                          {(calc.fullTimeWorkRecords && (calc.fullTimeWorkRecords as (FullTimeWorkRecordCalc & { isPaid?: boolean })[]).length > 0) ? (
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {(calc.fullTimeWorkRecords as (FullTimeWorkRecordCalc & { isPaid?: boolean })[]).map((wr) => {
+                              const isPaid = wr.isPaid ?? false;
+                              const isSelected = empForm.fullTimeWorkRecordIds.includes(wr._id);
+                              return (
+                                <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={isPaid}
+                                    onChange={() => {
+                                      if (isPaid) return;
+                                      const next = isSelected ? empForm.fullTimeWorkRecordIds.filter((id) => id !== wr._id) : [...empForm.fullTimeWorkRecordIds, wr._id];
+                                      setEmpForm((f) => ({ ...f, fullTimeWorkRecordIds: next }));
+                                      loadEmpCalculation(empForm.employeeId, empForm.month, 'full_time', undefined, next);
+                                    }}
+                                    className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workOrder')} – {wr.daysWorked} {t('daysWorked')}, {wr.otHours || 0} {t('otHours')}{isPaid ? ` (${t('paymentDone')})` : ''}</p>
+                                    <p className="text-slate-600 text-sm">₹{formatAmount(wr.totalAmount || 0)}</p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          ) : (
+                            <p className="text-sm text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders for this month. Add work orders in Work Orders.'}</p>
+                          )}
+                          <p className="text-xs text-slate-500 mt-1">{t('daysWorked')}: {calc.daysWorked ?? 0} / {calc.totalWorkingDays ?? 0} | OT: {calc.otHours ?? 0}h = ₹{formatAmount(calc.otAmount ?? 0)}</p>
                         </div>
                       )}
                       {modalRecipientType === 'contractor' && calc?.workRecords && calc.workRecords.length > 0 && (
-                        <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                          <p className="text-sm font-medium text-slate-800">{t('calculationBreakup')}</p>
-                          {calc.workRecords.map((wr: WorkRecordCalc) => {
-                            const styleLabel = wr.styleOrder ? ` (${t('styleOrder')}: ${wr.styleOrder.styleCode}${wr.styleOrder.brand ? ` - ${wr.styleOrder.brand}` : ''})` : '';
-                            return (
-                              <div key={wr._id} className="border-l-2 border-slate-300 pl-3 text-sm">
-                                <p className="font-medium text-slate-700">{wr.branch?.name || t('workRecord')}{styleLabel}</p>
-                                {(wr.workItems || []).map((item: WorkItemRow, i: number) => (
-                                  <p key={i} className="text-slate-600 ml-2">
-                                    {item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}
-                                  </p>
-                                ))}
-                                <p className="text-slate-800 font-medium mt-1">₹{formatAmount(wr.totalAmount || 0)}</p>
-                              </div>
-                            );
-                          })}
+                        <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                          <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {(calc.workRecords as WorkRecordCalc[]).map((wr) => {
+                              const isPaid = wr.isPaid ?? false;
+                              const isSelected = empForm.workRecordIds.includes(wr._id);
+                              return (
+                                <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={isPaid}
+                                    onChange={() => {
+                                      if (isPaid) return;
+                                      const next = isSelected ? empForm.workRecordIds.filter((id) => id !== wr._id) : [...empForm.workRecordIds, wr._id];
+                                      setEmpForm((f) => ({ ...f, workRecordIds: next }));
+                                      loadEmpCalculation(empForm.employeeId, empForm.month, 'contractor', next, undefined);
+                                    }}
+                                    className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : ''}{isPaid ? ` (${t('paid')})` : ''}</p>
+                                    {(wr.workItems || []).map((item: WorkItemRow, i: number) => (
+                                      <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)}</p>
+                                    ))}
+                                    <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount || 0)}</p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">
+                            {empForm.addDeductAmount > 0 ? t('addDeductProfit') : empForm.addDeductAmount < 0 ? t('addDeductLoss') : t('addDeduct')} (₹)
+                          </label>
                           <ValidatedInput type="text" inputMode="decimal" value={empForm.addDeductAmount ? String(empForm.addDeductAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹)</label>
-                          <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceDeducted ? String(empForm.advanceDeducted) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('remarks')}{empForm.addDeductAmount !== 0 ? ' *' : ''}</label>
+                          <ValidatedInput type="text" value={empForm.addDeductRemarks} onChange={(v) => setEmpForm((f) => ({ ...f, addDeductRemarks: v }))} fieldType="text" placeholderHint={empForm.addDeductAmount !== 0 ? t('mandatoryForAddDeduct') || 'Required when Add/Deduct ≠ 0' : t('optionalRemarks') || 'Optional'} className={`w-full px-3 py-2.5 ${empForm.addDeductAmount !== 0 && !empForm.addDeductRemarks?.trim() ? 'border-amber-500' : ''}`} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹){advanceOutstanding > 0 && <span className="text-slate-500 text-xs ml-1">({t('outstanding')}: ₹{formatAmount(advanceOutstanding)})</span>}</label>
+                          <ValidatedInput type="text" inputMode="decimal" value={empForm.advanceDeducted != null && empForm.advanceDeducted !== 0 ? String(empForm.advanceDeducted) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} fieldType="number" placeholderHint={advanceOutstanding > 0 ? String(advanceOutstanding) : '0'} className="w-full px-3 py-2.5" />
                         </div>
                       </div>
-                      <div className="p-4 bg-uff-accent/5 rounded-xl">
-                        <p className="text-lg font-bold">₹{formatAmount(totalPayableEmp)}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('paymentAmount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={empForm.paymentAmount ? String(empForm.paymentAmount) : ''} onChange={(v) => setEmpForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
+                      {modalRecipientType === 'full_time' && calc && (
+                        <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+                          <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+                          <p className="text-slate-700">{t('grossSalary') || 'Gross'}: ₹{formatAmount(calc.grossSalary ?? 0)}</p>
+                          {(calc.otAmount ?? 0) > 0 && <p className="text-slate-700">+ {t('otHours')} / OT: ₹{formatAmount(calc.otAmount ?? 0)}</p>}
+                          {(calc.pf ?? 0) > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(calc.pf ?? 0)}</p>}
+                          {(calc.esi ?? 0) > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(calc.esi ?? 0)}</p>}
+                          {(calc.other ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(calc.other ?? 0)}</p>}
+                          {empForm.addDeductAmount !== 0 && <p className="text-slate-700">{empForm.addDeductAmount > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(empForm.addDeductAmount)} {empForm.addDeductRemarks && `(${empForm.addDeductRemarks})`}</p>}
+                          {(empForm.advanceDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(empForm.advanceDeducted ?? 0)}</p>}
+                        </div>
+                      )}
+                      <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
+                        <p className="text-sm font-medium text-slate-700">{t('finalPayable')}</p>
+                        <p className="text-2xl font-bold text-slate-900">₹{formatAmount(totalPayableEmp)}</p>
                       </div>
                     </>
                   )}
@@ -1141,15 +1327,6 @@ export default function AllPayments() {
               )}
               {canShowVendorForm && (
                 <>
-                  <div className="flex gap-2 text-sm">
-                    <button onClick={() => setModalRecipientType('')} className="text-uff-accent hover:underline">
-                      ← {t('selectRecipientType')}
-                    </button>
-                    <span className="text-slate-400">|</span>
-                    <button onClick={() => setModalPaymentKind('')} className="text-uff-accent hover:underline">
-                      ← {t('payment')}
-                    </button>
-                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('vendor')} *</label>
@@ -1162,7 +1339,7 @@ export default function AllPayments() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} *</label>
-                      <input type="month" value={vendorForm.month} onChange={(e) => setVendorForm((f) => ({ ...f, month: e.target.value }))} onBlur={() => vendorForm.vendorId && loadVendorCalculation(vendorForm.vendorId, vendorForm.month)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />
+                      <input type="month" value={vendorForm.month} onChange={(e) => { const m = e.target.value; setVendorForm((f) => ({ ...f, month: m })); if (vendorForm.vendorId) loadVendorCalculation(vendorForm.vendorId, m); }} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />
                     </div>
                   </div>
                   {isAdvanceFlow ? (
@@ -1178,38 +1355,47 @@ export default function AllPayments() {
                     </>
                   ) : (
                     <>
-                      <div className="p-4 bg-slate-50 rounded-xl">
-                        <p className="text-sm">{t('baseAmount')}: ₹{formatAmount(vendorForm.baseAmount)}</p>
-                      </div>
                       {vendorCalc?.workOrders && vendorCalc.workOrders.length > 0 && (
-                        <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                          <p className="text-sm font-medium text-slate-800">{t('calculationBreakup')}</p>
-                          {vendorCalc.workOrders.map((wo: VendorWorkOrderCalc) => {
-                            const styleLabel = wo.styleOrder ? ` (${t('styleOrder')}: ${wo.styleOrder.styleCode}${wo.styleOrder.brand ? ` - ${wo.styleOrder.brand}` : ''})` : '';
-                            return (
-                              <div key={wo._id} className="border-l-2 border-slate-300 pl-3 text-sm">
-                                <p className="font-medium text-slate-700">{wo.branch?.name || t('vendorWorkOrders')}{styleLabel}</p>
-                                {(wo.workItems || []).map((item: VendorWorkItemRow, i: number) => (
-                                  <p key={i} className="text-slate-600 ml-2">
-                                    {item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}
-                                  </p>
-                                ))}
-                                <p className="text-slate-800 font-medium mt-1">₹{formatAmount(wo.totalAmount || 0)}</p>
-                              </div>
-                            );
-                          })}
+                        <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                          <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {(vendorCalc.workOrders as VendorWorkOrderCalc[]).map((wo) => {
+                              const isPaid = wo.isPaid ?? false;
+                              const isSelected = vendorForm.vendorWorkOrderIds.includes(wo._id);
+                              return (
+                                <label key={wo._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={isPaid}
+                                    onChange={() => {
+                                      if (isPaid) return;
+                                      const next = isSelected ? vendorForm.vendorWorkOrderIds.filter((id) => id !== wo._id) : [...vendorForm.vendorWorkOrderIds, wo._id];
+                                      setVendorForm((f) => ({ ...f, vendorWorkOrderIds: next }));
+                                      loadVendorCalculation(vendorForm.vendorId, vendorForm.month, next);
+                                    }}
+                                    className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{wo.styleOrder ? ` – ${formatStyleOrderDisplay(wo.styleOrder.styleCode, wo.styleOrder.brand, wo.styleOrder.colour)}` : ''}{isPaid ? ` (${t('paid')})` : ''}</p>
+                                    {(wo.workItems || []).map((item: VendorWorkItemRow, i: number) => (
+                                      <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)}</p>
+                                    ))}
+                                    <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wo.totalAmount || 0)}</p>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       <div>
                         <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
                         <ValidatedInput type="text" inputMode="decimal" value={vendorForm.addDeductAmount ? String(vendorForm.addDeductAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
                       </div>
-                      <div className="p-4 bg-uff-accent/5 rounded-xl">
-                        <p className="text-lg font-bold">₹{formatAmount(vendorTotalPayable)}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('paymentAmount')} (₹) *</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.paymentAmount ? String(vendorForm.paymentAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, paymentAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
+                      <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
+                        <p className="text-sm font-medium text-slate-700">{t('finalPayable')}</p>
+                        <p className="text-2xl font-bold text-slate-900">₹{formatAmount(vendorTotalPayable)}</p>
                       </div>
                     </>
                   )}
@@ -1234,63 +1420,168 @@ export default function AllPayments() {
         </div>
       </Modal>
 
-      <Modal open={!!detailPayment} onClose={() => setDetailPayment(null)} title={t('paymentDetails')} size="lg" footer={
+      <Modal open={!!detailPayment} onClose={() => setDetailPayment(null)} title={t('paymentDetails')} size="3xl" footer={
         <button onClick={() => setDetailPayment(null)} className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-medium hover:bg-slate-50 transition">
           {t('close')}
         </button>
       }>
         {detailPayment && (
-          <div className="space-y-4 text-sm">
-            <div className="space-y-3">
+          <div className="space-y-5 text-sm max-h-[75vh] overflow-y-auto">
+            {/* Header: same as add form */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
               <p><span className="font-medium text-slate-700">{t('employeeType')}:</span> {getTypeLabel(detailPayment.type)}</p>
               <p><span className="font-medium text-slate-700">{detailPayment.type === 'vendor' ? t('vendor') : t('employeeName')}:</span> {detailPayment.name}</p>
               <p><span className="font-medium text-slate-700">{t('month')}:</span> {formatMonth(detailPayment.month)}</p>
-              <p><span className="font-medium text-slate-700">{t('totalPayable')}:</span> ₹{formatAmount(detailPayment.totalPayable)}</p>
-              <p><span className="font-medium text-slate-700">{t('paymentAmount')}:</span> ₹{formatAmount(detailPayment.paymentAmount)}</p>
               <p><span className="font-medium text-slate-700">{t('paymentMode')}:</span> {formatMode(detailPayment.paymentMode)}</p>
+              {(detailPayment.raw as { transactionRef?: string })?.transactionRef && (
+                <p><span className="font-medium text-slate-700">{t('transactionRef')}:</span> {(detailPayment.raw as { transactionRef: string }).transactionRef}</p>
+              )}
+              {(detailPayment.raw as { paidAt?: string })?.paidAt && (
+                <p><span className="font-medium text-slate-700">Paid At:</span> {new Date((detailPayment.raw as { paidAt: string }).paidAt).toLocaleString()}</p>
+              )}
             </div>
+
             {detailLoading ? (
               <p className="text-slate-500">{t('loading')}</p>
-            ) : detailPaymentFull && detailPayment.type === 'contractor' && (detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: WorkItemRow[]; totalAmount?: number } }[])?.length > 0 ? (
-              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                <p className="font-medium text-slate-800">{t('calculationBreakup')}</p>
-                {(detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: WorkItemRow[]; totalAmount?: number }; totalAmount?: number }[]).map((ref: { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: WorkItemRow[]; totalAmount?: number }; totalAmount?: number }, i: number) => {
-                  const wr = ref.workRecord;
-                  if (!wr) return null;
-                  const styleLabel = wr.styleOrder ? ` (${t('styleOrder')}: ${wr.styleOrder.styleCode}${wr.styleOrder.brand ? ` - ${wr.styleOrder.brand}` : ''})` : '';
-                  return (
-                    <div key={i} className="border-l-2 border-slate-300 pl-3 text-sm">
-                      <p className="font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{styleLabel}</p>
-                      {(wr.workItems || []).map((item: WorkItemRow, j: number) => (
-                        <p key={j} className="text-slate-600 ml-2">
-                          {item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}
-                        </p>
-                      ))}
-                      <p className="text-slate-800 font-medium mt-1">₹{formatAmount(wr.totalAmount ?? ref.totalAmount ?? 0)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : detailPaymentFull && detailPayment.type === 'vendor' && (detailPaymentFull.vendorWorkOrderRefs as { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number } }[])?.length > 0 ? (
-              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-                <p className="font-medium text-slate-800">{t('calculationBreakup')}</p>
-                {(detailPaymentFull.vendorWorkOrderRefs as { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number }; totalAmount?: number }[]).map((ref: { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number }; totalAmount?: number }, i: number) => {
-                  const wo = ref.vendorWorkOrder;
-                  if (!wo) return null;
-                  const styleLabel = wo.styleOrder ? ` (${t('styleOrder')}: ${wo.styleOrder.styleCode}${wo.styleOrder.brand ? ` - ${wo.styleOrder.brand}` : ''})` : '';
-                  return (
-                    <div key={i} className="border-l-2 border-slate-300 pl-3 text-sm">
-                      <p className="font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{styleLabel}</p>
-                      {(wo.workItems || []).map((item: VendorWorkItemRow, j: number) => (
-                        <p key={j} className="text-slate-600 ml-2">
-                          {item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}
-                        </p>
-                      ))}
-                      <p className="text-slate-800 font-medium mt-1">₹{formatAmount(wo.totalAmount ?? ref.totalAmount ?? 0)}</p>
-                    </div>
-                  );
-                })}
-              </div>
+            ) : detailPaymentFull ? (
+              <>
+                {/* ADVANCE PAYMENT */}
+                {detailPayment.isAdvance && (
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <p><span className="font-semibold text-slate-800">{t('advance')}:</span> ₹{formatAmount((detailPaymentFull.paymentAmount as number) ?? 0)}</p>
+                    {(detailPaymentFull.addDeductRemarks as string) && <p className="text-slate-600 mt-1">{(detailPaymentFull.addDeductRemarks as string)}</p>}
+                  </div>
+                )}
+
+                {/* WORK ORDERS - Contractor (same layout as add form) */}
+                {!detailPayment.isAdvance && detailPayment.type === 'contractor' && (
+                  <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                    <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('paymentAgainstJobOrder') || 'Payment against'}</p>
+                    {(detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: WorkItemRow[]; totalAmount?: number }; totalAmount?: number }[])?.length > 0 ? (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {(detailPaymentFull.workRecordRefs as { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: WorkItemRow[]; totalAmount?: number }; totalAmount?: number }[]).map((ref: { workRecord?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: WorkItemRow[]; totalAmount?: number }; totalAmount?: number }, i: number) => {
+                          const wr = ref.workRecord;
+                          if (!wr) return null;
+                          const styleLabel = wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : '';
+                          return (
+                            <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{styleLabel}</p>
+                                {(wr.workItems || []).map((item: WorkItemRow, j: number) => (
+                                  <p key={j} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity}{(item.multiplier ?? 1) !== 1 ? ` × ${item.multiplier}` : ''} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                                ))}
+                                <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount ?? ref.totalAmount ?? 0)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders.'}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* WORK ORDERS - Full-time (same layout as add form) */}
+                {!detailPayment.isAdvance && detailPayment.type === 'full_time' && (
+                  <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                    <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+                    {(detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[])?.length > 0 ? (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {(detailPaymentFull.fullTimeWorkRecordRefs as { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }[]).map((ref: { fullTimeWorkRecord?: { branch?: { name: string }; daysWorked?: number; otHours?: number; otAmount?: number; totalAmount?: number }; daysWorked?: number; otHours?: number; otAmount?: number }, i: number) => {
+                          const ft = ref.fullTimeWorkRecord;
+                          if (!ft) return null;
+                          return (
+                            <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-700">{(ft.branch as { name?: string })?.name || t('branch')} – {ref.daysWorked ?? ft.daysWorked ?? 0} {t('daysWorked')}, {ref.otHours ?? ft.otHours ?? 0} {t('otHours')}</p>
+                                <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(ft.totalAmount ?? 0)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders.'}</p>
+                    )}
+                    {(detailPaymentFull.daysWorked ?? detailPaymentFull.totalWorkingDays) != null && (
+                      <p className="text-xs text-slate-500 mt-1">{t('daysWorked')}: {detailPaymentFull.daysWorked ?? '—'} / {detailPaymentFull.totalWorkingDays ?? '—'} | OT: {detailPaymentFull.otHours ?? 0}h = ₹{formatAmount((detailPaymentFull.otAmount as number) ?? 0)}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* WORK ORDERS - Vendor (same layout as add form) */}
+                {!detailPayment.isAdvance && detailPayment.type === 'vendor' && (
+                  <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                    <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('paymentAgainstJobOrder') || 'Payment against'}</p>
+                    {(detailPaymentFull.vendorWorkOrderRefs as { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number; extraAmount?: number }; totalAmount?: number }[])?.length > 0 ? (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {(detailPaymentFull.vendorWorkOrderRefs as { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number; extraAmount?: number }; totalAmount?: number }[]).map((ref: { vendorWorkOrder?: { branch?: { name: string }; styleOrder?: { styleCode: string; brand?: string; colour?: string }; workItems?: VendorWorkItemRow[]; totalAmount?: number; extraAmount?: number }; totalAmount?: number }, i: number) => {
+                          const wo = ref.vendorWorkOrder;
+                          if (!wo) return null;
+                          const styleLabel = wo.styleOrder ? ` – ${formatStyleOrderDisplay(wo.styleOrder.styleCode, wo.styleOrder.brand, wo.styleOrder.colour)}` : '';
+                          return (
+                            <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{styleLabel}</p>
+                                {(wo.workItems || []).map((item: VendorWorkItemRow, j: number) => (
+                                  <p key={j} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity}{(item.multiplier ?? 1) !== 1 ? ` × ${item.multiplier}` : ''} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                                ))}
+                                {(wo.extraAmount ?? 0) > 0 && <p className="text-slate-600 text-xs ml-2">{t('extraAmount')}: +₹{formatAmount(wo.extraAmount ?? 0)}</p>}
+                                <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wo.totalAmount ?? ref.totalAmount ?? 0)}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders.'}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* CALCULATION BREAKUP - Same as add form (slate-100 box) */}
+                {!detailPayment.isAdvance && (
+                  <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+                    <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+                    {detailPayment.type === 'full_time' ? (
+                      <>
+                        <p className="text-slate-700">{t('grossSalary') || 'Gross'}: ₹{formatAmount(roundAmount(((detailPaymentFull.baseAmount as number) ?? 0) + ((detailPaymentFull.pfDeducted as number) ?? 0) + ((detailPaymentFull.esiDeducted as number) ?? 0) + ((detailPaymentFull.otherDeducted as number) ?? 0)))}</p>
+                        {((detailPaymentFull.otAmount as number) ?? 0) > 0 && <p className="text-slate-700">+ {t('otHours')} / OT: ₹{formatAmount(detailPaymentFull.otAmount as number)}</p>}
+                        {((detailPaymentFull.pfDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(detailPaymentFull.pfDeducted as number)}</p>}
+                        {((detailPaymentFull.esiDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(detailPaymentFull.esiDeducted as number)}</p>}
+                        {((detailPaymentFull.otherDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(detailPaymentFull.otherDeducted as number)}</p>}
+                        {((detailPaymentFull.addDeductAmount as number) ?? 0) !== 0 && <p className="text-slate-700">{((detailPaymentFull.addDeductAmount as number) ?? 0) > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(detailPaymentFull.addDeductAmount as number)} {(detailPaymentFull.addDeductRemarks as string) && `(${detailPaymentFull.addDeductRemarks})`}</p>}
+                        {((detailPaymentFull.advanceDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(detailPaymentFull.advanceDeducted as number)}</p>}
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-slate-700">{t('baseAmount')}: ₹{formatAmount((detailPaymentFull.baseAmount as number) ?? 0)}</p>
+                        {((detailPaymentFull.pfDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(detailPaymentFull.pfDeducted as number)}</p>}
+                        {((detailPaymentFull.esiDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(detailPaymentFull.esiDeducted as number)}</p>}
+                        {((detailPaymentFull.otherDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(detailPaymentFull.otherDeducted as number)}</p>}
+                        {((detailPaymentFull.addDeductAmount as number) ?? 0) !== 0 && <p className="text-slate-700">{((detailPaymentFull.addDeductAmount as number) ?? 0) > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(detailPaymentFull.addDeductAmount as number)} {(detailPaymentFull.addDeductRemarks as string) && `(${detailPaymentFull.addDeductRemarks})`}</p>}
+                        {((detailPaymentFull.advanceDeducted as number) ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(detailPaymentFull.advanceDeducted as number)}</p>}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* FINAL PAYABLE - Same accent box as add form */}
+                {!detailPayment.isAdvance && (
+                  <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
+                    <p className="text-sm font-medium text-slate-700">{t('finalPayable')}</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{formatAmount((detailPaymentFull.totalPayable as number) ?? 0)}</p>
+                    <p className="text-slate-700 mt-1">{t('paymentAmount')}: ₹{formatAmount((detailPaymentFull.paymentAmount as number) ?? 0)}</p>
+                    {((detailPaymentFull.remainingAmount as number) ?? 0) > 0 && (
+                      <p className="text-amber-700 mt-1"><span className="font-medium">{t('remainingDue')}:</span> ₹{formatAmount(detailPaymentFull.remainingAmount as number)}</p>
+                    )}
+                    {((detailPaymentFull.carriedForward as number) ?? 0) > 0 && (
+                      <p className="text-slate-600 mt-1">{t('carryForward')}: ₹{formatAmount(detailPaymentFull.carriedForward as number)} {(detailPaymentFull.carriedForwardRemarks as string) && `(${detailPaymentFull.carriedForwardRemarks})`}</p>
+                    )}
+                  </div>
+                )}
+              </>
             ) : null}
           </div>
         )}

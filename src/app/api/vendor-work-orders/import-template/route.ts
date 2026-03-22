@@ -19,12 +19,17 @@ export async function GET() {
     await connectDB();
     const vendors = await Vendor.find({ isActive: true }).select('name').lean();
     const branches = await Branch.find({ isActive: true }).select('name').lean();
-    const styleOrders = await StyleOrder.find({ isActive: true }).select('styleCode brand').lean();
+    const styleOrders = await StyleOrder.find({ isActive: true }).select('styleCode brand colour').lean();
     const rates = await RateMaster.find({ isActive: true }).select('name').lean();
 
     const vendorNames = vendors.map((v) => (v as { name: string }).name);
     const branchNames = branches.map((b) => (b as { name: string }).name);
-    const styleCodes = styleOrders.map((s) => `${(s as { styleCode: string }).styleCode} - ${(s as { brand?: string }).brand || ''}`);
+    const styleCodes = styleOrders.map((s) => {
+      const code = (s as { styleCode: string }).styleCode;
+      const brand = (s as { brand?: string }).brand || '';
+      const colour = (s as { colour?: string }).colour || '';
+      return colour ? `${code} - ${brand} (${colour})` : `${code} - ${brand}`;
+    });
     const rateNames = rates.map((r) => (r as { name: string }).name);
     const workItemNames = VENDOR_WORK_ITEMS.map((w) => w.name);
     const allItemNames = [...new Set([...rateNames, ...workItemNames])];

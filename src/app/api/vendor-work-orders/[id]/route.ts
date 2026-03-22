@@ -7,6 +7,7 @@ import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import WorkRecord from '@/lib/models/WorkRecord';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { getAdminUserIds, createNotifications } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
 import { VENDOR_WORK_ITEMS } from '@/app/api/vendor-work-items/route';
@@ -93,7 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const monthStr = String(month || (existing as { month?: string }).month).slice(0, 7);
     const styleOrderIdFinal = styleOrderId ?? (existing.styleOrder as { toString?: () => string })?.toString?.();
 
-    type WorkItemEntry = { rateMaster?: unknown; workItemKey?: string; rateName: string; unit: string; quantity: number; multiplier?: number; remarks?: string; ratePerUnit: number; amount: number };
+    type WorkItemEntry = { rateMaster?: unknown; workItemKey?: string; rateName: string; unit: string; quantity: number; multiplier?: number; remarks?: string; ratePerUnit: number; defaultRatePerUnit?: number; rateOverrideApproved?: boolean; amount: number };
     let workItemsWithAmounts = (existing.workItems || []) as WorkItemEntry[];
     let totalAmount = 0;
 
@@ -116,7 +117,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (isVendorWorkItem) {
           const def = VENDOR_WORK_ITEMS.find((v) => v.id === workItemKey);
           if (!def) continue;
-          const amount = roundAmount(quantity * multiplier * ratePerUnit);
+          const defaultRate = 0;
+          const rateOverrideApproved = ratePerUnit === defaultRate;
+          const effectiveRate = rateOverrideApproved ? ratePerUnit : defaultRate;
+          const amount = roundAmount(quantity * multiplier * effectiveRate);
           workItemsWithAmounts.push({
             rateMaster: null,
             workItemKey,
@@ -126,6 +130,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             multiplier,
             remarks: (item as { remarks?: string }).remarks || '',
             ratePerUnit,
+            defaultRatePerUnit: defaultRate,
+            rateOverrideApproved,
             amount,
           });
           totalAmount += amount;
@@ -139,7 +145,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               (typeof br.branch === 'object' ? br.branch?.toString?.() : String(br.branch)) === branchIdFinal
           );
           const defaultRate = branchRate?.amount ?? 0;
-          const effectiveRate = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
+          const rateOverrideApproved = ratePerUnit === defaultRate;
+          const effectiveRate = rateOverrideApproved ? ratePerUnit : defaultRate;
 
           const amount = roundAmount(quantity * multiplier * effectiveRate);
           workItemsWithAmounts.push({
@@ -149,7 +156,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             quantity,
             multiplier,
             remarks: (item as { remarks?: string }).remarks || '',
-            ratePerUnit: effectiveRate,
+            ratePerUnit,
+            defaultRatePerUnit: defaultRate,
+            rateOverrideApproved,
             amount,
           });
           totalAmount += amount;
@@ -179,6 +188,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .populate('branch', 'name _id')
       .populate('styleOrder', 'styleCode brand colour _id')
       .lean();
+
+    const hasRateOverride = workItemsWithAmounts.some((wi: { rateOverrideApproved?: boolean }) => wi.rateOverrideApproved === false);
+    if (hasRateOverride) {
+      const vendorName = (record?.vendor as { name?: string })?.name || 'Vendor';
+      const adminIds = await getAdminUserIds();
+      createNotifications({
+        recipientIds: adminIds,
+        type: 'vendor_work_order_rate_override_pending',
+        title: 'Vendor rate override pending approval',
+        message: `Vendor work order for ${vendorName} (${monthStr}) has rate(s) changed from default. Approve to apply entered price. Until then, default price is used.`,
+        link: `/work-orders?vendorWorkOrderId=${id}`,
+        metadata: { entityId: id, entityType: 'vendor_work_order', vendorName, month: monthStr, amount: finalTotal },
+      }).catch(() => {});
+    }
 
     logAudit({
       user,

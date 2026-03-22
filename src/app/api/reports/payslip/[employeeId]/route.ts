@@ -31,28 +31,46 @@ export async function GET(
     if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
 
     const empType = (employee as { employeeType?: string }).employeeType || 'contractor';
-    const payment = await Payment.findOne({
+    const monthStr = month.slice(0, 7);
+    const payments = await Payment.find({
       employee: employeeId,
-      month: month.slice(0, 7),
+      month: monthStr,
       paymentType: empType,
       isAdvance: false,
     }).lean();
 
-    if (!payment) {
+    if (!payments || payments.length === 0) {
       return NextResponse.json({ error: 'No payment found for this month' }, { status: 404 });
     }
 
-    const p = payment as {
-      baseAmount?: number;
-      addDeductAmount?: number;
-      addDeductRemarks?: string;
-      pfDeducted?: number;
-      esiDeducted?: number;
-      advanceDeducted?: number;
-      totalPayable?: number;
-      paymentAmount?: number;
-      paymentMode?: string;
-    };
+    // Aggregate all salary payments for the month collectively
+    const p = payments.reduce(
+      (acc, px) => {
+        const x = px as {
+          baseAmount?: number;
+          addDeductAmount?: number;
+          addDeductRemarks?: string;
+          pfDeducted?: number;
+          esiDeducted?: number;
+          advanceDeducted?: number;
+          totalPayable?: number;
+          paymentAmount?: number;
+          paymentMode?: string;
+        };
+        return {
+          baseAmount: (acc.baseAmount ?? 0) + (x.baseAmount ?? 0),
+          addDeductAmount: (acc.addDeductAmount ?? 0) + (x.addDeductAmount ?? 0),
+          addDeductRemarks: acc.addDeductRemarks || x.addDeductRemarks || '',
+          pfDeducted: (acc.pfDeducted ?? 0) + (x.pfDeducted ?? 0),
+          esiDeducted: (acc.esiDeducted ?? 0) + (x.esiDeducted ?? 0),
+          advanceDeducted: (acc.advanceDeducted ?? 0) + (x.advanceDeducted ?? 0),
+          totalPayable: (acc.totalPayable ?? 0) + (x.totalPayable ?? 0),
+          paymentAmount: (acc.paymentAmount ?? 0) + (x.paymentAmount ?? 0),
+          paymentMode: acc.paymentMode || x.paymentMode || '',
+        };
+      },
+      { baseAmount: 0, addDeductAmount: 0, addDeductRemarks: '', pfDeducted: 0, esiDeducted: 0, advanceDeducted: 0, totalPayable: 0, paymentAmount: 0, paymentMode: '' }
+    );
 
     const emp = employee as {
       name?: string;

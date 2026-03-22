@@ -18,12 +18,17 @@ export async function GET() {
     await connectDB();
     const employees = await Employee.find({ isActive: true, employeeType: 'contractor' }).select('name employeeId').lean();
     const branches = await Branch.find({ isActive: true }).select('name').lean();
-    const styleOrders = await StyleOrder.find({ isActive: true }).select('styleCode brand').lean();
+    const styleOrders = await StyleOrder.find({ isActive: true }).select('styleCode brand colour').lean();
     const rates = await RateMaster.find({ isActive: true }).populate('branchRates.branch').lean();
 
     const empNames = employees.map((e) => (e as { name: string }).name);
     const branchNames = branches.map((b) => (b as { name: string }).name);
-    const styleCodes = styleOrders.map((s) => `${(s as { styleCode: string }).styleCode} - ${(s as { brand?: string }).brand || ''}`);
+    const styleCodes = styleOrders.map((s) => {
+      const code = (s as { styleCode: string }).styleCode;
+      const brand = (s as { brand?: string }).brand || '';
+      const colour = (s as { colour?: string }).colour || '';
+      return colour ? `${code} - ${brand} (${colour})` : `${code} - ${brand}`;
+    });
     const rateNames = [...new Set(rates.map((r) => (r as { name: string }).name))];
 
     const wb = new ExcelJS.Workbook();

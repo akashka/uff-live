@@ -6,7 +6,6 @@ import User from '@/lib/models/User';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { areBranchesAllowed, getUserBranchScope } from '@/lib/branchAccess';
 import { generatePassword } from '@/lib/utils';
-import bcrypt from 'bcryptjs';
 import { notifyAdminsIfNeeded } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 
@@ -234,10 +233,9 @@ export async function POST(req: NextRequest) {
     });
 
     const password = generatePassword(12);
-    const hashedPassword = await bcrypt.hash(password, 12);
     await User.create({
       email,
-      password: hashedPassword,
+      password, // User model pre-save hook hashes this
       role,
       employeeId: employee._id,
       isActive: true,

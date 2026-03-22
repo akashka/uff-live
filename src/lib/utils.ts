@@ -30,6 +30,21 @@ export function formatMonth(month: string | null | undefined): string {
   return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
+/** Format style/order code with brand and colour for display (e.g. "0001 - Brand (Red)") */
+export function formatStyleOrderDisplay(
+  styleCode?: string | null,
+  brand?: string | null,
+  colour?: string | null
+): string {
+  const code = (styleCode || '').trim();
+  const b = (brand || '').trim();
+  const c = (colour || '').trim();
+  let out = code;
+  if (b) out += (out ? ' - ' : '') + b;
+  if (c) out += (out ? ' ' : '') + `(${c})`;
+  return out || '';
+}
+
 /** Format date range as dd MMM yyyy – dd MMM yyyy */
 export function formatDateRange(start: string | null | undefined, end: string | null | undefined): string {
   const s = formatDate(start);

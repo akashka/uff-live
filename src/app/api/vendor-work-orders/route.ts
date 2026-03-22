@@ -7,6 +7,7 @@ import RateMaster from '@/lib/models/RateMaster';
 import StyleOrder from '@/lib/models/StyleOrder';
 import WorkRecord from '@/lib/models/WorkRecord';
 import { getAuthUser, hasRole } from '@/lib/auth';
+import { getAdminUserIds, createNotifications } from '@/lib/notifications';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
 import { VENDOR_WORK_ITEMS } from '@/app/api/vendor-work-items/route';
@@ -146,7 +147,10 @@ export async function POST(req: NextRequest) {
       if (isVendorWorkItem) {
         const def = VENDOR_WORK_ITEMS.find((v) => v.id === workItemKey);
         if (!def) continue;
-        const amount = roundAmount(quantity * multiplier * ratePerUnit);
+        const defaultRate = 0;
+        const rateOverrideApproved = ratePerUnit === defaultRate;
+        const effectiveRate = rateOverrideApproved ? ratePerUnit : defaultRate;
+        const amount = roundAmount(quantity * multiplier * effectiveRate);
         workItemsWithAmounts.push({
           rateMaster: null,
           workItemKey,
@@ -156,6 +160,8 @@ export async function POST(req: NextRequest) {
           multiplier,
           remarks: (item as { remarks?: string }).remarks || '',
           ratePerUnit,
+          defaultRatePerUnit: defaultRate,
+          rateOverrideApproved,
           amount,
         });
         totalAmount += amount;
@@ -171,7 +177,8 @@ export async function POST(req: NextRequest) {
             )
           : null;
         const defaultRate = branchRate?.amount ?? 0;
-        const effectiveRate = (item as { ratePerUnit?: number }).ratePerUnit != null ? Number((item as { ratePerUnit?: number }).ratePerUnit) : defaultRate;
+        const rateOverrideApproved = ratePerUnit === defaultRate;
+        const effectiveRate = rateOverrideApproved ? ratePerUnit : defaultRate;
 
         if (styleOrderId && quantity > 0) {
           const available = await getAvailableQuantity(styleOrderId, monthStr, rateMasterId, branchId || null);
@@ -191,7 +198,9 @@ export async function POST(req: NextRequest) {
           quantity,
           multiplier,
           remarks: (item as { remarks?: string }).remarks || '',
-          ratePerUnit: effectiveRate,
+          ratePerUnit,
+          defaultRatePerUnit: defaultRate,
+          rateOverrideApproved,
           amount,
         });
         totalAmount += amount;
@@ -223,6 +232,19 @@ export async function POST(req: NextRequest) {
       .lean();
 
     const vendorName = (populated?.vendor as { name?: string })?.name || 'Vendor';
+
+    const hasRateOverride = workItemsWithAmounts.some((wi: { rateOverrideApproved?: boolean }) => wi.rateOverrideApproved === false);
+    if (hasRateOverride) {
+      const adminIds = await getAdminUserIds();
+      createNotifications({
+        recipientIds: adminIds,
+        type: 'vendor_work_order_rate_override_pending',
+        title: 'Vendor rate override pending approval',
+        message: `Vendor work order for ${vendorName} (${monthStr}) has rate(s) changed from default. Approve to apply entered price. Until then, default price is used.`,
+        link: `/work-orders?vendorWorkOrderId=${record._id}`,
+        metadata: { entityId: String(record._id), entityType: 'vendor_work_order', vendorId, vendorName, month: monthStr, amount: finalTotal },
+      }).catch(() => {});
+    }
 
     logAudit({
       user,

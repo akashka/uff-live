@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ValidatedInput from '@/components/ValidatedInput';
 import { useBranches, useDepartments, useEmployees, useRates, useStyleOrdersByBranchMonth } from '@/lib/hooks/useApi';
-import { formatAmount } from '@/lib/utils';
+import { formatAmount, formatStyleOrderDisplay } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import SaveOverlay from '@/components/SaveOverlay';
 
@@ -69,6 +69,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
   });
 
   const [saving, setSaving] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   const { branches } = useBranches(false);
   const { departments } = useDepartments(true);
@@ -107,12 +108,13 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
         const id = String(wi.rateMaster ?? (wi as { rateMasterId?: string }).rateMasterId ?? '');
         const qty = Math.max(1, (wi.quantity as number) || 1);
         const rate = Math.max(0, (wi.ratePerUnit as number) || 0);
+        const defaultRate = Math.max(0, (wi.defaultRatePerUnit as number) ?? rate);
         if (id)
           workItemsRecord[id] = {
             quantity: qty,
             defaultQuantity: qty,
             ratePerUnit: rate,
-            defaultRatePerUnit: rate,
+            defaultRatePerUnit: defaultRate,
             remarks: (wi.remarks as string) ?? '',
           };
       }
@@ -125,7 +127,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
         departmentName: empDept && typeof empDept === 'object' ? (empDept as { name?: string }).name || '' : '',
         month: (record.month as string) || '',
         styleOrderId: style?._id || '',
-        styleOrderCode: (style as { brand?: string })?.brand ? `${(style as { styleCode?: string })?.styleCode || ''} - ${(style as { brand?: string })?.brand}` : style?.styleCode || '',
+        styleOrderCode: formatStyleOrderDisplay((style as { styleCode?: string })?.styleCode, (style as { brand?: string })?.brand, (style as { colour?: string })?.colour || (record.colour as string)),
         colour: (record.colour as string) || '',
         workItems: workItemsRecord,
         otHours: (record.otHours as number) ?? 0,
@@ -212,8 +214,26 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
     });
   };
 
+  const hasUnapprovedRateOverride = (record?.workItems as { rateOverrideApproved?: boolean }[] | undefined)?.some?.((wi) => wi.rateOverrideApproved === false) ?? false;
+  const isAdmin = user?.role === 'admin';
   const workTotal = Object.entries(form.workItems).reduce((sum, [, wi]) => sum + (wi.quantity || 0) * (wi.ratePerUnit || 0), 0);
   const totalAmount = workTotal + (form.otAmount ?? 0);
+
+  const handleApproveRateOverride = async () => {
+    if (!record?._id) return;
+    setApproving(true);
+    try {
+      const res = await fetch(`/api/work-records/${record._id}/approve-rate-override`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t('error'));
+      toast.success(t('rateOverrideApproved'));
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'));
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -221,7 +241,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
       const workItemsArray = Object.entries(form.workItems)
         .filter(([, wi]) => (wi.quantity || 0) > 0)
         .map(([rateMasterId, wi]) => {
-          const needsRemarks = wi.ratePerUnit !== wi.defaultRatePerUnit || wi.quantity !== wi.defaultQuantity;
+          const needsRemarks = wi.ratePerUnit !== wi.defaultRatePerUnit;
           if (needsRemarks && !(wi.remarks || '').trim()) {
             throw new Error(t('remarksRequiredWhenRateChanged'));
           }
@@ -395,7 +415,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
                 value={form.styleOrderId}
                 onChange={(e) => {
                   const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string }) => x._id === e.target.value);
-                  const display = s ? ((s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || '') : '';
+                  const display = s ? formatStyleOrderDisplay((s as { styleCode?: string }).styleCode, (s as { brand?: string }).brand, (s as { colour?: string }).colour) : '';
                   const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
                   setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: styleColour, workItems: {} }));
                 }}
@@ -409,9 +429,9 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
                       ? 'No styles for this branch/month'
                       : 'Select style/order...'}
                 </option>
-                {(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string }) => (
+                {(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string; colour?: string }) => (
                   <option key={s._id} value={s._id}>
-                    {(s as { brand?: string }).brand ? `${(s as { styleCode?: string }).styleCode || ''} - ${(s as { brand?: string }).brand}` : (s as { styleCode?: string }).styleCode || s._id}
+                    {formatStyleOrderDisplay(s.styleCode, s.brand, s.colour) || s._id}
                   </option>
                 ))}
               </select>
@@ -422,104 +442,129 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
         <div>
           <label className="block text-sm font-medium text-slate-800 mb-2">{t('workItems')} *</label>
           {form.branchId && effectiveDepartmentId && rates && rates.length > 0 && (
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 bg-uff-surface text-sm font-medium text-slate-800 border-b border-slate-200">
-                {mode !== 'view' ? (
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allRatesSelected}
-                      onChange={(e) => selectAllRates(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300"
-                    />
-                    <span className="text-xs">{t('selectAll')}</span>
-                  </label>
-                ) : (
-                  <span className="w-8" />
-                )}
-                <span>{t('rateName') || 'Rate'}</span>
-                <span>{t('quantityShort') || 'Qty'}</span>
-                <span>{t('rate') || 'Rate (₹)'}</span>
-                <span>{t('amount') || 'Amount'}</span>
-                <span>{t('remarks')}</span>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {(mode === 'view' ? (rates as RateMaster[]).filter((r) => form.workItems[r._id]) : (rates as RateMaster[])).map((r) => {
-                  const wi = form.workItems[r._id];
-                  const isChecked = !!wi;
-                  const maxQty = getDefaultQuantity(r._id);
-                  const amount = isChecked ? (wi.quantity || 0) * (wi.ratePerUnit || 0) : 0;
-                  const defaultAmount = isChecked ? (wi.defaultQuantity || 0) * (wi.defaultRatePerUnit || 0) : 0;
-                  const showRemarks = isChecked && (wi.ratePerUnit !== wi.defaultRatePerUnit || wi.quantity !== wi.defaultQuantity);
-                  return (
-                    <div
-                      key={r._id}
-                      className={`grid grid-cols-[auto_1fr_80px_100px_80px_1fr] gap-2 px-3 py-2 items-center border-b border-slate-100 last:border-0 text-sm ${isChecked ? 'bg-uff-surface/50' : ''}`}
-                    >
-                      {mode === 'view' ? (
-                        <>
-                          <span className="w-8" />
-                          <span className="text-slate-800">{r.name} ({r.unit})</span>
-                          <span>{wi.quantity} / {maxQty}</span>
-                          <span>₹{wi.ratePerUnit} {wi.ratePerUnit !== wi.defaultRatePerUnit && <span className="text-amber-600">(was ₹{wi.defaultRatePerUnit})</span>}</span>
-                          <span>₹{formatAmount(amount)}</span>
-                          <span>{wi.remarks || '–'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => toggleRateChecked(r._id, e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-300"
-                          />
-                          <span className="text-slate-800">{r.name} ({r.unit}) {maxQty > 0 && <span className="text-slate-500 text-xs">(max {maxQty})</span>}</span>
-                          {isChecked ? (
-                            <>
-                              <input
-                                type="number"
-                                min={1}
-                                max={maxQty}
-                                value={wi.quantity || ''}
-                                onChange={(e) => updateWorkItemField(r._id, 'quantity', parseFloat(e.target.value) || 1)}
-                                className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
-                              />
-                              <input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                value={wi.ratePerUnit ?? ''}
-                                onChange={(e) => updateWorkItemField(r._id, 'ratePerUnit', parseFloat(e.target.value) ?? 0)}
-                                className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
-                              />
-                              <span className="text-slate-700">₹{formatAmount(amount)}</span>
-                              {showRemarks ? (
+            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <div className="min-w-[720px] border-slate-200">
+                <div className="grid grid-cols-[auto_minmax(120px,1fr)_55px_70px_60px_55px_70px_60px_minmax(90px,1fr)] gap-2 px-3 py-2 bg-uff-surface text-sm font-medium text-slate-800 border-b border-slate-200">
+                  {mode !== 'view' ? (
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={allRatesSelected}
+                        onChange={(e) => selectAllRates(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-xs">{t('selectAll')}</span>
+                    </label>
+                  ) : (
+                    <span className="w-8" />
+                  )}
+                  <span>{t('rateName') || 'Rate'}</span>
+                  <span className="text-xs">{t('maxQty')}</span>
+                  <span className="text-xs">{t('defaultRate')}</span>
+                  <span className="text-xs">{t('defaultAmount')}</span>
+                  <span className="text-xs">{t('enteredQty')}</span>
+                  <span className="text-xs">{t('enteredRate')}</span>
+                  <span className="text-xs">{t('enteredAmount')}</span>
+                  <span>{t('remarks')}</span>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {(mode === 'view' ? (rates as RateMaster[]).filter((r) => form.workItems[r._id]) : (rates as RateMaster[])).map((r) => {
+                    const wi = form.workItems[r._id];
+                    const isChecked = !!wi;
+                    const maxQty = getDefaultQuantity(r._id);
+                    const defaultRate = wi?.defaultRatePerUnit ?? r.amountForBranch ?? 0;
+                    const defaultAmt = isChecked ? (maxQty || 0) * defaultRate : 0;
+                    const enteredAmt = isChecked ? (wi.quantity || 0) * (wi.ratePerUnit || 0) : 0;
+                    const showRemarks = isChecked && wi.ratePerUnit !== wi.defaultRatePerUnit;
+                    const recWi = (record?.workItems as { rateMaster?: string | { _id?: string }; rateOverrideApproved?: boolean }[] | undefined)?.find(
+                      (x) => String(typeof x.rateMaster === 'object' && x.rateMaster?._id ? x.rateMaster._id : x.rateMaster ?? '') === r._id
+                    );
+                    const isOverridePending = recWi?.rateOverrideApproved === false;
+                    return (
+                      <div
+                        key={r._id}
+                        className={`grid grid-cols-[auto_minmax(120px,1fr)_55px_70px_60px_55px_70px_60px_minmax(90px,1fr)] gap-2 px-3 py-2 items-center border-b border-slate-100 last:border-0 text-sm ${isChecked ? 'bg-uff-surface/50' : ''} ${isOverridePending ? 'border-l-2 border-l-amber-400' : ''}`}
+                      >
+                        {mode === 'view' ? (
+                          <>
+                            <span className="w-8" />
+                            <span className="text-slate-800">{r.name} ({r.unit})</span>
+                            <span className="text-slate-600 tabular-nums">{maxQty}</span>
+                            <span className="text-slate-600 tabular-nums">₹{defaultRate}</span>
+                            <span className="text-slate-600 tabular-nums">₹{formatAmount(defaultAmt)}</span>
+                            <span className="tabular-nums">{wi.quantity}</span>
+                            <span className="tabular-nums">₹{wi.ratePerUnit}{isOverridePending && <span className="text-amber-600 text-xs ml-1">(pending)</span>}</span>
+                            <span className="tabular-nums">₹{formatAmount(enteredAmt)}</span>
+                            <span className="text-slate-700">{showRemarks ? (wi.remarks || '–') : '–'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => toggleRateChecked(r._id, e.target.checked)}
+                              className="w-4 h-4 rounded border-slate-300"
+                            />
+                            <span className="text-slate-800">{r.name} ({r.unit})</span>
+                            {isChecked ? (
+                              <>
+                                <span className="text-slate-600 bg-slate-50 px-1 py-1 rounded tabular-nums text-right">{maxQty}</span>
+                                <span className="text-slate-600 bg-slate-50 px-1 py-1 rounded tabular-nums text-right">₹{defaultRate}</span>
+                                <span className="text-slate-600 bg-slate-50 px-1 py-1 rounded tabular-nums text-right">₹{formatAmount(defaultAmt)}</span>
                                 <input
-                                  type="text"
-                                  value={wi.remarks ?? ''}
-                                  onChange={(e) => updateWorkItemField(r._id, 'remarks', e.target.value)}
-                                  placeholder={t('remarksRequiredWhenRateChanged')}
-                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm border-amber-300"
-                                  required
+                                  type="number"
+                                  min={1}
+                                  max={maxQty}
+                                  value={wi.quantity || ''}
+                                  onChange={(e) => updateWorkItemField(r._id, 'quantity', parseFloat(e.target.value) || 1)}
+                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm text-right"
                                 />
-                              ) : (
-                                <span className="text-slate-400 text-xs">–</span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-slate-400">–</span>
-                              <span className="text-slate-400">₹{r.amountForBranch ?? 0}</span>
-                              <span className="text-slate-400">–</span>
-                              <span className="text-slate-400">–</span>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={wi.ratePerUnit ?? ''}
+                                  onChange={(e) => updateWorkItemField(r._id, 'ratePerUnit', parseFloat(e.target.value) ?? 0)}
+                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm text-right"
+                                />
+                                <span className="text-slate-700 tabular-nums py-1">₹{formatAmount(enteredAmt)}</span>
+                                {showRemarks ? (
+                                  <input
+                                    type="text"
+                                    value={wi.remarks ?? ''}
+                                    onChange={(e) => updateWorkItemField(r._id, 'remarks', e.target.value)}
+                                    placeholder={t('remarksRequiredWhenRateChanged')}
+                                    className="w-full px-2 py-1 border border-slate-300 rounded text-sm border-amber-300"
+                                    required
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 text-xs">–</span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">₹{r.amountForBranch ?? 0}</span>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">–</span>
+                                <span className="text-slate-400">–</span>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+              {hasUnapprovedRateOverride && mode === 'view' && (
+                <p className="px-3 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">
+                  {t('rateOverridePending')}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -580,6 +625,15 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
             {saving ? '...' : t('save')}
           </button>
         )}
+        {mode === 'view' && hasUnapprovedRateOverride && isAdmin && (
+          <button
+            onClick={handleApproveRateOverride}
+            disabled={approving}
+            className="px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 transition"
+          >
+            {approving ? '...' : t('approveRateOverride')}
+          </button>
+        )}
         {mode === 'view' && canAdd && onSwitchToEdit && (
           <button
             onClick={onSwitchToEdit}
@@ -593,7 +647,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
         </button>
       </div>
 
-      <SaveOverlay show={saving} label={t('saving')} />
+      <SaveOverlay show={saving || approving} label={saving ? t('saving') : t('approving')} />
     </>
   );
 }

@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
 import SaveOverlay from '@/components/SaveOverlay';
 import ImportModal from '@/components/ImportModal';
+import { formatStyleOrderDisplay } from '@/lib/utils';
 
 interface Branch {
   _id: string;
@@ -387,11 +388,8 @@ export default function StyleOrdersPage() {
           ) : (
             sorted.map((s) => (
               <div key={s._id} className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition">
-                <h3 className="font-semibold text-slate-900">{s.styleCode} {s.brand ? `— ${s.brand}` : ''}</h3>
+                <h3 className="font-semibold text-slate-900">{formatStyleOrderDisplay(s.styleCode, s.brand, getColour(s))}</h3>
                 <p className="text-sm text-slate-600 mt-1">{t('month')}: {formatMonthYear(s.month || '')}</p>
-                {getColour(s) && (
-                  <p className="text-sm text-slate-600 mt-0.5">{t('colour')}: {getColour(s)}</p>
-                )}
                 {s.totalOrderQuantity != null && s.totalOrderQuantity > 0 && (
                   <p className="text-sm text-slate-700 mt-1 font-medium">{t('totalPieces')}: {s.totalOrderQuantity}</p>
                 )}

@@ -8,7 +8,11 @@ export interface IWorkItem {
   multiplier?: number; // NO OF FIX: amount = quantity × (multiplier || 1) × ratePerUnit
   remarks?: string;
   ratePerUnit: number;
-  amount: number;
+  /** Default rate from RateMaster at time of creation. Used when rateOverrideApproved is false. */
+  defaultRatePerUnit?: number;
+  /** True when ratePerUnit equals default, or when admin has approved the override. */
+  rateOverrideApproved?: boolean;
+  amount: number; // computed using effective rate: approved ? ratePerUnit : defaultRatePerUnit
 }
 
 export interface IWorkRecord extends Document {
@@ -36,6 +40,8 @@ const WorkItemSchema = new Schema<IWorkItem>(
     multiplier: { type: Number, default: 1, min: 0 },
     remarks: { type: String, default: '' },
     ratePerUnit: { type: Number, required: true, min: 0 },
+    defaultRatePerUnit: { type: Number, default: undefined },
+    rateOverrideApproved: { type: Boolean, default: true },
     amount: { type: Number, required: true, min: 0 },
   },
   { _id: false }
