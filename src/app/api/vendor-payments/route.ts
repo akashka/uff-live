@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       baseAmount,
       addDeductAmount,
       addDeductRemarks,
+      advanceDeducted,
       totalPayable,
       paymentAmount,
       paymentMode,
@@ -105,7 +106,8 @@ export async function POST(req: NextRequest) {
 
     const baseAmt = Number(baseAmount) || 0;
     const addDeduct = Number(addDeductAmount) || 0;
-    const totalPay = Number(totalPayable) || baseAmt + addDeduct;
+    const advDeduct = paymentType === 'monthly' ? Math.max(0, Number(advanceDeducted) || 0) : 0;
+    const totalPay = Number(totalPayable) ?? baseAmt + addDeduct - advDeduct;
     const paymentAmt = Number(paymentAmount) || 0;
     const remaining = Math.max(0, totalPay - paymentAmt);
     const carried = Number(carriedForward) || 0;
@@ -117,6 +119,7 @@ export async function POST(req: NextRequest) {
       baseAmount: baseAmt,
       addDeductAmount: addDeduct,
       addDeductRemarks: (addDeductRemarks || '').slice(0, 500),
+      advanceDeducted: advDeduct,
       totalPayable: totalPay,
       paymentAmount: paymentAmt,
       paymentMode: paymentMode || 'cash',

@@ -458,7 +458,7 @@ export default function WorkOrdersPage() {
               ? `${t('view')} ${t('workOrder')}`
               : `${t('edit')} ${t('workOrder')}`
         }
-        size="3xl"
+        size="5xl"
       >
         {modal === 'create' && createStep === 'type' ? (
           <div className="space-y-4">

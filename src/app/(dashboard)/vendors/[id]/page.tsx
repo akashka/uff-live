@@ -7,6 +7,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import Breadcrumb from '@/components/Breadcrumb';
+import { PageLoader } from '@/components/Skeleton';
 import { formatDate, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
@@ -14,7 +15,7 @@ type PassbookEntry = { type: string; id: string; date: string; particulars: stri
 
 export default function VendorDetailPage() {
   const { t } = useApp();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const params = useParams();
   const vendorId = params?.id as string | undefined;
 
@@ -33,7 +34,8 @@ export default function VendorDetailPage() {
   }, [vendorId]);
 
   useEffect(() => {
-    if (!vendorId || !canAccess) {
+    if (!vendorId || authLoading) return;
+    if (!canAccess) {
       setError(t('accessDenied'));
       setLoading(false);
       return;
@@ -60,7 +62,16 @@ export default function VendorDetailPage() {
         toast.error(t('error'));
       })
       .finally(() => setLoading(false));
-  }, [vendorId, canAccess, page, t]);
+  }, [vendorId, canAccess, authLoading, page, t]);
+
+  if (authLoading) {
+    return (
+      <div>
+        <PageHeader title={t('vendorPassbook')} />
+        <PageLoader mode="table" />
+      </div>
+    );
+  }
 
   if (!canAccess) {
     return (
@@ -83,7 +94,7 @@ export default function VendorDetailPage() {
     return (
       <div>
         <PageHeader title={t('vendorPassbook')} />
-        <div className="animate-pulse h-64 bg-slate-100 rounded-xl" />
+        <PageLoader mode="table" />
       </div>
     );
   }

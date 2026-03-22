@@ -49,6 +49,7 @@ interface WorkRecordCalc {
   workItems?: WorkItemRow[];
   totalAmount: number;
   isPaid?: boolean;
+  isPendingApproval?: boolean;
 }
 
 interface FullTimeWorkRecordCalc {
@@ -78,6 +79,7 @@ interface VendorWorkOrderCalc {
   workItems?: VendorWorkItemRow[];
   totalAmount: number;
   isPaid?: boolean;
+  isPendingApproval?: boolean;
 }
 
 interface EmployeePayment {
@@ -247,6 +249,7 @@ export default function AllPayments() {
     baseAmount: 0,
     addDeductAmount: 0,
     addDeductRemarks: '',
+    advanceDeducted: 0,
     totalPayable: 0,
     paymentAmount: 0,
     paymentMode: 'cash' as string,
@@ -275,6 +278,7 @@ export default function AllPayments() {
   } | null>(null);
   const [vendorCalc, setVendorCalc] = useState<{ baseAmount: number; workOrders?: VendorWorkOrderCalc[] } | null>(null);
   const [advanceOutstanding, setAdvanceOutstanding] = useState(0);
+  const [vendorAdvanceOutstanding, setVendorAdvanceOutstanding] = useState(0);
 
   const { employees: formEmpList } = useEmployees(false, { limit: 0, branchId: empForm.branchId || undefined, departmentId: empForm.departmentId || undefined });
   const employeesForForm = (Array.isArray(formEmpList) ? formEmpList : []).filter(
@@ -310,6 +314,12 @@ export default function AllPayments() {
       })
       .finally(() => setDetailLoading(false));
   }, [detailPayment]);
+
+  useEffect(() => {
+    if (addModal && modalRecipientType === 'vendor' && modalPaymentKind === 'job_order' && vendorForm.vendorId && vendorForm.month) {
+      loadVendorCalculation(vendorForm.vendorId, vendorForm.month, vendorForm.vendorWorkOrderIds);
+    }
+  }, [addModal, modalRecipientType, modalPaymentKind, vendorForm.vendorId, vendorForm.month]);
 
   const mutateAll = () => {
     mutateEmpPayments();
@@ -415,6 +425,7 @@ export default function AllPayments() {
       baseAmount: 0,
       addDeductAmount: 0,
       addDeductRemarks: '',
+      advanceDeducted: 0,
       totalPayable: 0,
       paymentAmount: 0,
       paymentMode: 'cash',
@@ -470,7 +481,7 @@ export default function AllPayments() {
       if (!calcRes.error) {
         setCalc(calcRes);
         const workRecords = calcRes.workRecords || [];
-        const unpaidIds = workRecords.filter((r: WorkRecordCalc) => !r.isPaid).map((r: WorkRecordCalc) => r._id);
+        const unpaidIds = workRecords.filter((r: WorkRecordCalc) => !r.isPaid && !r.isPendingApproval).map((r: WorkRecordCalc) => r._id);
         const defaultSelected = selectedWorkIds ?? unpaidIds;
         const base = calcRes.baseAmount ?? 0;
         const pf = calcRes.pfToDeduct ?? 0;
@@ -492,22 +503,29 @@ export default function AllPayments() {
   const loadVendorCalculation = async (vendorId: string, month: string, selectedIds?: string[]) => {
     if (!vendorId || !month) {
       setVendorCalc(null);
+      setVendorAdvanceOutstanding(0);
       return;
     }
     const voParam = selectedIds?.length ? `&selectedVendorWorkOrderIds=${selectedIds.join(',')}` : '';
-    const calcRes = await fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}${voParam}`).then((r) => r.json());
+    const [calcRes, advRes] = await Promise.all([
+      fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}${voParam}`).then((r) => r.json()),
+      fetch(`/api/vendor-payments/advance-outstanding?vendorId=${vendorId}&month=${month}`).then((r) => r.json()),
+    ]);
+    const outstanding = advRes.error ? 0 : (advRes.outstanding ?? 0);
+    setVendorAdvanceOutstanding(outstanding);
     if (calcRes.error) {
       setVendorCalc(null);
     } else {
       const workOrders = calcRes.workOrders || [];
-      const unpaidIds = workOrders.filter((r: VendorWorkOrderCalc) => !r.isPaid).map((r: VendorWorkOrderCalc) => r._id);
+      const unpaidIds = workOrders.filter((r: VendorWorkOrderCalc) => !r.isPaid && !r.isPendingApproval).map((r: VendorWorkOrderCalc) => r._id);
       const defaultSelected = selectedIds ?? unpaidIds;
       const base = calcRes.baseAmount ?? 0;
       setVendorCalc({ baseAmount: base, workOrders });
       setVendorForm((f) => ({
         ...f,
         baseAmount: base,
-        totalPayable: base + f.addDeductAmount,
+        advanceDeducted: outstanding,
+        totalPayable: base + f.addDeductAmount - outstanding,
         vendorWorkOrderIds: defaultSelected,
       }));
     }
@@ -572,6 +590,13 @@ export default function AllPayments() {
       const base = modalRecipientType === 'full_time' ? (calc?.baseAmount ?? 0) : empForm.baseAmount;
       const twd = roundDays(calc?.totalWorkingDays ?? 0);
       const dw = roundDays(empForm.daysWorked ?? calc?.daysWorked ?? 0);
+      const contractorWorkRecordIds =
+        empForm.paymentType === 'contractor'
+          ? empForm.workRecordIds.filter((id) => {
+              const wr = (calc?.workRecords as (WorkRecordCalc & { isPendingApproval?: boolean })[] | undefined)?.find((r) => r._id === id);
+              return wr && !wr.isPaid && !wr.isPendingApproval;
+            })
+          : [];
       const payload: Record<string, unknown> = {
         employeeId: empForm.employeeId,
         paymentType: empForm.paymentType,
@@ -591,7 +616,7 @@ export default function AllPayments() {
         carriedForward: 0,
         carriedForwardRemarks: '',
         isAdvance: false,
-        workRecordIds: empForm.paymentType === 'contractor' ? empForm.workRecordIds : [],
+        workRecordIds: contractorWorkRecordIds,
         fullTimeWorkRecordIds: empForm.paymentType === 'full_time' ? empForm.fullTimeWorkRecordIds : [],
       };
       if (empForm.paymentType === 'full_time') {
@@ -653,9 +678,16 @@ export default function AllPayments() {
     }
   };
 
-  const vendorTotalPayable = vendorForm.baseAmount + vendorForm.addDeductAmount;
+  const vendorTotalPayable = vendorForm.baseAmount + vendorForm.addDeductAmount - (vendorForm.advanceDeducted ?? 0);
 
   const handleVendorJobOrderSubmit = async () => {
+    if (vendorForm.addDeductAmount !== 0 && !(vendorForm.addDeductRemarks || '').trim()) {
+      toast.error(t('mandatoryForAddDeduct') || t('remarksRequiredWhenRateChanged'));
+      return;
+    }
+    const validVendorWorkOrderIds = (vendorCalc?.workOrders ?? []).filter(
+      (wo) => vendorForm.vendorWorkOrderIds.includes(wo._id) && !wo.isPaid && !(wo as VendorWorkOrderCalc & { isPendingApproval?: boolean }).isPendingApproval
+    ).map((wo) => wo._id);
     setSaving(true);
     try {
       const res = await fetch('/api/vendor-payments', {
@@ -666,10 +698,11 @@ export default function AllPayments() {
           paymentType: 'monthly',
           totalPayable: vendorTotalPayable,
           paymentAmount: vendorTotalPayable,
+          advanceDeducted: vendorForm.advanceDeducted ?? 0,
           remainingAmount: 0,
           carriedForward: 0,
           carriedForwardRemarks: '',
-          vendorWorkOrderIds: vendorForm.vendorWorkOrderIds,
+          vendorWorkOrderIds: validVendorWorkOrderIds,
         }),
       });
       const data = await res.json();
@@ -1247,15 +1280,18 @@ export default function AllPayments() {
                           <div className="space-y-2 max-h-48 overflow-y-auto">
                             {(calc.workRecords as WorkRecordCalc[]).map((wr) => {
                               const isPaid = wr.isPaid ?? false;
+                              const isPendingApproval = wr.isPendingApproval ?? false;
+                              const isDisabled = isPaid || isPendingApproval;
                               const isSelected = empForm.workRecordIds.includes(wr._id);
+                              const statusLabel = isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : '';
                               return (
-                                <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    disabled={isPaid}
+                                    disabled={isDisabled}
                                     onChange={() => {
-                                      if (isPaid) return;
+                                      if (isDisabled) return;
                                       const next = isSelected ? empForm.workRecordIds.filter((id) => id !== wr._id) : [...empForm.workRecordIds, wr._id];
                                       setEmpForm((f) => ({ ...f, workRecordIds: next }));
                                       loadEmpCalculation(empForm.employeeId, empForm.month, 'contractor', next, undefined);
@@ -1263,8 +1299,8 @@ export default function AllPayments() {
                                     className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
                                   />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : ''}{isPaid ? ` (${t('paid')})` : ''}</p>
-                                    {(wr.workItems || []).map((item: WorkItemRow, i: number) => (
+                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : ''}{statusLabel}</p>
+                                    {((wr.workItems || []).filter((item): item is WorkItemRow => !!item) as WorkItemRow[]).map((item: WorkItemRow, i: number) => (
                                       <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)}</p>
                                     ))}
                                     <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount || 0)}</p>
@@ -1299,6 +1335,17 @@ export default function AllPayments() {
                           {(calc.pf ?? 0) > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(calc.pf ?? 0)}</p>}
                           {(calc.esi ?? 0) > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(calc.esi ?? 0)}</p>}
                           {(calc.other ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(calc.other ?? 0)}</p>}
+                          {empForm.addDeductAmount !== 0 && <p className="text-slate-700">{empForm.addDeductAmount > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(empForm.addDeductAmount)} {empForm.addDeductRemarks && `(${empForm.addDeductRemarks})`}</p>}
+                          {(empForm.advanceDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(empForm.advanceDeducted ?? 0)}</p>}
+                        </div>
+                      )}
+                      {modalRecipientType === 'contractor' && (
+                        <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+                          <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+                          <p className="text-slate-700">{t('baseAmount')}: ₹{formatAmount(empForm.baseAmount ?? 0)}</p>
+                          {(empForm.pfDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(empForm.pfDeducted ?? 0)}</p>}
+                          {(empForm.esiDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(empForm.esiDeducted ?? 0)}</p>}
+                          {(empForm.otherDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('otherDeductions')}: ₹{formatAmount(empForm.otherDeducted ?? 0)}</p>}
                           {empForm.addDeductAmount !== 0 && <p className="text-slate-700">{empForm.addDeductAmount > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(empForm.addDeductAmount)} {empForm.addDeductRemarks && `(${empForm.addDeductRemarks})`}</p>}
                           {(empForm.advanceDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(empForm.advanceDeducted ?? 0)}</p>}
                         </div>
@@ -1361,15 +1408,18 @@ export default function AllPayments() {
                           <div className="space-y-2 max-h-48 overflow-y-auto">
                             {(vendorCalc.workOrders as VendorWorkOrderCalc[]).map((wo) => {
                               const isPaid = wo.isPaid ?? false;
+                              const isPendingApproval = wo.isPendingApproval ?? false;
+                              const isDisabled = isPaid || isPendingApproval;
                               const isSelected = vendorForm.vendorWorkOrderIds.includes(wo._id);
+                              const statusLabel = isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : '';
                               return (
-                                <label key={wo._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                <label key={wo._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                                   <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    disabled={isPaid}
+                                    disabled={isDisabled}
                                     onChange={() => {
-                                      if (isPaid) return;
+                                      if (isDisabled) return;
                                       const next = isSelected ? vendorForm.vendorWorkOrderIds.filter((id) => id !== wo._id) : [...vendorForm.vendorWorkOrderIds, wo._id];
                                       setVendorForm((f) => ({ ...f, vendorWorkOrderIds: next }));
                                       loadVendorCalculation(vendorForm.vendorId, vendorForm.month, next);
@@ -1377,8 +1427,8 @@ export default function AllPayments() {
                                     className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
                                   />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{wo.styleOrder ? ` – ${formatStyleOrderDisplay(wo.styleOrder.styleCode, wo.styleOrder.brand, wo.styleOrder.colour)}` : ''}{isPaid ? ` (${t('paid')})` : ''}</p>
-                                    {(wo.workItems || []).map((item: VendorWorkItemRow, i: number) => (
+                                    <p className="text-sm font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{wo.styleOrder ? ` – ${formatStyleOrderDisplay(wo.styleOrder.styleCode, wo.styleOrder.brand, wo.styleOrder.colour)}` : ''}{statusLabel}</p>
+                                    {((wo.workItems || []).filter((item): item is VendorWorkItemRow => !!item) as VendorWorkItemRow[]).map((item: VendorWorkItemRow, i: number) => (
                                       <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)}</p>
                                     ))}
                                     <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wo.totalAmount || 0)}</p>
@@ -1389,9 +1439,27 @@ export default function AllPayments() {
                           </div>
                         </div>
                       )}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
-                        <ValidatedInput type="text" inputMode="decimal" value={vendorForm.addDeductAmount ? String(vendorForm.addDeductAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" className="w-full px-3 py-2.5" />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">
+                            {vendorForm.addDeductAmount > 0 ? t('addDeductProfit') : vendorForm.addDeductAmount < 0 ? t('addDeductLoss') : t('addDeduct')} (₹)
+                          </label>
+                          <ValidatedInput type="text" inputMode="decimal" value={vendorForm.addDeductAmount ? String(vendorForm.addDeductAmount) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductAmount: parseFloat(v) || 0 }))} fieldType="number" validate={(v) => v.trim() === '' || !isNaN(parseFloat(v))} className="w-full px-3 py-2.5" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('remarks')}{vendorForm.addDeductAmount !== 0 ? ' *' : ''}</label>
+                          <ValidatedInput type="text" value={vendorForm.addDeductRemarks} onChange={(v) => setVendorForm((f) => ({ ...f, addDeductRemarks: v }))} fieldType="text" placeholderHint={vendorForm.addDeductAmount !== 0 ? t('mandatoryForAddDeduct') || 'Required when Add/Deduct ≠ 0' : t('optionalRemarks') || 'Optional'} className={`w-full px-3 py-2.5 ${vendorForm.addDeductAmount !== 0 && !vendorForm.addDeductRemarks?.trim() ? 'border-amber-500' : ''}`} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹){vendorAdvanceOutstanding > 0 && <span className="text-slate-500 text-xs ml-1">({t('outstanding')}: ₹{formatAmount(vendorAdvanceOutstanding)})</span>}</label>
+                          <ValidatedInput type="text" inputMode="decimal" value={vendorForm.advanceDeducted != null && vendorForm.advanceDeducted !== 0 ? String(vendorForm.advanceDeducted) : ''} onChange={(v) => setVendorForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} fieldType="number" placeholderHint={vendorAdvanceOutstanding > 0 ? String(vendorAdvanceOutstanding) : '0'} className="w-full px-3 py-2.5" />
+                        </div>
+                      </div>
+                      <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+                        <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+                        <p className="text-slate-700">{t('baseAmount')}: ₹{formatAmount(vendorForm.baseAmount ?? 0)}</p>
+                        {vendorForm.addDeductAmount !== 0 && <p className="text-slate-700">{vendorForm.addDeductAmount > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(vendorForm.addDeductAmount)} {vendorForm.addDeductRemarks && `(${vendorForm.addDeductRemarks})`}</p>}
+                        {(vendorForm.advanceDeducted ?? 0) > 0 && <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(vendorForm.advanceDeducted ?? 0)}</p>}
                       </div>
                       <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">
                         <p className="text-sm font-medium text-slate-700">{t('finalPayable')}</p>
@@ -1467,7 +1535,7 @@ export default function AllPayments() {
                             <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{styleLabel}</p>
-                                {(wr.workItems || []).map((item: WorkItemRow, j: number) => (
+                                {((wr.workItems || []).filter((item): item is WorkItemRow => !!item) as WorkItemRow[]).map((item: WorkItemRow, j: number) => (
                                   <p key={j} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity}{(item.multiplier ?? 1) !== 1 ? ` × ${item.multiplier}` : ''} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
                                 ))}
                                 <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount ?? ref.totalAmount ?? 0)}</p>
@@ -1524,7 +1592,7 @@ export default function AllPayments() {
                             <div key={i} className="flex items-start gap-3 p-2 rounded-lg border bg-white border-slate-200">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-700">{(wo.branch as { name?: string })?.name || t('vendorWorkOrders')}{styleLabel}</p>
-                                {(wo.workItems || []).map((item: VendorWorkItemRow, j: number) => (
+                                {((wo.workItems || []).filter((item): item is VendorWorkItemRow => !!item) as VendorWorkItemRow[]).map((item: VendorWorkItemRow, j: number) => (
                                   <p key={j} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity}{(item.multiplier ?? 1) !== 1 ? ` × ${item.multiplier}` : ''} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
                                 ))}
                                 {(wo.extraAmount ?? 0) > 0 && <p className="text-slate-600 text-xs ml-2">{t('extraAmount')}: +₹{formatAmount(wo.extraAmount ?? 0)}</p>}

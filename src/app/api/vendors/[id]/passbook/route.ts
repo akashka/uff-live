@@ -14,6 +14,15 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const MAX_FETCH = 5000;
 
+/** Branch ref may be missing; String(null) is "null" and must not be queried as ObjectId */
+function validBranchObjectIdString(branch: unknown): string | null {
+  if (branch == null) return null;
+  const s = typeof branch === 'string' ? branch.trim() : String(branch);
+  if (!s || s === 'null' || s === 'undefined') return null;
+  if (!mongoose.Types.ObjectId.isValid(s)) return null;
+  return s;
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
@@ -42,23 +51,32 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         .limit(MAX_FETCH)
         .lean(),
       VendorPayment.find({ vendor: vendorObjId })
-        .select('_id paidAt paymentAmount paymentMode month totalPayable paymentType')
+        .select('_id paidAt paymentAmount paymentMode month totalPayable paymentType baseAmount addDeductAmount advanceDeducted')
         .sort({ paidAt: 1 })
         .limit(MAX_FETCH)
         .lean(),
     ]);
 
-    const branchIds = [...new Set((workOrders || []).map((r) => String((r as { branch?: unknown }).branch)).filter(Boolean))];
+    const branchIds = [
+      ...new Set(
+        (workOrders || [])
+          .map((r) => validBranchObjectIdString((r as { branch?: unknown }).branch))
+          .filter((id): id is string => id != null)
+      ),
+    ];
     const branchMap = new Map<string, string>();
     if (branchIds.length > 0) {
-      const branches = await Branch.find({ _id: { $in: branchIds } }).select('name').lean();
+      const branches = await Branch.find({ _id: { $in: branchIds.map((id) => new mongoose.Types.ObjectId(id)) } })
+        .select('name')
+        .lean();
       for (const b of branches || []) {
         branchMap.set(String(b._id), (b as { name?: string }).name || '');
       }
     }
 
     const workEntries = (workOrders || []).map((r) => {
-      const branchName = branchMap.get(String((r as { branch?: unknown }).branch)) || 'Branch';
+      const branchKey = validBranchObjectIdString((r as { branch?: unknown }).branch);
+      const branchName = (branchKey ? branchMap.get(branchKey) : undefined) || 'Branch';
       const month = (r as { month?: string }).month;
       const [y, m] = (month || '').split('-').map(Number);
       const d = y && m ? new Date(y, m - 1, 1) : new Date();
@@ -80,13 +98,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const paidAt = (p as { paidAt?: Date }).paidAt;
       const paymentMode = (p as { paymentMode?: string }).paymentMode || '';
       const monthStr = formatMonth(month) || '–';
+      const paymentAmount = (p as { paymentAmount?: number }).paymentAmount ?? 0;
+      const baseAmount = (p as { baseAmount?: number }).baseAmount ?? 0;
+      const addDeductAmount = (p as { addDeductAmount?: number }).addDeductAmount ?? 0;
+      const advanceDeducted = (p as { advanceDeducted?: number }).advanceDeducted ?? 0;
+      const debitAmount = isAdv ? paymentAmount : baseAmount + addDeductAmount;
       return {
         type: isAdv ? 'advance' : 'payment',
         id: `p-${(p as { _id?: unknown })._id}`,
         date: paidAt ? new Date(paidAt).toISOString() : d.toISOString(),
         particulars: isAdv ? `Advance – ${monthStr}` : `Payment – ${monthStr} (${paymentMode})`,
         credit: 0,
-        debit: (p as { paymentAmount?: number }).paymentAmount ?? 0,
+        debit: debitAmount,
       };
     });
 

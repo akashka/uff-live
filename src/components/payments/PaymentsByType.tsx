@@ -668,19 +668,6 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
             {t('calculate')}
           </button>
 
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <p className="text-sm text-slate-800">{t('baseAmount')}: ₹{formatAmount(form.baseAmount)}</p>
-            {paymentType === 'contractor' && form.pfDeducted > 0 && (
-              <p className="text-sm text-slate-800">{t('pf')} {t('deducted')}: -₹{formatAmount(form.pfDeducted)}</p>
-            )}
-            {paymentType === 'contractor' && form.esiDeducted > 0 && (
-              <p className="text-sm text-slate-800">{t('esi')} {t('deducted')}: -₹{formatAmount(form.esiDeducted)}</p>
-            )}
-            {(form.advanceDeducted ?? 0) > 0 && (
-              <p className="text-sm text-slate-800">{t('advance')} {t('deducted')}: -₹{formatAmount(form.advanceDeducted)}</p>
-            )}
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('addDeduct')} (₹)</label>
@@ -694,6 +681,23 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('advanceDeducted')} (₹)</label>
               <ValidatedInput type="text" inputMode="decimal" value={form.advanceDeducted != null && form.advanceDeducted !== 0 ? String(form.advanceDeducted) : ''} onChange={(v) => setForm((f) => ({ ...f, advanceDeducted: parseFloat(v) || 0 }))} fieldType="number" placeholderHint="0" className="w-full px-3 py-2.5" />
             </div>
+          </div>
+
+          <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 space-y-1.5 text-sm">
+            <p className="font-medium text-slate-800 mb-2">{t('calculationBreakup')}</p>
+            <p className="text-slate-700">{t('baseAmount')}: ₹{formatAmount(form.baseAmount)}</p>
+            {paymentType === 'contractor' && (form.pfDeducted ?? 0) > 0 && (
+              <p className="text-slate-600">− {t('pf')}: ₹{formatAmount(form.pfDeducted ?? 0)}</p>
+            )}
+            {paymentType === 'contractor' && (form.esiDeducted ?? 0) > 0 && (
+              <p className="text-slate-600">− {t('esi')}: ₹{formatAmount(form.esiDeducted ?? 0)}</p>
+            )}
+            {(form.addDeductAmount ?? 0) !== 0 && (
+              <p className="text-slate-700">{(form.addDeductAmount ?? 0) > 0 ? '+' : ''}{t('addDeduct')}: ₹{formatAmount(form.addDeductAmount ?? 0)} {form.addDeductRemarks && `(${form.addDeductRemarks})`}</p>
+            )}
+            {(form.advanceDeducted ?? 0) > 0 && (
+              <p className="text-slate-600">− {t('advanceDeducted')}: ₹{formatAmount(form.advanceDeducted ?? 0)}</p>
+            )}
           </div>
 
           <div className="p-4 bg-uff-accent/5 rounded-xl border border-uff-accent/20">

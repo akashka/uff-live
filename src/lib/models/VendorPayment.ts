@@ -16,6 +16,7 @@ export interface IVendorPayment extends Document {
   baseAmount: number;
   addDeductAmount: number;
   addDeductRemarks: string;
+  advanceDeducted: number;
   totalPayable: number;
   paymentAmount: number;
   paymentMode: VendorPaymentMode;
@@ -46,6 +47,7 @@ const VendorPaymentSchema = new Schema<IVendorPayment>(
     baseAmount: { type: Number, required: true, default: 0 },
     addDeductAmount: { type: Number, default: 0 },
     addDeductRemarks: { type: String, default: '' },
+    advanceDeducted: { type: Number, default: 0 },
     totalPayable: { type: Number, required: true },
     paymentAmount: { type: Number, required: true },
     paymentMode: { type: String, enum: ['cash', 'upi', 'bank_transfer', 'cheque', 'other'], required: true },

@@ -59,16 +59,19 @@ export async function GET(req: NextRequest) {
     const workOrdersWithPaid = (allWorkOrders || []).map((r) => {
       const rid = (r as { _id?: unknown })._id;
       const idStr = rid ? String(rid) : '';
+      const workItems = (r as { workItems?: { rateOverrideApproved?: boolean }[] }).workItems || [];
+      const isPendingApproval = workItems.some((wi: { rateOverrideApproved?: boolean }) => wi.rateOverrideApproved === false);
       return {
         ...r,
         isPaid: paidIds.includes(idStr),
+        isPendingApproval,
       };
     });
 
     const selectedIds = selectedIdsParam ? selectedIdsParam.split(',').filter(Boolean) : null;
     const ordersToSum = selectedIds
       ? workOrdersWithPaid.filter((r) => selectedIds.includes(String((r as { _id?: unknown })._id)))
-      : workOrdersWithPaid.filter((r) => !(r as { isPaid?: boolean }).isPaid);
+      : workOrdersWithPaid.filter((r) => !(r as { isPaid?: boolean }).isPaid && !(r as { isPendingApproval?: boolean }).isPendingApproval);
 
     const totalWorkAmount = roundAmount(ordersToSum.reduce((sum, r) => sum + (r.totalAmount || 0), 0));
 

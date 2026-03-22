@@ -122,16 +122,19 @@ export async function GET(req: NextRequest) {
       const workRecordsWithPaid = (allWorkRecords || []).map((r) => {
         const rid = (r as { _id?: mongoose.Types.ObjectId })._id;
         const idStr = rid ? String(rid) : '';
+        const workItems = (r as { workItems?: { rateOverrideApproved?: boolean }[] }).workItems || [];
+        const isPendingApproval = workItems.some((wi: { rateOverrideApproved?: boolean }) => wi.rateOverrideApproved === false);
         return {
           ...r,
           isPaid: paidIds.includes(idStr),
+          isPendingApproval,
         };
       });
 
       const selectedIds = selectedIdsParam ? selectedIdsParam.split(',').filter(Boolean) : null;
       const recordsToSum = selectedIds
         ? workRecordsWithPaid.filter((r) => selectedIds.includes(String((r as { _id?: unknown })._id)))
-        : workRecordsWithPaid.filter((r) => !(r as { isPaid?: boolean }).isPaid);
+        : workRecordsWithPaid.filter((r) => !(r as { isPaid?: boolean }).isPaid && !(r as { isPendingApproval?: boolean }).isPendingApproval);
 
       const totalWorkAmount = roundAmount(recordsToSum.reduce((sum, r) => sum + (r.totalAmount || 0), 0));
 

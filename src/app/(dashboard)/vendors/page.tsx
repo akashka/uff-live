@@ -303,7 +303,7 @@ export default function VendorsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           <Link
-                            href={`/vendors/${v._id}`}
+                            href={`/vendors/${v._id}/passbook`}
                             className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition"
                           >
                             {t('view')} {t('passbook')}
@@ -339,7 +339,7 @@ export default function VendorsPage() {
                   {v.isActive ? t('active') : t('inactive')}
                 </span>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
-                  <Link href={`/vendors/${v._id}`} className="inline-flex px-3 py-1.5 rounded-lg border border-uff-accent text-uff-accent hover:bg-uff-accent/10 font-medium text-sm">
+                  <Link href={`/vendors/${v._id}/passbook`} className="inline-flex px-3 py-1.5 rounded-lg border border-uff-accent text-uff-accent hover:bg-uff-accent/10 font-medium text-sm">
                     {t('view')} / {t('passbook')}
                   </Link>
                   {canAdd && (

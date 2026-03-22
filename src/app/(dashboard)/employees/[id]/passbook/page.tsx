@@ -371,7 +371,7 @@ export default function EmployeePassbookPage() {
                         return (
                           <div key={i} className="py-2 border-b border-slate-200 last:border-0">
                             <p className="font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{styleStr}</p>
-                            {(wr.workItems || []).map((item, j) => (
+                            {((wr.workItems || []).filter((item): item is { rateName: string; quantity: number; ratePerUnit: number; amount: number } => !!item)).map((item, j) => (
                               <p key={j} className="text-slate-600 text-sm ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
                             ))}
                             <p className="font-medium">₹{formatAmount(wr.totalAmount ?? ref.totalAmount ?? 0)}</p>
@@ -401,9 +401,9 @@ export default function EmployeePassbookPage() {
                     {((detailWorkRecord as { otHours?: number }).otHours ?? 0) > 0 && (
                       <p className="text-slate-700">{t('otHours')}: {(detailWorkRecord as { otHours: number }).otHours} → ₹{formatAmount((detailWorkRecord as { otAmount?: number }).otAmount ?? 0)}</p>
                     )}
-                    {(detailWorkRecord.workItems as { rateName: string; quantity: number; ratePerUnit: number; amount: number }[])?.length > 0 && (
+                    {((detailWorkRecord.workItems as { rateName?: string; quantity?: number; ratePerUnit?: number; amount?: number }[] | undefined) || []).filter((item) => item && typeof item.quantity === 'number').length > 0 && (
                       <div className="mt-2 space-y-1">
-                        {(detailWorkRecord.workItems as { rateName: string; quantity: number; ratePerUnit: number; amount: number }[]).map((item, j) => (
+                        {((detailWorkRecord.workItems as { rateName?: string; quantity?: number; ratePerUnit?: number; amount?: number }[] | undefined) || []).filter((item) => item && typeof item.quantity === 'number').map((item, j) => (
                           <p key={j} className="text-slate-600 text-sm">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
                         ))}
                       </div>
