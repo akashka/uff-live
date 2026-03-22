@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader';
 import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import ConfirmModal from '@/components/ConfirmModal';
 import { toast } from '@/lib/toast';
@@ -276,64 +277,54 @@ export default function UsersPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
-        <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('email')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('role')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeType')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sortedUsers.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-600">
-                      {t('noData')}
-                    </td>
-                  </tr>
-                ) : (
-                  sortedUsers.map((u) => (
-                    <tr key={u._id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-800">{getDisplayName(u)}</td>
-                      <td className="px-4 py-3 text-slate-800">{getEmail(u)}</td>
-                      <td className="px-4 py-3 text-slate-800">{t(u.role) || u.role}</td>
-                      <td className="px-4 py-3 text-slate-800">
-                        {getEmployeeType(u)
-                          ? getEmployeeType(u) === 'full_time'
-                            ? t('fullTime')
-                            : t('contractor')
-                          : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${u.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-800'}`}
-                        >
-                          {u.isActive ? t('active') : t('inactive')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ActionButtons
-                          onView={() => openViewUser(u)}
-                          onEdit={() => openEditUser(u)}
-                          onToggleActive={() => handleToggleUserActive(u)}
-                          isActive={u.isActive}
-                          viewLabel={t('view')}
-                          editLabel={t('edit')}
-                          toggleLabel={u.isActive ? t('makeInactive') : t('makeActive')}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('employeeName')}</DataTableHead>
+              <DataTableHead>{t('email')}</DataTableHead>
+              <DataTableHead>{t('role')}</DataTableHead>
+              <DataTableHead>{t('employeeType')}</DataTableHead>
+              <DataTableHead>{t('status')}</DataTableHead>
+              <DataTableHead align="right">{t('actions')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {sortedUsers.length === 0 ? (
+              <DataTableEmpty colSpan={6}>{t('noData')}</DataTableEmpty>
+            ) : (
+              sortedUsers.map((u) => (
+                <DataTableRow key={u._id}>
+                  <DataTableCell className="font-medium text-slate-800">{getDisplayName(u)}</DataTableCell>
+                  <DataTableCell>{getEmail(u)}</DataTableCell>
+                  <DataTableCell>{t(u.role) || u.role}</DataTableCell>
+                  <DataTableCell>
+                    {getEmployeeType(u)
+                      ? getEmployeeType(u) === 'full_time'
+                        ? t('fullTime')
+                        : t('contractor')
+                      : '—'}
+                  </DataTableCell>
+                  <DataTableCell>
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${u.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {u.isActive ? t('active') : t('inactive')}
+                    </span>
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    <ActionButtons
+                      onView={() => openViewUser(u)}
+                      onEdit={() => openEditUser(u)}
+                      onToggleActive={() => handleToggleUserActive(u)}
+                      isActive={u.isActive}
+                      viewLabel={t('view')}
+                      editLabel={t('edit')}
+                      toggleLabel={u.isActive ? t('makeInactive') : t('makeActive')}
+                    />
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sortedUsers.length === 0 ? (

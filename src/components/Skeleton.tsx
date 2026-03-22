@@ -18,24 +18,24 @@ export function Skeleton({ className = '', variant = 'rect' }: SkeletonProps) {
 
 export function TableSkeleton({ rows = 5, cols = 5 }: { rows?: number; cols?: number }) {
   return (
-    <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+    <div className="rounded-xl bg-white border border-slate-200/80 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+        <table className="min-w-full border-collapse">
+          <thead className="bg-slate-50/90 border-b border-slate-200">
             <tr>
               {Array.from({ length: cols }).map((_, i) => (
-                <th key={i} className="px-4 py-3 text-left">
-                  <Skeleton className="h-4 w-20" variant="text" />
+                <th key={i} className="px-4 py-3.5 text-left">
+                  <Skeleton className="h-3 w-20" variant="text" />
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-slate-100 bg-white">
             {Array.from({ length: rows }).map((_, i) => (
-              <tr key={i}>
+              <tr key={i} className="border-b border-slate-100 last:border-0">
                 {Array.from({ length: cols }).map((_, j) => (
                   <td key={j} className="px-4 py-3">
-                    <Skeleton className={j === cols - 1 ? 'h-8 w-16 ml-auto' : 'h-4'} variant="text" />
+                    <Skeleton className={j === cols - 1 ? 'h-4 w-16 ml-auto' : 'h-4'} variant="text" />
                   </td>
                 ))}
               </tr>

@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader } from '@/components/Skeleton';
 import { useWorkOrders, useBranches, useDepartments, useEmployees, useVendors } from '@/lib/hooks/useApi';
 import { formatMonth, formatAmount } from '@/lib/utils';
@@ -343,57 +344,49 @@ export default function WorkOrdersPage() {
 
       {viewMode === 'table' ? (
         <>
-          <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-uff-surface">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('type') || 'Type'}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">
-                      {filterType === 'vendor' ? t('vendor') : t('employeeName')}
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrder')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {sorted.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
-                    </tr>
-                  ) : (
-                    sorted.map((r: WorkOrderRow) => (
-                      <tr key={`${r.type}-${r._id}`} className="hover:bg-uff-surface">
-                        <td className="px-4 py-3 text-slate-800">
-                          <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">
-                            {getTypeLabel(r.type)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-800">{r.subjectName}</td>
-                        <td className="px-4 py-3 text-slate-700">{r.branchName || '–'}</td>
-                        <td className="px-4 py-3 text-slate-700 text-sm">{formatMonth(r.month)}</td>
-                        <td className="px-4 py-3 text-slate-700">{r.styleCode || '–'}</td>
-                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(r.totalAmount)}</td>
-                        <td className="px-4 py-3">
-                          <ActionButtons
-                            onView={() => openView(r)}
-                            onEdit={canAdd ? () => openEdit(r) : undefined}
-                            onDelete={canAdd ? () => handleDelete(r) : undefined}
-                            viewLabel={t('view')}
-                            editLabel={t('edit')}
-                            deleteLabel={t('delete')}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <DataTable>
+            <DataTableHeader className="bg-slate-50">
+              <tr>
+                <DataTableHead>{t('type') || 'Type'}</DataTableHead>
+                <DataTableHead>{filterType === 'vendor' ? t('vendor') : t('employeeName')}</DataTableHead>
+                <DataTableHead>{t('branches')}</DataTableHead>
+                <DataTableHead>{t('month')}</DataTableHead>
+                <DataTableHead>{t('styleOrder')}</DataTableHead>
+                <DataTableHead align="right">{t('totalAmount')}</DataTableHead>
+                <DataTableHead align="right">{t('actions')}</DataTableHead>
+              </tr>
+            </DataTableHeader>
+            <DataTableBody>
+              {sorted.length === 0 ? (
+                <DataTableEmpty colSpan={7}>{t('noData')}</DataTableEmpty>
+              ) : (
+                sorted.map((r: WorkOrderRow) => (
+                  <DataTableRow key={`${r.type}-${r._id}`}>
+                    <DataTableCell>
+                      <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-800">
+                        {getTypeLabel(r.type)}
+                      </span>
+                    </DataTableCell>
+                    <DataTableCell className="font-medium text-slate-800">{r.subjectName}</DataTableCell>
+                    <DataTableCell>{r.branchName || '–'}</DataTableCell>
+                    <DataTableCell className="text-slate-600">{formatMonth(r.month)}</DataTableCell>
+                    <DataTableCell>{r.styleCode || '–'}</DataTableCell>
+                    <DataTableCell align="right" className="font-medium text-slate-800">₹{formatAmount(r.totalAmount)}</DataTableCell>
+                    <DataTableCell align="right">
+                      <ActionButtons
+                        onView={() => openView(r)}
+                        onEdit={canAdd ? () => openEdit(r) : undefined}
+                        onDelete={canAdd ? () => handleDelete(r) : undefined}
+                        viewLabel={t('view')}
+                        editLabel={t('edit')}
+                        deleteLabel={t('delete')}
+                      />
+                    </DataTableCell>
+                  </DataTableRow>
+                ))
+              )}
+            </DataTableBody>
+          </DataTable>
           {sorted.length > 0 && (
             <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
               <span>

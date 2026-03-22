@@ -12,6 +12,7 @@ import { PageLoader } from '@/components/Skeleton';
 import Modal from '@/components/Modal';
 import { formatDate, formatAmount, formatMonth } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 
 type PassbookEntry = { type: string; id: string; date: string; particulars: string; credit: number; debit: number; balance?: number; paymentId?: string; workRecordId?: string };
 
@@ -235,65 +236,59 @@ export default function EmployeePassbookPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-800">{t('date')}</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-800">{t('particulars')}</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-800">{t('credit')}</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-800">{t('debit')}</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-slate-800">{t('balance')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {rowsWithBalance.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-600">
-                    {t('noData')}
-                  </td>
-                </tr>
-              ) : (
-                rowsWithBalance.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => handleRowClick(row)}
-                    className={`hover:bg-slate-50/50 ${(row.paymentId || row.workRecordId) ? 'cursor-pointer' : ''}`}
-                  >
-                    <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
-                      {row.date ? formatDate(row.date) : '–'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-800 max-w-xs truncate" title={row.particulars}>
-                      {row.particulars}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right">
-                      {row.credit > 0 ? (
-                        <span className="text-green-700 font-medium">₹{formatAmount(row.credit)}</span>
-                      ) : (
-                        <span className="text-slate-400">–</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right">
-                      {row.debit > 0 ? (
-                        <span className="text-red-700 font-medium">₹{formatAmount(row.debit)}</span>
-                      ) : (
-                        <span className="text-slate-400">–</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right font-medium">
-                      {((): React.ReactNode => {
-                        const bal = row.balance ?? 0;
-                        if (bal > 0) return <span className="text-green-700">₹{formatAmount(bal)}</span>;
-                        if (bal < 0) return <span className="text-red-700">₹{formatAmount(bal)}</span>;
-                        return <span className="text-slate-600">₹0</span>;
-                      })()}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('date')}</DataTableHead>
+              <DataTableHead>{t('particulars')}</DataTableHead>
+              <DataTableHead align="right">{t('credit')}</DataTableHead>
+              <DataTableHead align="right">{t('debit')}</DataTableHead>
+              <DataTableHead align="right">{t('balance')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {rowsWithBalance.length === 0 ? (
+              <DataTableEmpty colSpan={5}>{t('noData')}</DataTableEmpty>
+            ) : (
+              rowsWithBalance.map((row) => (
+                <DataTableRow
+                  key={row.id}
+                  className={(row.paymentId || row.workRecordId) ? 'cursor-pointer' : ''}
+                  onClick={() => (row.paymentId || row.workRecordId) && handleRowClick(row)}
+                >
+                  <DataTableCell className="text-sm text-slate-600 whitespace-nowrap">
+                    {row.date ? formatDate(row.date) : '–'}
+                  </DataTableCell>
+                  <DataTableCell className="max-w-xs truncate" title={row.particulars}>
+                    {row.particulars}
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    {row.credit > 0 ? (
+                      <span className="text-emerald-700 font-medium">₹{formatAmount(row.credit)}</span>
+                    ) : (
+                      <span className="text-slate-400">–</span>
+                    )}
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    {row.debit > 0 ? (
+                      <span className="text-red-600 font-medium">₹{formatAmount(row.debit)}</span>
+                    ) : (
+                      <span className="text-slate-400">–</span>
+                    )}
+                  </DataTableCell>
+                  <DataTableCell align="right" className="font-medium">
+                    {((): React.ReactNode => {
+                      const bal = row.balance ?? 0;
+                      if (bal > 0) return <span className="text-emerald-700">₹{formatAmount(bal)}</span>;
+                      if (bal < 0) return <span className="text-red-600">₹{formatAmount(bal)}</span>;
+                      return <span className="text-slate-600">₹0</span>;
+                    })()}
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
 
         {rowsWithBalance.length > 0 && (
           <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-between items-center">

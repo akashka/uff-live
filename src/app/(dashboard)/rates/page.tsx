@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useRates, useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -368,46 +369,40 @@ export default function RatesPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
-        <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rateName')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rate')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sorted.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-700">{t('noData')}</td>
-                  </tr>
-                ) : (
-                  sorted.map((r) => (
-                    <tr key={r._id} className="hover:bg-uff-surface">
-                      <td className="px-4 py-3 text-slate-800">{r.name}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm max-w-[180px]" title={formatBranches(r)}>{formatBranches(r)}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm max-w-[140px]" title={formatDepartments(r)}>{formatDepartments(r)}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{formatRateWithUnit(r)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${r.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
-                          {r.isActive ? t('active') : t('inactive')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onToggleActive={() => handleToggleActive(r)} isActive={r.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={r.isActive ? t('makeInactive') : t('makeActive')} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('rateName')}</DataTableHead>
+              <DataTableHead>{t('branches')}</DataTableHead>
+              <DataTableHead>{t('department')}</DataTableHead>
+              <DataTableHead>{t('rate')}</DataTableHead>
+              <DataTableHead>{t('status')}</DataTableHead>
+              <DataTableHead align="right">{t('actions')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {sorted.length === 0 ? (
+              <DataTableEmpty colSpan={6}>{t('noData')}</DataTableEmpty>
+            ) : (
+              sorted.map((r) => (
+                <DataTableRow key={r._id}>
+                  <DataTableCell className="font-medium text-slate-800">{r.name}</DataTableCell>
+                  <DataTableCell className="text-sm max-w-[180px] truncate" title={formatBranches(r)}>{formatBranches(r)}</DataTableCell>
+                  <DataTableCell className="text-sm max-w-[140px] truncate" title={formatDepartments(r)}>{formatDepartments(r)}</DataTableCell>
+                  <DataTableCell className="text-slate-700">{formatRateWithUnit(r)}</DataTableCell>
+                  <DataTableCell>
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${r.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {r.isActive ? t('active') : t('inactive')}
+                    </span>
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    <ActionButtons onView={() => openView(r)} onEdit={() => openEdit(r)} onToggleActive={() => handleToggleActive(r)} isActive={r.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={r.isActive ? t('makeInactive') : t('makeActive')} />
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.length === 0 ? (

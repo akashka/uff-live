@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty, DataTableFooter } from '@/components/ui/DataTable';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -28,6 +29,8 @@ interface AnalyticsSummary {
 
 interface AnalyticsRow {
   styleCode: string;
+  brand?: string;
+  colour?: string;
   branch: { name: string };
   month: string;
   rateName: string;
@@ -351,50 +354,48 @@ export default function ReportsPage() {
                       </>
                     )}
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrderCode')}</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('rateName')}</th>
-                          <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('orderQty')}</th>
-                          <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('produced')}</th>
-                          {isAdmin && (
-                            <>
-                              <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('manufacturingCost')}</th>
-                              <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('sellingPrice')}</th>
-                              <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('profitLoss')}</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {analyticsData.data.length === 0 ? (
-                          <tr><td colSpan={isAdmin ? 9 : 6} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td></tr>
-                        ) : (
-                          analyticsData.data.map((r) => (
-                            <tr key={r.styleCode + r.month + r.rateName + (r.branch?.name || '')} className="hover:bg-slate-50">
-                              <td className="px-4 py-3 text-slate-800 font-medium">{r.styleCode}{r.brand ? ` - ${r.brand}` : ''}{r.colour ? ` (${r.colour})` : ''}</td>
-                              <td className="px-4 py-3 text-slate-700">{r.branch?.name || '-'}</td>
-                              <td className="px-4 py-3 text-slate-700">{formatMonth(r.month)}</td>
-                              <td className="px-4 py-3 text-slate-700">{r.rateName}</td>
-                              <td className="px-4 py-3 text-right">{formatAmount(r.totalOrderQuantity)}</td>
-                              <td className="px-4 py-3 text-right">{formatAmount(r.totalProducedQuantity)}</td>
-                              {isAdmin && (
-                                <>
-                                  <td className="px-4 py-3 text-right">₹{formatAmount(r.manufacturingCost)}</td>
-                                  <td className="px-4 py-3 text-right">₹{formatAmount(r.totalSellingPrice)}</td>
-                                  <td className={`px-4 py-3 text-right font-medium ${r.profitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{formatAmount(r.profitLoss)}</td>
-                                </>
-                              )}
-                            </tr>
-                          ))
+                  <DataTable>
+                    <DataTableHeader>
+                      <tr>
+                        <DataTableHead>{t('styleOrderCode')}</DataTableHead>
+                        <DataTableHead>{t('branches')}</DataTableHead>
+                        <DataTableHead>{t('month')}</DataTableHead>
+                        <DataTableHead>{t('rateName')}</DataTableHead>
+                        <DataTableHead align="right">{t('orderQty')}</DataTableHead>
+                        <DataTableHead align="right">{t('produced')}</DataTableHead>
+                        {isAdmin && (
+                          <>
+                            <DataTableHead align="right">{t('manufacturingCost')}</DataTableHead>
+                            <DataTableHead align="right">{t('sellingPrice')}</DataTableHead>
+                            <DataTableHead align="right">{t('profitLoss')}</DataTableHead>
+                          </>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                      </tr>
+                    </DataTableHeader>
+                    <DataTableBody>
+                      {analyticsData.data.length === 0 ? (
+                        <DataTableEmpty colSpan={isAdmin ? 9 : 6}>{t('noData')}</DataTableEmpty>
+                      ) : (
+                        analyticsData.data.map((r) => (
+                          <DataTableRow key={r.styleCode + r.month + r.rateName + (r.branch?.name || '')}>
+                            <DataTableCell className="font-medium text-slate-800">{r.styleCode}{r.brand ? ` - ${r.brand}` : ''}{r.colour ? ` (${r.colour})` : ''}</DataTableCell>
+                            <DataTableCell>{r.branch?.name || '-'}</DataTableCell>
+                            <DataTableCell>{formatMonth(r.month)}</DataTableCell>
+                            <DataTableCell>{r.rateName}</DataTableCell>
+                            <DataTableCell align="right">{formatAmount(r.totalOrderQuantity)}</DataTableCell>
+                            <DataTableCell align="right">{formatAmount(r.totalProducedQuantity)}</DataTableCell>
+                            {isAdmin && (
+                              <>
+                                <DataTableCell align="right">₹{formatAmount(r.manufacturingCost)}</DataTableCell>
+                                <DataTableCell align="right">₹{formatAmount(r.totalSellingPrice)}</DataTableCell>
+                                <DataTableCell align="right" className={`font-medium ${r.profitLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{formatAmount(r.profitLoss)}</DataTableCell>
+                              </>
+                            )}
+                          </DataTableRow>
+                        ))
+                      )}
+                    </DataTableBody>
+                  </DataTable>
                 </>
               )}
             </div>
@@ -431,33 +432,31 @@ export default function ReportsPage() {
                 <div className="h-72 animate-pulse bg-slate-100 rounded-xl" />
               ) : branchCompData?.data?.length ? (
                 <>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 mb-6">
-                    <table className="min-w-full divide-y divide-slate-200">
-                      <thead className="bg-blue-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                          <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('workAmount')}</th>
-                          <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('payments')}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {branchCompData.data.map((row) => (
-                          <tr key={row.branchName} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 text-slate-800 font-medium">{row.branchName}</td>
-                            <td className="px-4 py-3 text-right">₹{formatAmount(row.workAmount)}</td>
-                            <td className="px-4 py-3 text-right">₹{formatAmount(row.paymentAmount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-slate-100 font-semibold">
-                        <tr>
-                          <td className="px-4 py-3">{t('all')}</td>
-                          <td className="px-4 py-3 text-right">₹{formatAmount(branchCompData.totals?.workAmount)}</td>
-                          <td className="px-4 py-3 text-right">₹{formatAmount(branchCompData.totals?.paymentAmount)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                  <DataTable className="mb-6">
+                    <DataTableHeader className="bg-blue-50">
+                      <tr>
+                        <DataTableHead>{t('branches')}</DataTableHead>
+                        <DataTableHead align="right">{t('workAmount')}</DataTableHead>
+                        <DataTableHead align="right">{t('payments')}</DataTableHead>
+                      </tr>
+                    </DataTableHeader>
+                    <DataTableBody>
+                      {branchCompData.data.map((row) => (
+                        <DataTableRow key={row.branchName}>
+                          <DataTableCell className="font-medium text-slate-800">{row.branchName}</DataTableCell>
+                          <DataTableCell align="right">₹{formatAmount(row.workAmount)}</DataTableCell>
+                          <DataTableCell align="right">₹{formatAmount(row.paymentAmount)}</DataTableCell>
+                        </DataTableRow>
+                      ))}
+                    </DataTableBody>
+                    <DataTableFooter>
+                      <tr>
+                        <DataTableCell>{t('all')}</DataTableCell>
+                        <DataTableCell align="right">₹{formatAmount(branchCompData.totals?.workAmount)}</DataTableCell>
+                        <DataTableCell align="right">₹{formatAmount(branchCompData.totals?.paymentAmount)}</DataTableCell>
+                      </tr>
+                    </DataTableFooter>
+                  </DataTable>
                   <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={branchCompData.data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -535,28 +534,26 @@ export default function ReportsPage() {
               {prodLoading ? (
                 <div className="h-48 animate-pulse bg-slate-100 rounded-xl" />
               ) : prodData?.data?.length ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-violet-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('workAmount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {prodData.data.flatMap((row) =>
-                        row.months.map((m) => (
-                          <tr key={`${row.employeeName}-${m.month}`} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 text-slate-800 font-medium">{row.employeeName}</td>
-                            <td className="px-4 py-2 text-slate-600">{formatMonth(m.month)}</td>
-                            <td className="px-4 py-2 text-right">₹{formatAmount(m.amount)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable>
+                  <DataTableHeader className="bg-slate-50">
+                    <tr>
+                      <DataTableHead>{t('employeeName')}</DataTableHead>
+                      <DataTableHead>{t('month')}</DataTableHead>
+                      <DataTableHead align="right">{t('workAmount')}</DataTableHead>
+                    </tr>
+                  </DataTableHeader>
+                  <DataTableBody>
+                    {prodData.data.flatMap((row) =>
+                      row.months.map((m) => (
+                        <DataTableRow key={`${row.employeeName}-${m.month}`}>
+                          <DataTableCell className="font-medium text-slate-800">{row.employeeName}</DataTableCell>
+                          <DataTableCell className="text-slate-600">{formatMonth(m.month)}</DataTableCell>
+                          <DataTableCell align="right">₹{formatAmount(m.amount)}</DataTableCell>
+                        </DataTableRow>
+                      ))
+                    )}
+                  </DataTableBody>
+                </DataTable>
               ) : (
                 <p className="text-slate-600 py-8 text-center">{t('noData')}</p>
               )}
@@ -606,28 +603,26 @@ export default function ReportsPage() {
               {vendorProdLoading ? (
                 <div className="h-48 animate-pulse bg-slate-100 rounded-xl" />
               ) : vendorProdData?.data?.length ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-cyan-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendor')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('workAmount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {vendorProdData.data.flatMap((row) =>
-                        row.months.map((m) => (
-                          <tr key={`${row.vendorName}-${m.month}`} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 text-slate-800 font-medium">{row.vendorName}</td>
-                            <td className="px-4 py-2 text-slate-600">{formatMonth(m.month)}</td>
-                            <td className="px-4 py-2 text-right">₹{formatAmount(m.amount)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable>
+                  <DataTableHeader className="bg-slate-50">
+                    <tr>
+                      <DataTableHead>{t('vendor')}</DataTableHead>
+                      <DataTableHead>{t('month')}</DataTableHead>
+                      <DataTableHead align="right">{t('workAmount')}</DataTableHead>
+                    </tr>
+                  </DataTableHeader>
+                  <DataTableBody>
+                    {vendorProdData.data.flatMap((row) =>
+                      row.months.map((m) => (
+                        <DataTableRow key={`${row.vendorName}-${m.month}`}>
+                          <DataTableCell className="font-medium text-slate-800">{row.vendorName}</DataTableCell>
+                          <DataTableCell className="text-slate-600">{formatMonth(m.month)}</DataTableCell>
+                          <DataTableCell align="right">₹{formatAmount(m.amount)}</DataTableCell>
+                        </DataTableRow>
+                      ))
+                    )}
+                  </DataTableBody>
+                </DataTable>
               ) : (
                 <p className="text-slate-600 py-8 text-center">{t('noData')}</p>
               )}

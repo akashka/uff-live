@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useStyleOrders, useBranches } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
@@ -331,56 +332,50 @@ export default function StyleOrdersPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
-        <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-uff-surface">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('styleOrderCode')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('brand')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('colour')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('totalPieces')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sorted.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
-                  </tr>
-                ) : (
-                  sorted.map((s) => (
-                    <tr key={s._id} className="hover:bg-uff-surface">
-                      <td className="px-4 py-3 font-medium text-slate-900">{s.styleCode}</td>
-                      <td className="px-4 py-3 text-slate-700">{s.brand || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{getColour(s) || '–'}</td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">{formatMonthYear(s.month || '')}</td>
-                      <td className="px-4 py-3 text-slate-700">{s.totalOrderQuantity && s.totalOrderQuantity > 0 ? s.totalOrderQuantity : '–'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
-                          {s.isActive ? t('active') : t('inactive')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ActionButtons
-                          onView={() => openView(s)}
-                          onEdit={canAdd ? () => openEdit(s) : undefined}
-                          onToggleActive={canAdd ? () => handleToggleActive(s) : undefined}
-                          isActive={s.isActive}
-                          viewLabel={t('view')}
-                          editLabel={t('edit')}
-                          toggleLabel={s.isActive ? t('makeInactive') : t('makeActive')}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('styleOrderCode')}</DataTableHead>
+              <DataTableHead>{t('brand')}</DataTableHead>
+              <DataTableHead>{t('colour')}</DataTableHead>
+              <DataTableHead>{t('month')}</DataTableHead>
+              <DataTableHead>{t('totalPieces')}</DataTableHead>
+              <DataTableHead>{t('status')}</DataTableHead>
+              <DataTableHead align="right">{t('actions')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {sorted.length === 0 ? (
+              <DataTableEmpty colSpan={7}>{t('noData')}</DataTableEmpty>
+            ) : (
+              sorted.map((s) => (
+                <DataTableRow key={s._id}>
+                  <DataTableCell className="font-medium text-slate-800">{s.styleCode}</DataTableCell>
+                  <DataTableCell>{s.brand || '–'}</DataTableCell>
+                  <DataTableCell>{getColour(s) || '–'}</DataTableCell>
+                  <DataTableCell className="text-slate-600">{formatMonthYear(s.month || '')}</DataTableCell>
+                  <DataTableCell>{s.totalOrderQuantity && s.totalOrderQuantity > 0 ? s.totalOrderQuantity : '–'}</DataTableCell>
+                  <DataTableCell>
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${s.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {s.isActive ? t('active') : t('inactive')}
+                    </span>
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    <ActionButtons
+                      onView={() => openView(s)}
+                      onEdit={canAdd ? () => openEdit(s) : undefined}
+                      onToggleActive={canAdd ? () => handleToggleActive(s) : undefined}
+                      isActive={s.isActive}
+                      viewLabel={t('view')}
+                      editLabel={t('edit')}
+                      toggleLabel={s.isActive ? t('makeInactive') : t('makeActive')}
+                    />
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.length === 0 ? (

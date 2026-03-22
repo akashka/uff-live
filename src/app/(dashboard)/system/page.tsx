@@ -6,6 +6,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import { PageLoader } from '@/components/Skeleton';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { toast } from '@/lib/toast';
 
 interface HealthData {
@@ -496,53 +497,47 @@ export default function SystemPage() {
               <div className="animate-pulse h-48 rounded-xl bg-slate-100" />
             ) : (
               <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50 sticky top-0">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">{t('auditTime')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">{t('auditActor')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">{t('auditAction')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">{t('auditEntityType')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">{t('auditSummary')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {logs.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                            {t('noData')}
-                          </td>
-                        </tr>
-                      ) : (
-                        logs.map((log) => (
-                          <tr key={log._id} className="hover:bg-slate-50/80 transition">
-                            <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">
-                              {formatDate(log.createdAt)}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="font-medium text-slate-800">{log.actorEmail || '—'}</span>
-                              {log.actorRole && (
-                                <span className="ml-1 text-xs text-slate-500">({log.actorRole})</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${getActionStyle(log.action)}`}>
-                                {formatAction(log.action)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="text-slate-700 font-medium">{formatAction(log.entityType)}</span>
-                            </td>
-                            <td className="px-4 py-3 text-slate-700 max-w-md truncate" title={log.summary}>
-                              {log.summary}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable maxHeight="500px" className="border-0 rounded-none shadow-none">
+                  <DataTableHeader sticky>
+                    <tr>
+                      <DataTableHead>{t('auditTime')}</DataTableHead>
+                      <DataTableHead>{t('auditActor')}</DataTableHead>
+                      <DataTableHead>{t('auditAction')}</DataTableHead>
+                      <DataTableHead>{t('auditEntityType')}</DataTableHead>
+                      <DataTableHead>{t('auditSummary')}</DataTableHead>
+                    </tr>
+                  </DataTableHeader>
+                  <DataTableBody>
+                    {logs.length === 0 ? (
+                      <DataTableEmpty colSpan={5}>{t('noData')}</DataTableEmpty>
+                    ) : (
+                      logs.map((log) => (
+                        <DataTableRow key={log._id}>
+                          <DataTableCell className="text-sm text-slate-600 whitespace-nowrap">
+                            {formatDate(log.createdAt)}
+                          </DataTableCell>
+                          <DataTableCell>
+                            <span className="font-medium text-slate-800">{log.actorEmail || '—'}</span>
+                            {log.actorRole && (
+                              <span className="ml-1 text-xs text-slate-500">({log.actorRole})</span>
+                            )}
+                          </DataTableCell>
+                          <DataTableCell>
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${getActionStyle(log.action)}`}>
+                              {formatAction(log.action)}
+                            </span>
+                          </DataTableCell>
+                          <DataTableCell>
+                            <span className="text-slate-700 font-medium">{formatAction(log.entityType)}</span>
+                          </DataTableCell>
+                          <DataTableCell className="max-w-md truncate" title={log.summary}>
+                            {log.summary}
+                          </DataTableCell>
+                        </DataTableRow>
+                      ))
+                    )}
+                  </DataTableBody>
+                </DataTable>
                 {hasMore && (
                   <div className="px-4 py-3 border-t border-slate-200 text-center bg-slate-50">
                     <button

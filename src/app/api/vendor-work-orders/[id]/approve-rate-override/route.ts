@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
-import VendorWorkOrder from '@/lib/models/VendorWorkOrder';
+import VendorWorkOrder, { type IVendorWorkItem } from '@/lib/models/VendorWorkOrder';
 import { getAuthUser, hasRole } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { roundAmount } from '@/lib/utils';
@@ -26,10 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'No rate overrides pending approval' }, { status: 400 });
     }
 
-    const updatedWorkItems = (workItems as Record<string, unknown>[]).map((wi) => {
-      const multiplier = (wi.multiplier as number) ?? 1;
-      const effectiveRate = wi.rateOverrideApproved === false ? (wi.ratePerUnit as number) : ((wi.defaultRatePerUnit as number) ?? (wi.ratePerUnit as number));
-      return { ...wi, rateOverrideApproved: true, amount: roundAmount((wi.quantity as number) * multiplier * effectiveRate) };
+    const updatedWorkItems: IVendorWorkItem[] = workItems.map((wi) => {
+      const multiplier = wi.multiplier ?? 1;
+      const effectiveRate = wi.rateOverrideApproved === false ? wi.ratePerUnit : (wi.defaultRatePerUnit ?? wi.ratePerUnit);
+      return { ...wi, rateOverrideApproved: true, amount: roundAmount(wi.quantity * multiplier * effectiveRate) };
     });
     let totalAmount = 0;
     for (const wi of updatedWorkItems) totalAmount += wi.amount;

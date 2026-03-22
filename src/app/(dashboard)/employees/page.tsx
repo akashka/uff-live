@@ -29,6 +29,7 @@ import Breadcrumb from '@/components/Breadcrumb';
 import UserAvatar from '@/components/UserAvatar';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import ValidatedInput from '@/components/ValidatedInput';
 import MultiselectDropdown from '@/components/MultiselectDropdown';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
@@ -1080,57 +1081,49 @@ export default function EmployeesPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
-        <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeId')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeName')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('department')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branches')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('employeeType')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sortedEmployees.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-600">
-                      {t('noData')}
-                    </td>
-                  </tr>
-                ) : (
-                  sortedEmployees.map((e) => (
-                    <tr key={e._id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono font-medium text-slate-700">{e.employeeId || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <UserAvatar photo={e.photo} name={e.name} size="sm" className="w-8 h-8 shrink-0" />
-                          <span className="text-slate-800">{e.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{e.contactNumber}</td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {e.department && typeof e.department === 'object' && 'name' in e.department ? (e.department as Department).name : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 text-sm">
-                        {Array.isArray(e.branches) && e.branches.length > 0
-                          ? e.branches.map((b: Branch | string) => (typeof b === 'object' && b && 'name' in b ? (b as Branch).name : b)).join(', ')
-                          : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${e.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
-                          {e.isActive ? t('active') : t('inactive')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ActionButtons
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('employeeId')}</DataTableHead>
+              <DataTableHead>{t('employeeName')}</DataTableHead>
+              <DataTableHead>{t('contactNumber')}</DataTableHead>
+              <DataTableHead>{t('department')}</DataTableHead>
+              <DataTableHead>{t('branches')}</DataTableHead>
+              <DataTableHead>{t('employeeType')}</DataTableHead>
+              <DataTableHead>{t('status')}</DataTableHead>
+              <DataTableHead align="right">{t('actions')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {sortedEmployees.length === 0 ? (
+              <DataTableEmpty colSpan={8}>{t('noData')}</DataTableEmpty>
+            ) : (
+              sortedEmployees.map((e) => (
+                <DataTableRow key={e._id}>
+                  <DataTableCell className="font-mono font-medium text-slate-600">{e.employeeId || '—'}</DataTableCell>
+                  <DataTableCell>
+                    <div className="flex items-center gap-3">
+                      <UserAvatar photo={e.photo} name={e.name} size="sm" className="w-8 h-8 shrink-0" />
+                      <span className="text-slate-800 font-medium">{e.name}</span>
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell>{e.contactNumber}</DataTableCell>
+                  <DataTableCell>
+                    {e.department && typeof e.department === 'object' && 'name' in e.department ? (e.department as Department).name : '—'}
+                  </DataTableCell>
+                  <DataTableCell className="text-sm max-w-[180px] truncate" title={Array.isArray(e.branches) && e.branches.length > 0 ? e.branches.map((b: Branch | string) => (typeof b === 'object' && b && 'name' in b ? (b as Branch).name : b)).join(', ') : undefined}>
+                    {Array.isArray(e.branches) && e.branches.length > 0
+                      ? e.branches.map((b: Branch | string) => (typeof b === 'object' && b && 'name' in b ? (b as Branch).name : b)).join(', ')
+                      : '—'}
+                  </DataTableCell>
+                  <DataTableCell>{e.employeeType === 'full_time' ? t('fullTime') : t('contractor')}</DataTableCell>
+                  <DataTableCell>
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${e.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {e.isActive ? t('active') : t('inactive')}
+                    </span>
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    <ActionButtons
                           onView={() => openView(e)}
                           onEdit={canAdd ? () => openEdit(e) : undefined}
                           onToggleActive={canAdd ? () => handleToggleActive(e) : undefined}
@@ -1141,14 +1134,12 @@ export default function EmployeesPage() {
                           toggleLabel={e.isActive ? t('makeInactive') : t('makeActive')}
                           passbookLabel={t('viewPassbook')}
                         />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sortedEmployees.length === 0 ? (

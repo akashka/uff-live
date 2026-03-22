@@ -8,6 +8,7 @@ import PageHeader from '@/components/PageHeader';
 import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useVendors } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -270,38 +271,32 @@ export default function VendorsPage() {
       </ListToolbar>
 
       {viewMode === 'table' ? (
-        <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendorId')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('vendor')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('contactNumber')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {sorted.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-600">
-                      {t('noData')}
-                    </td>
-                  </tr>
-                ) : (
-                  sorted.map((v) => (
-                    <tr key={v._id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-700 font-mono text-sm">{v.vendorId || '-'}</td>
-                      <td className="px-4 py-3 text-slate-800 font-medium">{v.name}</td>
-                      <td className="px-4 py-3 text-slate-700">{v.contactNumber}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${v.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>
-                          {v.isActive ? t('active') : t('inactive')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+        <DataTable>
+          <DataTableHeader>
+            <tr>
+              <DataTableHead>{t('vendorId')}</DataTableHead>
+              <DataTableHead>{t('vendor')}</DataTableHead>
+              <DataTableHead>{t('contactNumber')}</DataTableHead>
+              <DataTableHead>{t('status')}</DataTableHead>
+              <DataTableHead align="right">{t('actions')}</DataTableHead>
+            </tr>
+          </DataTableHeader>
+          <DataTableBody>
+            {sorted.length === 0 ? (
+              <DataTableEmpty colSpan={5}>{t('noData')}</DataTableEmpty>
+            ) : (
+              sorted.map((v) => (
+                <DataTableRow key={v._id}>
+                  <DataTableCell className="font-mono text-slate-600">{v.vendorId || '-'}</DataTableCell>
+                  <DataTableCell className="font-medium text-slate-800">{v.name}</DataTableCell>
+                  <DataTableCell>{v.contactNumber}</DataTableCell>
+                  <DataTableCell>
+                    <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${v.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {v.isActive ? t('active') : t('inactive')}
+                    </span>
+                  </DataTableCell>
+                  <DataTableCell align="right">
+                    <div className="flex items-center justify-end gap-2">
                           <Link
                             href={`/vendors/${v._id}/passbook`}
                             className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition"
@@ -316,15 +311,13 @@ export default function VendorsPage() {
                             editLabel={t('edit')}
                             deleteLabel={v.isActive ? t('makeInactive') : t('makeActive')}
                           />
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                    </div>
+                  </DataTableCell>
+                </DataTableRow>
+              ))
+            )}
+          </DataTableBody>
+        </DataTable>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sorted.length === 0 ? (

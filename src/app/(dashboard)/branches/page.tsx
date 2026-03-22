@@ -6,6 +6,7 @@ import PageHeader from '@/components/PageHeader';
 import ValidatedInput from '@/components/ValidatedInput';
 import ListToolbar from '@/components/ListToolbar';
 import ActionButtons from '@/components/ActionButtons';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useBranches, useDepartments } from '@/lib/hooks/useApi';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -299,44 +300,38 @@ export default function BranchesPage() {
       {activeTab === 'branches' && (
         <>
           {viewMode === 'table' ? (
-            <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('branchName')}</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('address')}</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('phoneNumber')}</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {branchSorted.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
-                      </tr>
-                    ) : (
-                      branchSorted.map((b) => (
-                        <tr key={b._id} className="hover:bg-uff-surface">
-                          <td className="px-4 py-3 text-slate-800">{b.name}</td>
-                          <td className="px-4 py-3 text-slate-700">{b.address}</td>
-                          <td className="px-4 py-3 text-slate-700">{b.phoneNumber}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${b.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
-                              {b.isActive ? t('active') : t('inactive')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <ActionButtons onView={() => openBranchView(b)} onEdit={() => openBranchEdit(b)} onToggleActive={() => handleBranchToggleActive(b)} isActive={b.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={b.isActive ? t('makeInactive') : t('makeActive')} />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <DataTable>
+              <DataTableHeader>
+                <tr>
+                  <DataTableHead>{t('branchName')}</DataTableHead>
+                  <DataTableHead>{t('address')}</DataTableHead>
+                  <DataTableHead>{t('phoneNumber')}</DataTableHead>
+                  <DataTableHead>{t('status')}</DataTableHead>
+                  <DataTableHead align="right">{t('actions')}</DataTableHead>
+                </tr>
+              </DataTableHeader>
+              <DataTableBody>
+                {branchSorted.length === 0 ? (
+                  <DataTableEmpty colSpan={5}>{t('noData')}</DataTableEmpty>
+                ) : (
+                  branchSorted.map((b) => (
+                    <DataTableRow key={b._id}>
+                      <DataTableCell className="font-medium text-slate-800">{b.name}</DataTableCell>
+                      <DataTableCell>{b.address}</DataTableCell>
+                      <DataTableCell>{b.phoneNumber}</DataTableCell>
+                      <DataTableCell>
+                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${b.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                          {b.isActive ? t('active') : t('inactive')}
+                        </span>
+                      </DataTableCell>
+                      <DataTableCell align="right">
+                        <ActionButtons onView={() => openBranchView(b)} onEdit={() => openBranchEdit(b)} onToggleActive={() => handleBranchToggleActive(b)} isActive={b.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={b.isActive ? t('makeInactive') : t('makeActive')} />
+                      </DataTableCell>
+                    </DataTableRow>
+                  ))
+                )}
+              </DataTableBody>
+            </DataTable>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {branchSorted.length === 0 ? (
@@ -362,40 +357,34 @@ export default function BranchesPage() {
       {activeTab === 'departments' && (
         <>
           {viewMode === 'table' ? (
-            <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('departmentName')}</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {deptSorted.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
-                      </tr>
-                    ) : (
-                      deptSorted.map((d) => (
-                        <tr key={d._id} className="hover:bg-uff-surface">
-                          <td className="px-4 py-3 text-slate-800">{d.name}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${d.isActive ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}`}>
-                              {d.isActive ? t('active') : t('inactive')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <ActionButtons onView={() => openDeptView(d)} onEdit={() => openDeptEdit(d)} onToggleActive={() => handleDeptToggleActive(d)} isActive={d.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={d.isActive ? t('makeInactive') : t('makeActive')} />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <DataTable>
+              <DataTableHeader>
+                <tr>
+                  <DataTableHead>{t('departmentName')}</DataTableHead>
+                  <DataTableHead>{t('status')}</DataTableHead>
+                  <DataTableHead align="right">{t('actions')}</DataTableHead>
+                </tr>
+              </DataTableHeader>
+              <DataTableBody>
+                {deptSorted.length === 0 ? (
+                  <DataTableEmpty colSpan={3}>{t('noData')}</DataTableEmpty>
+                ) : (
+                  deptSorted.map((d) => (
+                    <DataTableRow key={d._id}>
+                      <DataTableCell className="font-medium text-slate-800">{d.name}</DataTableCell>
+                      <DataTableCell>
+                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${d.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                          {d.isActive ? t('active') : t('inactive')}
+                        </span>
+                      </DataTableCell>
+                      <DataTableCell align="right">
+                        <ActionButtons onView={() => openDeptView(d)} onEdit={() => openDeptEdit(d)} onToggleActive={() => handleDeptToggleActive(d)} isActive={d.isActive} viewLabel={t('view')} editLabel={t('edit')} toggleLabel={d.isActive ? t('makeInactive') : t('makeActive')} />
+                      </DataTableCell>
+                    </DataTableRow>
+                  ))
+                )}
+              </DataTableBody>
+            </DataTable>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {deptSorted.length === 0 ? (

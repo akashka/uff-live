@@ -7,6 +7,7 @@ import SaveOverlay from '@/components/SaveOverlay';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
 import ListToolbar from '@/components/ListToolbar';
+import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty } from '@/components/ui/DataTable';
 import { PageLoader, Skeleton } from '@/components/Skeleton';
 import { useEmployees, usePayments, useVendorPayments, useBranches, useDepartments, useVendors } from '@/lib/hooks/useApi';
 import ValidatedInput from '@/components/ValidatedInput';
@@ -883,68 +884,62 @@ export default function AllPayments() {
 
       {viewMode === 'table' ? (
         <>
-          <div className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('type')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{filterEmployeeType === 'all' ? t('employeeName') : filterEmployeeType === 'vendor' ? t('vendor') : t('employeeName')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('month')}</th>
+          <DataTable>
+            <DataTableHeader>
+              <tr>
+                <DataTableHead>{t('type')}</DataTableHead>
+                <DataTableHead>{filterEmployeeType === 'all' ? t('employeeName') : filterEmployeeType === 'vendor' ? t('vendor') : t('employeeName')}</DataTableHead>
+                <DataTableHead>{t('month')}</DataTableHead>
+                {(filterEmployeeType === 'full_time' || filterEmployeeType === 'all') && (
+                  <DataTableHead>{t('daysWorked')}</DataTableHead>
+                )}
+                <DataTableHead align="right">{t('totalAmount')}</DataTableHead>
+                <DataTableHead>{t('paymentMode')}</DataTableHead>
+                <DataTableHead>{t('status')}</DataTableHead>
+                <DataTableHead align="right">{t('actions')}</DataTableHead>
+              </tr>
+            </DataTableHeader>
+            <DataTableBody>
+              {filtered.length === 0 ? (
+                <DataTableEmpty colSpan={(filterEmployeeType === 'full_time' || filterEmployeeType === 'all') ? 8 : 7}>{t('noData')}</DataTableEmpty>
+              ) : (
+                filtered.map((row) => (
+                  <DataTableRow key={row._id}>
+                    <DataTableCell>
+                      <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-800">{getTypeLabel(row.type)}</span>
+                    </DataTableCell>
+                    <DataTableCell className="font-medium text-slate-800">{row.name}</DataTableCell>
+                    <DataTableCell className="text-slate-600 text-sm">{formatMonth(row.month)}</DataTableCell>
                     {(filterEmployeeType === 'full_time' || filterEmployeeType === 'all') && (
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('daysWorked')}</th>
+                      <DataTableCell>
+                        {(() => {
+                          const d = getDisplayDays(row);
+                          if (d) return <span className="font-medium">{d.days}{d.total != null ? ` / ${d.total}` : ''}</span>;
+                          return <span className="text-slate-400">—</span>;
+                        })()}
+                      </DataTableCell>
                     )}
-                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('totalAmount')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('paymentMode')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-slate-800">{t('status')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-slate-800">{t('actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-slate-600">{t('noData')}</td>
-                    </tr>
-                  ) : (
-                    filtered.map((row) => (
-                      <tr key={row._id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3">
-                          <span className="inline-flex px-2 py-0.5 rounded-md text-sm font-medium bg-slate-100 text-slate-800">{getTypeLabel(row.type)}</span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-800">{row.name}</td>
-                        <td className="px-4 py-3 text-slate-600 text-sm">{formatMonth(row.month)}</td>
-                        {(filterEmployeeType === 'full_time' || filterEmployeeType === 'all') && (
-                          <td className="px-4 py-3 text-slate-700">
-                            {(() => {
-                              const d = getDisplayDays(row);
-                              if (d) return <span className="font-medium">{d.days}{d.total != null ? ` / ${d.total}` : ''}</span>;
-                              return <span className="text-slate-400">—</span>;
-                            })()}
-                          </td>
-                        )}
-                        <td className="px-4 py-3 text-right font-medium">₹{formatAmount(row.totalPayable)}</td>
-                        <td className="px-4 py-3 text-slate-800">{formatMode(row.paymentMode)}</td>
-                        <td className="px-4 py-3">
-                          {row.status === 'due' ? (
-                            <span className="text-uff-accent text-sm">₹{formatAmount(row.remainingAmount)} {t('due')}</span>
-                          ) : row.status === 'advance' ? (
-                            <span className="text-blue-600 text-sm">{t('advance')}</span>
-                          ) : (
-                            <span className="text-green-600 text-sm">{t('paid')}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button onClick={() => setDetailPayment(row)} className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition">
-                            {t('view')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    <DataTableCell align="right" className="font-medium">₹{formatAmount(row.totalPayable)}</DataTableCell>
+                    <DataTableCell>{formatMode(row.paymentMode)}</DataTableCell>
+                    <DataTableCell>
+                      {row.status === 'due' ? (
+                        <span className="text-uff-accent text-sm">₹{formatAmount(row.remainingAmount)} {t('due')}</span>
+                      ) : row.status === 'advance' ? (
+                        <span className="text-blue-600 text-sm">{t('advance')}</span>
+                      ) : (
+                        <span className="text-emerald-600 text-sm">{t('paid')}</span>
+                      )}
+                    </DataTableCell>
+                    <DataTableCell align="right">
+                      <button onClick={() => setDetailPayment(row)} className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition">
+                        {t('view')}
+                      </button>
+                    </DataTableCell>
+                  </DataTableRow>
+                ))
+              )}
+            </DataTableBody>
+          </DataTable>
           {filtered.length > 0 && (
             <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
               <span>Showing 1–{filtered.length} of {totalRows}</span>
@@ -1121,6 +1116,7 @@ export default function AllPayments() {
                         carriedForwardRemarks: '',
                         isAdvance: false,
                         workRecordIds: [],
+                        fullTimeWorkRecordIds: [],
                         daysWorked: 0,
                         totalWorkingDays: 0,
                         advanceAmount: 0,
@@ -1572,9 +1568,18 @@ export default function AllPayments() {
                     ) : (
                       <p className="text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders.'}</p>
                     )}
-                    {(detailPaymentFull.daysWorked ?? detailPaymentFull.totalWorkingDays) != null && (
-                      <p className="text-xs text-slate-500 mt-1">{t('daysWorked')}: {detailPaymentFull.daysWorked ?? '—'} / {detailPaymentFull.totalWorkingDays ?? '—'} | OT: {detailPaymentFull.otHours ?? 0}h = ₹{formatAmount((detailPaymentFull.otAmount as number) ?? 0)}</p>
-                    )}
+                    {(() => {
+                      const dw = detailPaymentFull.daysWorked as number | undefined;
+                      const tw = detailPaymentFull.totalWorkingDays as number | undefined;
+                      const otH = detailPaymentFull.otHours as number | undefined;
+                      const otAmt = (detailPaymentFull.otAmount as number | undefined) ?? 0;
+                      if (dw == null && tw == null) return null;
+                      return (
+                        <p className="text-xs text-slate-500 mt-1">
+                          {t('daysWorked')}: {dw ?? '—'} / {tw ?? '—'} | OT: {otH ?? 0}h = ₹{formatAmount(otAmt)}
+                        </p>
+                      );
+                    })()}
                   </div>
                 )}
 
