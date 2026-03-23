@@ -67,6 +67,7 @@ export default function Modal({
     <AnimatePresence>
       {open && (
         <motion.div
+          key="modal-backdrop"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-black/50 backdrop-blur-sm"
           onClick={closeOnBackdrop && onClose ? () => onClose() : undefined}
           role="dialog"
@@ -78,6 +79,7 @@ export default function Modal({
           transition={{ duration: 0.2 }}
         >
           <motion.div
+            key="modal-content"
             className={`relative bg-white rounded-2xl shadow-2xl w-full ${sizeClasses[size]} my-8 flex flex-col max-h-[calc(100vh-4rem)]`}
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.96 }}

@@ -9,6 +9,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useUnreadNotificationCount } from '@/lib/hooks/useApi';
 import UFFLogo from '@/components/UFFLogo';
 import UserAvatar from '@/components/UserAvatar';
+import QuickActionChat from '@/components/QuickActionChat';
 
 const iconClass = 'w-5 h-5 shrink-0';
 
@@ -469,6 +470,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
+      <QuickActionChat />
     </div>
   );
 }

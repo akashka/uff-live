@@ -53,6 +53,7 @@ export default function ConfirmModal({
     <AnimatePresence>
       {open && (
         <motion.div
+          key="confirm-backdrop"
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[60]"
           role="dialog"
           aria-modal="true"
@@ -63,6 +64,7 @@ export default function ConfirmModal({
           transition={{ duration: 0.2 }}
         >
           <motion.div
+            key="confirm-content"
             className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}

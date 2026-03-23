@@ -184,6 +184,33 @@ export default function EmployeesPage() {
     }
   }, [searchParams.get('edit'), employees, editingId]);
 
+  // Quick Action: ?view=id — open employee in view mode
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId || editingId === viewId) return;
+    const e = employees.find((emp: Employee) => emp._id === viewId);
+    if (e) {
+      openView(e);
+    } else if (employees.length > 0) {
+      fetch(`/api/employees/${viewId}`)
+        .then((r) => r.json())
+        .then((emp) => {
+          if (emp._id) openView(emp as Employee);
+        })
+        .catch(() => {});
+    }
+    window.history.replaceState(null, '', '/employees');
+  }, [searchParams.get('view'), employees, editingId]);
+
+  // Quick Action: ?action=create — open the create modal
+  useEffect(() => {
+    if (searchParams.get('action') === 'create' && !modal) {
+      openCreate();
+      window.history.replaceState(null, '', '/employees');
+    }
+  }, [searchParams.get('action'), modal]);
+
+
   const openCreate = () => {
     setPhotoFile(null);
     const defaultBranchIds =

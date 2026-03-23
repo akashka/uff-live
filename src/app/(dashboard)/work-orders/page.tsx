@@ -134,6 +134,46 @@ export default function WorkOrdersPage() {
     }
   }, [vendorWorkOrderIdFromUrl, records, loading, canAccessAll]);
 
+  // Quick Action Handler
+  const quickAction = searchParams.get('action');
+  const qaType = searchParams.get('type') as WorkOrderType | null;
+  const qaEmployeeId = searchParams.get('employeeId');
+  const qaEmployeeName = searchParams.get('employeeName');
+  const qaVendorId = searchParams.get('vendorId');
+  const qaVendorName = searchParams.get('vendorName');
+  const qaMonth = searchParams.get('month');
+  const qaStyleCode = searchParams.get('styleCode');
+
+  useEffect(() => {
+    if (quickAction === 'create_work_order' && qaType) {
+      if (modal !== 'create') {
+        const dummyRaw: any = {};
+        if (qaMonth) dummyRaw.month = qaMonth;
+        if (qaType === 'contractor' || qaType === 'full_time') {
+           if (qaEmployeeId) dummyRaw.employee = { _id: qaEmployeeId, name: qaEmployeeName };
+        } else if (qaType === 'vendor') {
+           if (qaVendorId) dummyRaw.vendor = { _id: qaVendorId, name: qaVendorName };
+        }
+        if (qaStyleCode) dummyRaw.styleOrder = { styleCode: qaStyleCode };
+        
+        setCreateType(qaType);
+        setCreateStep('form');
+        setEditingRecord({
+          _id: '',
+          type: qaType,
+          month: qaMonth || '',
+          totalAmount: 0,
+          subjectName: qaEmployeeName || qaVendorName || '',
+          raw: dummyRaw
+        });
+        setModal('create');
+        
+        // Remove params from URL so it doesn't reopen on refresh
+        window.history.replaceState(null, '', '/work-orders');
+      }
+    }
+  }, [quickAction, qaType, qaEmployeeId, qaVendorId, qaMonth, qaStyleCode, modal]);
+
   const filtered = (Array.isArray(records) ? records : []).filter((r: WorkOrderRow) => {
     const q = search.toLowerCase();
     if (!q) return true;
