@@ -12,6 +12,7 @@ import { useVendors, useVendorPayments, useVendorWorkOrders } from '@/lib/hooks/
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -46,7 +47,7 @@ export default function VendorPayments() {
       paymentType: filterType === 'all' ? undefined : filterType,
     }
   );
-  const { vendors } = useVendors(true, { limit: 0 });
+  const { vendors } = useVendors(false, { limit: 0 });
   const [modal, setModal] = useState(false);
   const [advanceModal, setAdvanceModal] = useState(false);
   const [detailPayment, setDetailPayment] = useState<{ vendor?: { name?: string }; month?: string; baseAmount?: number; totalPayable?: number; paymentAmount?: number; paymentMode?: string; paymentType?: string } | null>(null);
@@ -54,6 +55,7 @@ export default function VendorPayments() {
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [saving, setSaving] = useState(false);
+  const [calc, setCalc] = useState<any>(null);
 
   const [form, setForm] = useState({
     vendorId: '',
@@ -164,16 +166,19 @@ export default function VendorPayments() {
     setModal(true);
   };
 
-  const loadCalculation = async (vendorId: string, month: string) => {
+  const loadCalculation = async (vendorId: string, month: string, selectedIds?: string[]) => {
     if (!vendorId || !month) return;
-    const calc = await fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}`).then((r) => r.json());
+    const voParam = selectedIds ? `&selectedVendorWorkOrderIds=${selectedIds.join(',')}` : '';
+    const calc = await fetch(`/api/vendor-payments/calculate?vendorId=${vendorId}&month=${month}${voParam}`).then((r) => r.json());
     if (calc.error) return;
+    setCalc(calc);
     const base = calc.baseAmount || 0;
+    const unpaidIds = (calc.workOrders || []).filter((r: any) => !r.isPaid && !r.isPendingApproval).map((r: any) => r._id);
     setForm((f) => ({
       ...f,
       baseAmount: base,
       totalPayable: base + f.addDeductAmount,
-      vendorWorkOrderIds: (calc.workOrders || []).map((r: { _id: string }) => r._id),
+      vendorWorkOrderIds: selectedIds ?? unpaidIds,
     }));
   };
 
@@ -285,15 +290,13 @@ export default function VendorPayments() {
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
         <div className="flex flex-wrap gap-3 items-center">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">{t('vendor')}</label>
-            <select value={filterVendor} onChange={(e) => setFilterVendor(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-              <option value="">{t('all')}</option>
-              {(Array.isArray(vendors) ? vendors : []).map((v: { _id: string; name: string }) => (
-                <option key={v._id} value={v._id}>{v.name}</option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            label={t('vendor')}
+            options={[{ _id: '', name: t('all') }, ...(Array.isArray(vendors) ? vendors : [])]}
+            value={filterVendor}
+            onChange={setFilterVendor}
+            className="min-w-[180px]"
+          />
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('month')}</label>
             <input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white" />
@@ -382,15 +385,13 @@ export default function VendorPayments() {
       }>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('vendor')} *</label>
-              <select value={form.vendorId} onChange={(e) => onVendorChange(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg">
-                <option value="">Select...</option>
-                {(Array.isArray(vendors) ? vendors : []).map((v: { _id: string; name: string }) => (
-                  <option key={v._id} value={v._id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('vendor')}
+              options={vendors || []}
+              value={form.vendorId}
+              onChange={onVendorChange}
+              required
+            />
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} *</label>
               <input type="month" value={form.month} onChange={(e) => setForm((f) => ({ ...f, month: e.target.value }))} onBlur={onMonthChange} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />
@@ -399,6 +400,47 @@ export default function VendorPayments() {
           <button type="button" onClick={() => form.vendorId && onMonthChange()} className="text-sm font-medium text-uff-accent hover:text-uff-accent-hover">
             {t('calculate')}
           </button>
+          {calc?.workOrders && calc.workOrders.length > 0 && (
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+              <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {(calc.workOrders as any[]).map((wo) => {
+                  const isPaid = wo.isPaid || !!wo.paymentId;
+                  const isPendingApproval = wo.isPendingApproval ?? false;
+                  const isDisabled = isPaid || isPendingApproval;
+                  const isSelected = form.vendorWorkOrderIds.includes(wo._id);
+                  const statusLabel = isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : '';
+                  return (
+                    <label key={wo._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => {
+                          if (isDisabled) return;
+                          const next = isSelected ? form.vendorWorkOrderIds.filter((id) => id !== wo._id) : [...form.vendorWorkOrderIds, wo._id];
+                          setForm((f) => ({ ...f, vendorWorkOrderIds: next }));
+                          loadCalculation(form.vendorId, form.month, next);
+                        }}
+                        className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700">
+                          {(wo.branch as { name?: string })?.name || t('workRecord')}
+                          {wo.styleOrder ? ` – ${wo.styleOrder.styleCode}` : ''}
+                          {statusLabel}
+                        </p>
+                        {((wo.workItems || []).map((item: any, i: number) => (
+                          <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                        )))}
+                        <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wo.totalAmount || 0)}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <p className="text-sm text-slate-800">{t('baseAmount')}: ₹{formatAmount(form.baseAmount)}</p>
             <div>
@@ -444,15 +486,13 @@ export default function VendorPayments() {
       }>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('vendor')} *</label>
-              <select value={advanceForm.vendorId} onChange={(e) => setAdvanceForm((f) => ({ ...f, vendorId: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" required>
-                <option value="">Select...</option>
-                {(Array.isArray(vendors) ? vendors : []).map((v: { _id: string; name: string }) => (
-                  <option key={v._id} value={v._id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('vendor')}
+              options={vendors || []}
+              value={advanceForm.vendorId}
+              onChange={(val: string) => setAdvanceForm((f) => ({ ...f, vendorId: val }))}
+              required
+            />
             <div>
               <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} *</label>
               <input type="month" value={advanceForm.month} onChange={(e) => setAdvanceForm((f) => ({ ...f, month: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />

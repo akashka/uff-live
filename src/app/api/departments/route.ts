@@ -11,11 +11,13 @@ async function fetchDepartments(includeInactive: boolean) {
   return Department.find(filter).sort({ name: 1 }).lean();
 }
 
-const getCachedDepartments = unstable_cache(
-  fetchDepartments,
-  ['departments'],
-  { revalidate: 60, tags: ['departments'] }
-);
+function getCachedDepartments(includeInactive: boolean) {
+  return unstable_cache(
+    () => fetchDepartments(includeInactive),
+    ['departments', includeInactive.toString()],
+    { revalidate: 60, tags: ['departments'] }
+  )();
+}
 
 export async function GET(req: NextRequest) {
   try {

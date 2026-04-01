@@ -8,6 +8,7 @@ import { useBranches, useDepartments, useEmployees, useRates, useStyleOrdersByBr
 import { formatAmount, formatStyleOrderDisplay } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import SaveOverlay from '@/components/SaveOverlay';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -72,7 +73,7 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
   const [approving, setApproving] = useState(false);
 
   const { branches } = useBranches(false);
-  const { departments } = useDepartments(true);
+  const { departments } = useDepartments(false);
   const { employees: formEmpList } = useEmployees(false, {
     limit: 0,
     branchId: form.branchId || undefined,
@@ -87,7 +88,18 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
     (selectedEmployee?.department && typeof selectedEmployee.department === 'object' && '_id' in selectedEmployee.department
       ? (selectedEmployee.department as { _id: string })._id
       : undefined);
-  const { rates } = useRates(true, form.branchId || undefined, effectiveDepartmentId);
+  const { rates: rawRates } = useRates(false, form.branchId || undefined, effectiveDepartmentId);
+  const rates = React.useMemo(() => {
+    if (!form.branchId || !effectiveDepartmentId) return [];
+    return (rawRates || []).filter((r: any) => {
+      // Show only those that have THIS department and branch for them in the rate master
+      return r.branchDepartmentRates?.some((bdr: any) => {
+        const bid = bdr.branch && typeof bdr.branch === 'object' && '_id' in bdr.branch ? String(bdr.branch._id) : String(bdr.branch);
+        const did = bdr.department && typeof bdr.department === 'object' && '_id' in bdr.department ? String(bdr.department._id) : String(bdr.department);
+        return bid === form.branchId && did === effectiveDepartmentId;
+      });
+    });
+  }, [rawRates, form.branchId, effectiveDepartmentId]);
   const { styleOrders: stylesForForm } = useStyleOrdersByBranchMonth(form.branchId || undefined, form.month || undefined, !!(form.branchId && form.month));
   const selectedStyle = stylesForForm?.find((s: { _id: string }) => s._id === form.styleOrderId) as StyleOrderWithAvailability | undefined;
 
@@ -299,13 +311,15 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.branchName || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
+                label={t('branches')}
+                options={[{ _id: '', name: 'Select branch first...' }, ...(Array.isArray(branches) ? branches : [])]}
                 value={form.branchId}
-                onChange={(e) => {
-                  const b = (Array.isArray(branches) ? branches : []).find((x: { _id: string; name: string }) => x._id === e.target.value);
+                onChange={(val: string) => {
+                  const b = (Array.isArray(branches) ? branches : []).find((x: { _id: string; name: string }) => x._id === val);
                   setForm((f) => ({
                     ...f,
-                    branchId: e.target.value,
+                    branchId: val,
                     branchName: b?.name || '',
                     departmentId: '',
                     departmentName: '',
@@ -317,14 +331,8 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
                     workItems: {},
                   }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 required
-              >
-                <option value="">Select branch first...</option>
-                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
+              />
             )}
           </div>
           <div>
@@ -332,13 +340,15 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.departmentName || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
+                label={t('department')}
+                options={[{ _id: '', name: !form.branchId ? 'Select branch first' : 'Select department...' }, ...(Array.isArray(departments) ? departments : [])]}
                 value={form.departmentId}
-                onChange={(e) => {
-                  const d = (Array.isArray(departments) ? departments : []).find((x: { _id: string; name: string }) => x._id === e.target.value);
+                onChange={(val: string) => {
+                  const d = (Array.isArray(departments) ? departments : []).find((x: { _id: string; name: string }) => x._id === val);
                   setForm((f) => ({
                     ...f,
-                    departmentId: e.target.value,
+                    departmentId: val,
                     departmentName: d?.name || '',
                     employeeId: '',
                     employeeName: '',
@@ -347,14 +357,8 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
                     workItems: {},
                   }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 disabled={!form.branchId}
-              >
-                <option value="">{!form.branchId ? 'Select branch first' : 'Select department...'}</option>
-                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
+              />
             )}
           </div>
           <div>
@@ -362,26 +366,21 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.employeeName || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
+                label={t('employeeName')}
+                options={employeesForBranchAndDepartment}
                 value={form.employeeId}
-                onChange={(e) => {
-                  const emp = employeesForBranchAndDepartment.find((x: Employee) => x._id === e.target.value);
-                  setForm((f) => ({ ...f, employeeId: e.target.value, employeeName: emp?.name || '' }));
+                onChange={(val: string) => {
+                  const emp = employeesForBranchAndDepartment.find((x: Employee) => x._id === val);
+                  setForm((f) => ({ ...f, employeeId: val, employeeName: emp?.name || '' }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                placeholder={employeesForBranchAndDepartment.length === 0 && form.branchId
+                  ? form.departmentId
+                    ? 'No contractors in this branch & department'
+                    : 'Select department first'
+                  : 'Select employee...'}
                 required
-              >
-                <option value="">
-                  {employeesForBranchAndDepartment.length === 0 && form.branchId
-                    ? form.departmentId
-                      ? 'No contractors in this branch & department'
-                      : 'Select department first'
-                    : 'Select employee...'}
-                </option>
-                {employeesForBranchAndDepartment.map((e: Employee) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
+              />
             )}
           </div>
         </div>
@@ -411,30 +410,27 @@ export default function WorkOrderFormContractor({ mode, record, onClose, onSaved
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.styleOrderCode || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
+                label={t('styleOrder')}
+                options={(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string; colour?: string }) => ({
+                  _id: s._id,
+                  name: formatStyleOrderDisplay(s.styleCode, s.brand, s.colour) || s._id
+                }))}
                 value={form.styleOrderId}
-                onChange={(e) => {
-                  const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string }) => x._id === e.target.value);
+                onChange={(val: string) => {
+                  const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string }) => x._id === val);
                   const display = s ? formatStyleOrderDisplay((s as { styleCode?: string }).styleCode, (s as { brand?: string }).brand, (s as { colour?: string }).colour) : '';
                   const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
-                  setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: styleColour, workItems: {} }));
+                  setForm((f) => ({ ...f, styleOrderId: val, styleOrderCode: display, colour: styleColour, workItems: {} }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 disabled={!form.branchId || !form.month}
-              >
-                <option value="">
-                  {!form.branchId || !form.month
-                    ? 'Select branch & month first'
-                    : stylesForForm?.length === 0
-                      ? 'No styles for this branch/month'
-                      : 'Select style/order...'}
-                </option>
-                {(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string; colour?: string }) => (
-                  <option key={s._id} value={s._id}>
-                    {formatStyleOrderDisplay(s.styleCode, s.brand, s.colour) || s._id}
-                  </option>
-                ))}
-              </select>
+                placeholder={!form.branchId || !form.month
+                  ? 'Select branch & month first'
+                  : stylesForForm?.length === 0
+                    ? 'No styles for this branch/month'
+                    : 'Select style/order...'}
+                required
+              />
             )}
           </div>
         </div>

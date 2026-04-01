@@ -43,7 +43,7 @@ export default function StyleOrdersPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [filterMonth, setFilterMonth] = useState('');
   const { styleOrders, loading, mutate } = useStyleOrders(includeInactive, undefined, filterMonth || undefined);
-  const { branches } = useBranches(true);
+  const { branches } = useBranches(false);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');

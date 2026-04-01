@@ -185,16 +185,16 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const canAccessMaster = canAccessBranches || canAccessEmployees || canAccessRates || canAccessStyleOrders || canAccessVendors;
   const masterNavItem = canAccessMaster
     ? {
-        label: t('master'),
-        icon: <MasterIcon />,
-        children: [
-          ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
-          ...(canAccessEmployees ? [{ href: '/employees', label: t('employees') }] : []),
-          ...(canAccessVendors ? [{ href: '/vendors', label: t('jobworkVendors') }] : []),
-          ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
-          ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders') }] : []),
-        ].filter((c) => c.href && c.label) as { href: string; label: string }[],
-      }
+      label: t('master'),
+      icon: <MasterIcon />,
+      children: [
+        ...(canAccessBranches ? [{ href: '/branches', label: t('branches') }] : []),
+        ...(canAccessEmployees ? [{ href: '/employees', label: t('employees') }] : []),
+        ...(canAccessVendors ? [{ href: '/vendors', label: t('jobworkVendors') }] : []),
+        ...(canAccessRates ? [{ href: '/rates', label: t('rateMaster') }] : []),
+        ...(canAccessStyleOrders ? [{ href: '/style-orders', label: t('styleOrders') }] : []),
+      ].filter((c) => c.href && c.label) as { href: string; label: string }[],
+    }
     : null;
 
   const workOrdersNavItem =
@@ -204,10 +204,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   const paymentsNavItem = (canAccessPayments || isEmployee)
     ? {
-        label: t('payments'),
-        icon: <PaymentsIcon />,
-        href: '/payments',
-      }
+      label: t('payments'),
+      icon: <PaymentsIcon />,
+      href: '/payments',
+    }
     : null;
 
   const profileNavItem = {
@@ -254,11 +254,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     key={child.href}
                     href={child.href}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 pl-11 pr-4 py-2.5 rounded-lg transition text-sm ${
-                      isActive
+                    className={`flex items-center gap-3 pl-11 pr-4 py-2.5 rounded-lg transition text-sm ${isActive
                         ? 'bg-uff-accent text-uff-primary font-medium'
                         : 'text-slate-200 hover:bg-white/10 hover:text-white'
-                    }`}
+                      }`}
                   >
                     <span>{child.label}</span>
                   </Link>
@@ -284,11 +283,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             key={href}
             href={href}
             onClick={() => setSidebarOpen(false)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
-              isActive
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${isActive
                 ? 'bg-uff-accent text-uff-primary font-medium'
                 : 'text-slate-200 hover:bg-white/10 hover:text-white'
-            }`}
+              }`}
           >
             {item.icon}
             <span className="flex-1 min-w-0">{item.label}</span>
@@ -340,46 +338,46 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <div className="hidden sm:flex gap-1">
-                <button
-                  onClick={decreaseFont}
-                  className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 text-sm"
-                  title={t('decreaseFont')}
-                >
-                  A-
-                </button>
-                <button
-                  onClick={increaseFont}
-                  className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 text-sm"
-                  title={t('increaseFont')}
-                >
-                  A+
-                </button>
-              </div>
-              <select
-                value={locale}
-                onChange={(e) => setLocale(e.target.value as 'en' | 'kn' | 'hi')}
-                className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white"
+            <div className="hidden sm:flex gap-1">
+              <button
+                onClick={decreaseFont}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 text-sm"
+                title={t('decreaseFont')}
               >
-                <option value="en">EN</option>
-                <option value="kn">KN</option>
-                <option value="hi">HI</option>
-              </select>
-              <span className="px-2 py-1 rounded bg-slate-200 text-slate-800 text-xs font-medium hidden sm:inline">
-                {user?.role ? t(user.role as 'admin' | 'finance' | 'accountancy' | 'hr' | 'employee') : ''}
-              </span>
-              <Link
-                href="/profile"
-                className="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
-                title={t('profile')}
+                A-
+              </button>
+              <button
+                onClick={increaseFont}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600 text-sm"
+                title={t('increaseFont')}
               >
-                <UserAvatar
-                  photo={user?.photo}
-                  name={user?.displayName}
-                  email={user?.email}
-                  size="md"
-                />
-              </Link>
+                A+
+              </button>
+            </div>
+            <select
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as 'en' | 'kn' | 'hi')}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white"
+            >
+              <option value="en">EN</option>
+              <option value="kn">KN</option>
+              <option value="hi">HI</option>
+            </select>
+            <span className="px-2 py-1 rounded bg-slate-200 text-slate-800 text-xs font-medium hidden sm:inline">
+              {user?.role ? t(user.role as 'admin' | 'finance' | 'accountancy' | 'hr' | 'employee') : ''}
+            </span>
+            <Link
+              href="/profile"
+              className="flex items-center gap-2 rounded-full hover:ring-2 hover:ring-slate-300 focus:outline-none focus:ring-2 focus:ring-uff-accent"
+              title={t('profile')}
+            >
+              <UserAvatar
+                photo={user?.photo}
+                name={user?.displayName}
+                email={user?.email}
+                size="md"
+              />
+            </Link>
           </div>
         </div>
       </header>
@@ -409,23 +407,23 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           >
-        <div className="p-4 flex items-center justify-end border-b border-white/10">
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="p-2 rounded-lg hover:bg-white/10"
-            aria-label="Close menu"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {navContent}
-        </nav>
-        <div className="border-t border-white/10 p-3 shrink-0">
-          {logoutButton}
-        </div>
+            <div className="p-4 flex items-center justify-end border-b border-white/10">
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 rounded-lg hover:bg-white/10"
+                aria-label="Close menu"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {navContent}
+            </nav>
+            <div className="border-t border-white/10 p-3 shrink-0">
+              {logoutButton}
+            </div>
           </motion.aside>
         )}
       </AnimatePresence>
@@ -470,7 +468,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </footer>
         </div>
       </div>
-      <QuickActionChat />
+      {/* <QuickActionChat /> */}
     </div>
   );
 }

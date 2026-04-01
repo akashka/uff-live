@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ValidatedInput from '@/components/ValidatedInput';
-import { useVendors, useStyleOrdersByBranchMonth } from '@/lib/hooks/useApi';
+import { useVendors, useStyleOrdersByBranchMonth, useRates } from '@/lib/hooks/useApi';
 import { formatAmount, formatStyleOrderDisplay } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import SaveOverlay from '@/components/SaveOverlay';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -98,14 +99,26 @@ export default function WorkOrderFormVendor({ mode, record, onClose, onSaved }: 
   const rateItems = selectedStyle?.monthData?.entries ?? [];
   const allRateIds = rateItems.map((e: { rateMasterId: string }) => e.rateMasterId);
 
+  const { rates: allRates } = useRates(false); // Fetch all active rates
+
   const toggleWorkItem = (rateMasterId: string, checked: boolean) => {
     if (checked) {
       const available = getAvailableQuantity(rateMasterId);
+      const rateData = (allRates || []).find((r: any) => r._id === rateMasterId);
+      // Pricing "as for the contractors" (fetching from Rate Master)
+      const defaultPrice = rateData?.amountForBranch ?? rateData?.branchDepartmentRates?.[0]?.amount ?? rateData?.branchRates?.[0]?.amount ?? 0;
+
       setForm((f) => ({
         ...f,
         workItems: {
           ...f.workItems,
-          [rateMasterId]: { quantity: Math.max(1, available), defaultQuantity: available, ratePerUnit: 0, defaultRatePerUnit: 0, remarks: '' },
+          [rateMasterId]: { 
+            quantity: Math.max(1, available), 
+            defaultQuantity: available, 
+            ratePerUnit: defaultPrice, 
+            defaultRatePerUnit: defaultPrice, 
+            remarks: '' 
+          },
         },
       }));
     } else {
@@ -122,7 +135,16 @@ export default function WorkOrderFormVendor({ mode, record, onClose, onSaved }: 
       const next: Record<string, { quantity: number; defaultQuantity: number; ratePerUnit: number; defaultRatePerUnit: number; remarks: string }> = {};
       for (const e of rateItems as { rateMasterId: string }[]) {
         const available = getAvailableQuantity(e.rateMasterId);
-        next[e.rateMasterId] = { quantity: Math.max(1, available), defaultQuantity: available, ratePerUnit: 0, defaultRatePerUnit: 0, remarks: '' };
+        const rateData = (allRates || []).find((r: any) => r._id === e.rateMasterId);
+        const defaultPrice = rateData?.amountForBranch ?? rateData?.branchDepartmentRates?.[0]?.amount ?? rateData?.branchRates?.[0]?.amount ?? 0;
+
+        next[e.rateMasterId] = { 
+          quantity: Math.max(1, available), 
+          defaultQuantity: available, 
+          ratePerUnit: defaultPrice, 
+          defaultRatePerUnit: defaultPrice, 
+          remarks: '' 
+        };
       }
       setForm((f) => ({ ...f, workItems: next }));
     } else {
@@ -232,28 +254,17 @@ export default function WorkOrderFormVendor({ mode, record, onClose, onSaved }: 
     <>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-800 mb-1">{t('vendor')} *</label>
-            {mode === 'view' ? (
-              <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.vendorName || '–'}</p>
-            ) : (
-              <select
-                value={form.vendorId}
-                onChange={(e) => {
-                  const ven = vendors.find((x: Vendor) => x._id === e.target.value);
-                  setForm((f) => ({ ...f, vendorId: e.target.value, vendorName: ven?.name || '' }));
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                required
-                disabled={mode === 'edit'}
-              >
-                <option value="">Select vendor...</option>
-                {vendors.map((v: Vendor) => (
-                  <option key={v._id} value={v._id}>{v.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+            <SearchableSelect
+              label={t('vendor')}
+              options={vendors.map((v: Vendor) => ({ _id: v._id, name: v.name }))}
+              value={form.vendorId}
+              onChange={(val) => {
+                const ven = vendors.find((x: Vendor) => x._id === val);
+                setForm((f) => ({ ...f, vendorId: val, vendorName: ven?.name || '' }));
+              }}
+              disabled={mode === 'view' || mode === 'edit'}
+              required
+            />
           <div>
             <label className="block text-sm font-medium text-slate-800 mb-1">{t('month')} *</label>
             <input
@@ -266,29 +277,23 @@ export default function WorkOrderFormVendor({ mode, record, onClose, onSaved }: 
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-slate-800 mb-1">{t('styleOrder')} *</label>
-            {mode === 'view' ? (
-              <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.styleOrderCode || '–'}</p>
-            ) : (
-              <select
-                value={form.styleOrderId}
-                onChange={(e) => {
-                  const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string }) => x._id === e.target.value);
-                  const display = s ? formatStyleOrderDisplay((s as { styleCode?: string }).styleCode, (s as { brand?: string }).brand, (s as { colour?: string }).colour) : '';
-                  const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
-                  setForm((f) => ({ ...f, styleOrderId: e.target.value, styleOrderCode: display, colour: styleColour, workItems: {} }));
-                }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                disabled={!form.month}
-              >
-                <option value="">{!form.month ? 'Select month first' : stylesForForm?.length === 0 ? 'No styles for this month' : 'Select style/order...'}</option>
-                {(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string; colour?: string }) => (
-                  <option key={s._id} value={s._id}>
-                    {formatStyleOrderDisplay(s.styleCode, s.brand, s.colour) || s._id}
-                  </option>
-                ))}
-              </select>
-            )}
+            <SearchableSelect
+              label={t('styleOrder')}
+              options={(Array.isArray(stylesForForm) ? stylesForForm : []).map((s: { _id: string; styleCode?: string; brand?: string; colour?: string }) => ({
+                _id: s._id,
+                name: formatStyleOrderDisplay(s.styleCode, s.brand, s.colour) || s._id
+              }))}
+              value={form.styleOrderId}
+              onChange={(val) => {
+                const s = (Array.isArray(stylesForForm) ? stylesForForm : []).find((x: { _id: string }) => x._id === val);
+                const display = s ? formatStyleOrderDisplay((s as { styleCode?: string }).styleCode, (s as { brand?: string }).brand, (s as { colour?: string }).colour) : '';
+                const styleColour = (s as { colour?: string })?.colour ?? (Array.isArray((s as { colours?: string[] })?.colours) ? (s as { colours?: string[] }).colours?.[0] : '') ?? '';
+                setForm((f) => ({ ...f, styleOrderId: val, styleOrderCode: display, colour: styleColour, workItems: {} }));
+              }}
+              disabled={mode === 'view' || !form.month}
+              placeholder={!form.month ? 'Select month first' : stylesForForm?.length === 0 ? 'No styles for this month' : 'Select style/order...'}
+              required
+            />
           </div>
         </div>
 

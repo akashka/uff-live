@@ -15,6 +15,7 @@ import Modal from '@/components/Modal';
 import ImportModal from '@/components/ImportModal';
 import { toast } from '@/lib/toast';
 import ValidatedInput from '@/components/ValidatedInput';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 interface Branch {
   _id: string;
@@ -48,7 +49,7 @@ export default function RatesPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const { rates, loading, mutate: mutateRates } = useRates(includeInactive);
   const { branches } = useBranches(false);
-  const { departments } = useDepartments(true);
+  const { departments } = useDepartments(false);
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -344,24 +345,18 @@ export default function RatesPage() {
       </PageHeader>
 
       <ListToolbar search={search} onSearchChange={setSearch} sortBy={sortBy} onSortChange={setSortBy} sortOptions={SORT_OPTIONS} viewMode={viewMode} onViewModeChange={setViewMode} searchPlaceholder={t('search')}>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">{t('branches')}</label>
-          <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-            <option value="">{t('all')}</option>
-            {(Array.isArray(branches) ? branches : []).map((b) => (
-              <option key={b._id} value={b._id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">{t('department')}</label>
-          <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-            <option value="">{t('all')}</option>
-            {(Array.isArray(departments) ? departments : []).map((d) => (
-              <option key={d._id} value={d._id}>{d.name}</option>
-            ))}
-          </select>
-        </div>
+        <SearchableSelect
+          label={t('branches')}
+          options={[{ _id: '', name: t('all') }, ...(Array.isArray(branches) ? branches : [])]}
+          value={filterBranch}
+          onChange={setFilterBranch}
+        />
+        <SearchableSelect
+          label={t('department')}
+          options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
+          value={filterDepartment}
+          onChange={setFilterDepartment}
+        />
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} className="rounded border-slate-400" />
           <span className="text-sm text-slate-800">{t('inactive')}</span>
@@ -450,47 +445,30 @@ export default function RatesPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1">{t('branches')} <span className="text-red-500" aria-hidden="true">*</span></label>
-              {modal === 'view' ? (
-                <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.branchName || '–'}</p>
-              ) : (
-                <select
+                <SearchableSelect
+                  label={t('branches')}
+                  options={Array.isArray(branches) ? branches : []}
                   value={form.branchId}
-                  onChange={(e) => {
-                    const b = (branches as { _id: string; name: string }[]).find((x) => x._id === e.target.value);
-                    setForm((f) => ({ ...f, branchId: e.target.value, branchName: b?.name ?? '', departmentId: '', departmentName: '' }));
+                  onChange={(val) => {
+                    const b = (branches as { _id: string; name: string }[]).find((x) => x._id === val);
+                    setForm((f) => ({ ...f, branchId: val, branchName: b?.name ?? '', departmentId: '', departmentName: '' }));
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   required
-                >
-                  <option value="">{t('selectBranch')}...</option>
-                  {(Array.isArray(branches) ? branches : []).map((b) => (
-                    <option key={b._id} value={b._id}>{b.name}</option>
-                  ))}
-                </select>
-              )}
+                />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1">{t('department')} <span className="text-red-500" aria-hidden="true">*</span></label>
-              {modal === 'view' ? (
-                <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.departmentName || '–'}</p>
-              ) : (
-                <select
+                <SearchableSelect
+                  label={t('department')}
+                  options={Array.isArray(departments) ? departments : []}
                   value={form.departmentId}
-                  onChange={(e) => {
-                    const d = (departments as { _id: string; name: string }[]).find((x) => x._id === e.target.value);
-                    setForm((f) => ({ ...f, departmentId: e.target.value, departmentName: d?.name ?? '' }));
+                  onChange={(val) => {
+                    const d = (departments as { _id: string; name: string }[]).find((x) => x._id === val);
+                    setForm((f) => ({ ...f, departmentId: val, departmentName: d?.name ?? '' }));
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   disabled={!form.branchId}
+                  placeholder={!form.branchId ? t('selectBranch') + ' first' : t('selectDepartment') + '...'}
                   required
-                >
-                  <option value="">{!form.branchId ? t('selectBranch') + ' first' : t('selectDepartment') + '...'}</option>
-                  {(Array.isArray(departments) ? departments : []).map((d) => (
-                    <option key={d._id} value={d._id}>{d.name}</option>
-                  ))}
-                </select>
-              )}
+                />
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import Modal from '@/components/Modal';
 import SaveOverlay from '@/components/SaveOverlay';
@@ -13,6 +14,7 @@ import { useEmployees, usePayments, useVendorPayments, useBranches, useDepartmen
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount, formatStyleOrderDisplay, roundAmount, roundDays } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -140,6 +142,7 @@ const PAYMENT_MODES = [
 export default function AllPayments() {
   const { t } = useApp();
   const { user } = useAuth();
+  const router = useRouter();
   const isEmployee = !!user?.employeeId;
   const canView = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '') || isEmployee;
   const canAdd = ['admin', 'finance'].includes(user?.role || '');
@@ -199,9 +202,9 @@ export default function AllPayments() {
   );
 
   const { employees: allEmployees } = useEmployees(false, { limit: 0, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
-  const { branches } = useBranches(true);
-  const { departments } = useDepartments(true);
-  const { vendors } = useVendors(true, { limit: 0 });
+  const { branches } = useBranches(false);
+  const { departments } = useDepartments(false);
+  const { vendors } = useVendors(false, { limit: 0 });
 
   const employees =
     filterEmployeeType === 'contractor'
@@ -575,7 +578,7 @@ export default function AllPayments() {
 
   const totalPayableEmp =
     modalRecipientType === 'full_time'
-      ? roundAmount((calc?.baseAmount ?? 0) + (calc?.otAmount ?? 0) + empForm.addDeductAmount - (empForm.advanceDeducted ?? 0))
+      ? roundAmount((calc?.baseAmount ?? 0) + (calc?.otAmount ?? 0) + empForm.addDeductAmount - (empForm.pfDeducted ?? 0) - (empForm.esiDeducted ?? 0) - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0))
       : roundAmount(empForm.baseAmount + empForm.addDeductAmount - empForm.pfDeducted - empForm.esiDeducted - (empForm.otherDeducted ?? 0) - (empForm.advanceDeducted ?? 0));
   const paymentAmountEmp = totalPayableEmp;
   const remainingEmp = 0;
@@ -594,9 +597,9 @@ export default function AllPayments() {
       const contractorWorkRecordIds =
         empForm.paymentType === 'contractor'
           ? empForm.workRecordIds.filter((id) => {
-              const wr = (calc?.workRecords as (WorkRecordCalc & { isPendingApproval?: boolean })[] | undefined)?.find((r) => r._id === id);
-              return wr && !wr.isPaid && !wr.isPendingApproval;
-            })
+            const wr = (calc?.workRecords as (WorkRecordCalc & { isPendingApproval?: boolean })[] | undefined)?.find((r) => r._id === id);
+            return wr && !wr.isPaid && !wr.isPendingApproval;
+          })
           : [];
       const payload: Record<string, unknown> = {
         employeeId: empForm.employeeId,
@@ -774,21 +777,24 @@ export default function AllPayments() {
         <div className="flex gap-2">
           {canAdd && (
             <button
-              onClick={openAdd}
+              onClick={() => router.push('/payments/bulk-add')}
               disabled={
                 (filterEmployeeType === 'contractor' || filterEmployeeType === 'full_time') && (!Array.isArray(employees) || employees.length === 0)
                   ? true
                   : filterEmployeeType === 'vendor' && (!Array.isArray(vendors) || vendors.length === 0)
                     ? true
                     : filterEmployeeType === 'all' &&
-                        (!Array.isArray(employees) || employees.length === 0) &&
-                        (!Array.isArray(vendors) || vendors.length === 0)
+                      (!Array.isArray(employees) || employees.length === 0) &&
+                      (!Array.isArray(vendors) || vendors.length === 0)
                       ? true
                       : false
               }
-              className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('add')}
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Bulk Add
             </button>
           )}
         </div>
@@ -798,63 +804,59 @@ export default function AllPayments() {
         <div className="flex flex-wrap gap-3 items-center">
           {!isEmployee && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeType')}</label>
-              <select
+              <SearchableSelect
+                label={t('employeeType')}
                 value={filterEmployeeType}
-                onChange={(e) => {
-                  setFilterEmployeeType(e.target.value as FilterEmployeeType);
+                onChange={(val) => {
+                  setFilterEmployeeType(val as FilterEmployeeType);
                   setFilterEmployee('');
                   setFilterVendor('');
                 }}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-              >
-                <option value="all">{t('all')}</option>
-                <option value="contractor">{t('contractors')}</option>
-                <option value="full_time">{t('fullTime')}</option>
-                <option value="vendor">{t('vendors')}</option>
-              </select>
+                options={[
+                  { _id: 'all', name: t('all') },
+                  { _id: 'contractor', name: t('contractors') },
+                  { _id: 'full_time', name: t('fullTime') },
+                  { _id: 'vendor', name: t('vendors') },
+                ]}
+              />
             </div>
           )}
           {!isEmployee && (filterEmployeeType === 'contractor' || filterEmployeeType === 'full_time' || filterEmployeeType === 'all') && (
             <>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
-                <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                    <option key={b._id} value={b._id}>{b.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  label={t('selectBranch')}
+                  value={filterBranch}
+                  onChange={(val) => { setFilterBranch(val); setFilterDepartment(''); setFilterEmployee(''); }}
+                  options={[{ _id: '', name: t('all') }, ...(Array.isArray(branches) ? branches : [])]}
+                />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
-                <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                    <option key={d._id} value={d._id}>{d.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  label={t('selectDepartment')}
+                  value={filterDepartment}
+                  onChange={(val) => { setFilterDepartment(val); setFilterEmployee(''); }}
+                  options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
+                />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-                <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {employees.map((e: Employee) => (
-                    <option key={e._id} value={e._id}>{e.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  label={t('employeeName')}
+                  value={filterEmployee}
+                  onChange={setFilterEmployee}
+                  options={[{ _id: '', name: t('all') }, ...employees.map((e: Employee) => ({ _id: e._id, name: e.name }))]}
+                />
               </div>
             </>
           )}
           {!isEmployee && (filterEmployeeType === 'vendor' || filterEmployeeType === 'all') && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('vendor')}</label>
-              <select value={filterVendor} onChange={(e) => setFilterVendor(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                <option value="">{t('all')}</option>
-                {(Array.isArray(vendors) ? vendors : []).map((v: { _id: string; name: string }) => (
-                  <option key={v._id} value={v._id}>{v.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                label={t('vendor')}
+                value={filterVendor}
+                onChange={setFilterVendor}
+                options={[{ _id: '', name: t('all') }, ...(Array.isArray(vendors) ? vendors : []).map((v: any) => ({ _id: v._id, name: v.name }))]}
+              />
             </div>
           )}
           <div>
@@ -1179,41 +1181,29 @@ export default function AllPayments() {
               {canShowEmployeeForm && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
-                      <select value={empForm.branchId} onChange={(e) => setEmpForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg">
-                        <option value="">{t('selectBranch')}...</option>
-                        {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                          <option key={b._id} value={b._id}>{b.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')}</label>
-                      <select value={empForm.departmentId} onChange={(e) => setEmpForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg">
-                        <option value="">{empForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
-                        {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                          <option key={d._id} value={d._id}>{d.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} *</label>
-                      <select
-                        value={empForm.employeeId}
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          setEmpForm((f) => ({ ...f, employeeId: id, paymentType: modalRecipientType as 'contractor' | 'full_time', workRecordIds: [], fullTimeWorkRecordIds: [] }));
-                          if (id && empForm.month) loadEmpCalculation(id, empForm.month, modalRecipientType as 'contractor' | 'full_time');
-                        }}
-                        className="w-full px-3 py-2.5 border border-slate-300 rounded-lg"
-                      >
-                        <option value="">Select...</option>
-                        {employeesForForm.map((e: Employee) => (
-                          <option key={e._id} value={e._id}>{e.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      label={t('selectBranch')}
+                      options={[{ _id: '', name: t('selectBranch') + '...' }, ...(Array.isArray(branches) ? branches : [])]}
+                      value={empForm.branchId}
+                      onChange={(val) => setEmpForm((f) => ({ ...f, branchId: val, departmentId: '', employeeId: '' }))}
+                    />
+                    <SearchableSelect
+                      label={t('selectDepartment')}
+                      options={[{ _id: '', name: empForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first' }, ...(Array.isArray(departments) ? departments : [])]}
+                      value={empForm.departmentId}
+                      onChange={(val) => setEmpForm((f) => ({ ...f, departmentId: val, employeeId: '' }))}
+                      disabled={!empForm.branchId}
+                    />
+                    <SearchableSelect
+                      label={t('employeeName')}
+                      options={employeesForForm}
+                      value={empForm.employeeId}
+                      onChange={(val) => {
+                        setEmpForm((f) => ({ ...f, employeeId: val, paymentType: modalRecipientType as 'contractor' | 'full_time', workRecordIds: [], fullTimeWorkRecordIds: [] }));
+                        if (val && empForm.month) loadEmpCalculation(val, empForm.month, modalRecipientType as 'contractor' | 'full_time');
+                      }}
+                      required
+                    />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1238,32 +1228,32 @@ export default function AllPayments() {
                         <div className="p-4 bg-slate-50 rounded-xl space-y-2">
                           <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
                           {(calc.fullTimeWorkRecords && (calc.fullTimeWorkRecords as (FullTimeWorkRecordCalc & { isPaid?: boolean })[]).length > 0) ? (
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {(calc.fullTimeWorkRecords as (FullTimeWorkRecordCalc & { isPaid?: boolean })[]).map((wr) => {
-                              const isPaid = wr.isPaid ?? false;
-                              const isSelected = empForm.fullTimeWorkRecordIds.includes(wr._id);
-                              return (
-                                <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    disabled={isPaid}
-                                    onChange={() => {
-                                      if (isPaid) return;
-                                      const next = isSelected ? empForm.fullTimeWorkRecordIds.filter((id) => id !== wr._id) : [...empForm.fullTimeWorkRecordIds, wr._id];
-                                      setEmpForm((f) => ({ ...f, fullTimeWorkRecordIds: next }));
-                                      loadEmpCalculation(empForm.employeeId, empForm.month, 'full_time', undefined, next);
-                                    }}
-                                    className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workOrder')} – {wr.daysWorked} {t('daysWorked')}, {wr.otHours || 0} {t('otHours')}{isPaid ? ` (${t('paymentDone')})` : ''}</p>
-                                    <p className="text-slate-600 text-sm">₹{formatAmount(wr.totalAmount || 0)}</p>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {(calc.fullTimeWorkRecords as (FullTimeWorkRecordCalc & { isPaid?: boolean })[]).map((wr) => {
+                                const isPaid = wr.isPaid ?? false;
+                                const isSelected = empForm.fullTimeWorkRecordIds.includes(wr._id);
+                                return (
+                                  <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isPaid ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={isPaid}
+                                      onChange={() => {
+                                        if (isPaid) return;
+                                        const next = isSelected ? empForm.fullTimeWorkRecordIds.filter((id) => id !== wr._id) : [...empForm.fullTimeWorkRecordIds, wr._id];
+                                        setEmpForm((f) => ({ ...f, fullTimeWorkRecordIds: next }));
+                                        loadEmpCalculation(empForm.employeeId, empForm.month, 'full_time', undefined, next);
+                                      }}
+                                      className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workOrder')} – {wr.daysWorked} {t('daysWorked')}, {wr.otHours || 0} {t('otHours')}{isPaid ? ` (${t('paymentDone')})` : ''}</p>
+                                      <p className="text-slate-600 text-sm">₹{formatAmount(wr.totalAmount || 0)}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <p className="text-sm text-slate-600">{t('noWorkOrdersForMonth') || 'No work orders for this month. Add work orders in Work Orders.'}</p>
                           )}
@@ -1279,7 +1269,6 @@ export default function AllPayments() {
                               const isPendingApproval = wr.isPendingApproval ?? false;
                               const isDisabled = isPaid || isPendingApproval;
                               const isSelected = empForm.workRecordIds.includes(wr._id);
-                              const statusLabel = isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : '';
                               return (
                                 <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                                   <input
@@ -1295,9 +1284,13 @@ export default function AllPayments() {
                                     className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
                                   />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-700">{(wr.branch as { name?: string })?.name || t('workRecord')}{wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : ''}{statusLabel}</p>
+                                    <p className="text-sm font-medium text-slate-700">
+                                      {(wr.branch as { name?: string })?.name || t('workRecord')}
+                                      {wr.styleOrder ? ` – ${formatStyleOrderDisplay(wr.styleOrder.styleCode, wr.styleOrder.brand, wr.styleOrder.colour)}` : ''}
+                                      {isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : ''}
+                                    </p>
                                     {((wr.workItems || []).filter((item): item is WorkItemRow => !!item) as WorkItemRow[]).map((item: WorkItemRow, i: number) => (
-                                      <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)}</p>
+                                      <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity}{(item.multiplier ?? 1) !== 1 ? ` × ${item.multiplier}` : ''} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
                                     ))}
                                     <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount || 0)}</p>
                                   </div>
@@ -1371,15 +1364,13 @@ export default function AllPayments() {
               {canShowVendorForm && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('vendor')} *</label>
-                      <select value={vendorForm.vendorId} onChange={(e) => { const id = e.target.value; setVendorForm((f) => ({ ...f, vendorId: id })); if (id && vendorForm.month) loadVendorCalculation(id, vendorForm.month); }} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg">
-                        <option value="">Select...</option>
-                        {(Array.isArray(vendors) ? vendors : []).map((v: { _id: string; name: string }) => (
-                          <option key={v._id} value={v._id}>{v.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      label={t('vendor')}
+                      options={vendors || []}
+                      value={vendorForm.vendorId}
+                      onChange={(val) => { setVendorForm((f) => ({ ...f, vendorId: val })); if (val && vendorForm.month) loadVendorCalculation(val, vendorForm.month); }}
+                      required
+                    />
                     <div>
                       <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('month')} *</label>
                       <input type="month" value={vendorForm.month} onChange={(e) => { const m = e.target.value; setVendorForm((f) => ({ ...f, month: m })); if (vendorForm.vendorId) loadVendorCalculation(vendorForm.vendorId, m); }} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg" />

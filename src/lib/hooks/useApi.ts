@@ -54,8 +54,8 @@ export function useBranches(includeInactive = false) {
 }
 
 /** Departments list - cached 60s */
-export function useDepartments(includeInactive = false) {
-  const key = `/api/departments?includeInactive=${includeInactive}`;
+export function useDepartments(includeInactive = true) {
+  const key = `/api/departments`;
   const { data, error, isLoading, mutate } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 60_000,

@@ -7,6 +7,7 @@ import { useBranches, useDepartments, useEmployees } from '@/lib/hooks/useApi';
 import { formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import SaveOverlay from '@/components/SaveOverlay';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -62,7 +63,7 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
   const maxDaysAllowed = Math.max(0, workingDays - daysAlreadyUsed);
 
   const { branches } = useBranches(false);
-  const { departments } = useDepartments(true);
+  const { departments } = useDepartments(false);
   const { employees: formEmpList } = useEmployees(false, {
     limit: 0,
     branchId: form.branchId || undefined,
@@ -180,26 +181,22 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.branchName || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
                 value={form.branchId}
-                onChange={(e) => {
-                  const b = (Array.isArray(branches) ? branches : []).find((x: { _id: string; name: string }) => x._id === e.target.value);
+                onChange={(val) => {
+                  const b = (Array.isArray(branches) ? branches : []).find((x: { _id: string; name: string }) => x._id === val);
                   setForm((f) => ({
                     ...f,
-                    branchId: e.target.value,
+                    branchId: val,
                     branchName: b?.name || '',
                     employeeId: '',
                     employeeName: '',
                   }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                options={Array.isArray(branches) ? branches : []}
+                placeholder="Select branch first..."
                 required
-              >
-                <option value="">Select branch first...</option>
-                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
+              />
             )}
           </div>
           <div>
@@ -207,17 +204,13 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">–</p>
             ) : (
-              <select
+              <SearchableSelect
+                label={t('department')}
+                options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
                 value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                onChange={setDepartmentId}
                 disabled={!form.branchId}
-              >
-                <option value="">{t('all')}</option>
-                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
+              />
             )}
           </div>
           <div>
@@ -225,22 +218,17 @@ export default function WorkOrderFormFullTime({ mode, record, onClose, onSaved }
             {mode === 'view' ? (
               <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-800">{form.employeeName || '–'}</p>
             ) : (
-              <select
+              <SearchableSelect
                 value={form.employeeId}
-                onChange={(e) => {
-                  const emp = employeesForBranch.find((x: Employee) => x._id === e.target.value);
-                  setForm((f) => ({ ...f, employeeId: e.target.value, employeeName: emp?.name || '' }));
+                onChange={(val) => {
+                  const emp = employeesForBranch.find((x: Employee) => x._id === val);
+                  setForm((f) => ({ ...f, employeeId: val, employeeName: emp?.name || '' }));
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                options={employeesForBranch}
+                placeholder={employeesForBranch.length === 0 && form.branchId ? 'No full-time employees in this branch' : 'Select employee...'}
                 required
-              >
-                <option value="">
-                  {employeesForBranch.length === 0 && form.branchId ? 'No full-time employees in this branch' : 'Select employee...'}
-                </option>
-                {employeesForBranch.map((e: Employee) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
+                disabled={!form.branchId}
+              />
             )}
           </div>
           <div>

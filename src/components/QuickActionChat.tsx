@@ -23,7 +23,7 @@ export default function QuickActionChat() {
 
   const handleSend = async (text: string, overrideState?: any) => {
     if (!text.trim()) return;
-    
+
     const userMessage: Message = { id: Date.now().toString(), role: 'user', content: text };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -36,7 +36,7 @@ export default function QuickActionChat() {
         body: JSON.stringify({ message: text, state: overrideState || state })
       });
       const data = await res.json();
-      
+
       if (data.status === 'COMPLETE') {
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'system', content: data.message }]);
         setState({ intent: null, entities: {} });
@@ -98,7 +98,7 @@ export default function QuickActionChat() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            
+
             <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50">
               {messages.map((m) => (
                 <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -122,11 +122,11 @@ export default function QuickActionChat() {
                 </div>
               ))}
               {loading && (
-                 <div className="flex items-start">
-                   <div className="px-4 py-2 rounded-2xl bg-white border border-slate-200 text-slate-500 shadow-sm text-sm">
-                     Thinking...
-                   </div>
-                 </div>
+                <div className="flex items-start">
+                  <div className="px-4 py-2 rounded-2xl bg-white border border-slate-200 text-slate-500 shadow-sm text-sm">
+                    Thinking...
+                  </div>
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>

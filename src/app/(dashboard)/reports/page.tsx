@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 import { DataTable, DataTableHeader, DataTableHead, DataTableBody, DataTableRow, DataTableCell, DataTableEmpty, DataTableFooter } from '@/components/ui/DataTable';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -104,9 +105,9 @@ export default function ReportsPage() {
   const canAccess = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isAdmin = user?.role === 'admin';
   const { employees } = useEmployees(false, { limit: 10000, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
-  const { vendors } = useVendors(true, { limit: 1000 });
-  const { branches } = useBranches(true);
-  const { departments } = useDepartments(true);
+  const { vendors } = useVendors(false, { limit: 1000 });
+  const { branches } = useBranches(false);
+  const { departments } = useDepartments(false);
 
   useEffect(() => {
     if (tabParam && TABS.some((tab) => tab.id === tabParam)) setActiveTab(tabParam);
@@ -251,27 +252,27 @@ export default function ReportsPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectMonth')}</label>
                   <input type="month" value={pdfMonth} onChange={(e) => setPdfMonth(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
-                  <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setPayslipEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500">
-                    <option value="">{t('all')}</option>
-                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
-                  <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setPayslipEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500">
-                    <option value="">{t('all')}</option>
-                    {(departments || []).map((d: { _id: string; name: string }) => <option key={d._id} value={d._id}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectEmployee')} ({t('payslip')})</label>
-                  <select value={payslipEmployeeId} onChange={(e) => setPayslipEmployeeId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[200px] focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500">
-                    <option value="">—</option>
-                    {(employees || []).map((e: { _id: string; name: string }) => <option key={e._id} value={e._id}>{e.name}</option>)}
-                  </select>
-                </div>
+                <SearchableSelect
+                  label={t('selectBranch')}
+                  options={[{ _id: '', name: t('all') }, ...(branches || [])]}
+                  value={filterBranch}
+                  onChange={(val) => { setFilterBranch(val); setFilterDepartment(''); setPayslipEmployeeId(''); }}
+                  className="min-w-[160px]"
+                />
+                <SearchableSelect
+                  label={t('selectDepartment')}
+                  options={[{ _id: '', name: t('all') }, ...(departments || [])]}
+                  value={filterDepartment}
+                  onChange={(val) => { setFilterDepartment(val); setPayslipEmployeeId(''); }}
+                  className="min-w-[160px]"
+                />
+                <SearchableSelect
+                  label={`${t('selectEmployee')} (${t('payslip')})`}
+                  options={[{ _id: '', name: '—' }, ...(employees || [])]}
+                  value={payslipEmployeeId}
+                  onChange={setPayslipEmployeeId}
+                  className="min-w-[200px]"
+                />
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={downloadPayslip} className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium shadow-sm transition">
                     {t('downloadPayslip')}
@@ -309,13 +310,12 @@ export default function ReportsPage() {
             </div>
             <div className="p-6">
               <div className="flex flex-wrap gap-4 items-end mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('branches')}</label>
-                  <select value={analyticsBranchId} onChange={(e) => setAnalyticsBranchId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500">
-                    <option value="">{t('all')} {t('branches')}</option>
-                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
+                <SearchableSelect
+                  label={t('branches')}
+                  options={[{ _id: '', name: `${t('all')} ${t('branches')}` }, ...(branches || [])]}
+                  value={analyticsBranchId}
+                  onChange={setAnalyticsBranchId}
+                />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('month')}</label>
                   <input type="month" value={analyticsMonth} onChange={(e) => setAnalyticsMonth(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500" />
@@ -494,34 +494,34 @@ export default function ReportsPage() {
             </div>
             <div className="p-6">
               <div className="flex flex-wrap gap-4 items-end mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
-                  <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setProdEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
-                    <option value="">{t('all')}</option>
-                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
-                  <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setProdEmployeeId(''); }} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[160px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
-                    <option value="">{t('all')}</option>
-                    {(departments || []).map((d: { _id: string; name: string }) => <option key={d._id} value={d._id}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('selectEmployee')}</label>
-                  <select value={prodEmployeeId} onChange={(e) => setProdEmployeeId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
-                    <option value="">{t('all')}</option>
-                    {(employees || []).map((e: { _id: string; name: string }) => <option key={e._id} value={e._id}>{e.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
-                  <select value={prodBranchId} onChange={(e) => setProdBranchId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500">
-                    <option value="">{t('all')}</option>
-                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
+                <SearchableSelect
+                  label={t('selectBranch')}
+                  options={[{ _id: '', name: t('all') }, ...(branches || [])]}
+                  value={filterBranch}
+                  onChange={(val) => { setFilterBranch(val); setFilterDepartment(''); setProdEmployeeId(''); }}
+                  className="min-w-[160px]"
+                />
+                <SearchableSelect
+                  label={t('selectDepartment')}
+                  options={[{ _id: '', name: t('all') }, ...(departments || [])]}
+                  value={filterDepartment}
+                  onChange={(val) => { setFilterDepartment(val); setProdEmployeeId(''); }}
+                  className="min-w-[160px]"
+                />
+                <SearchableSelect
+                  label={t('selectEmployee')}
+                  options={[{ _id: '', name: t('all') }, ...(employees || [])]}
+                  value={prodEmployeeId}
+                  onChange={setProdEmployeeId}
+                  className="min-w-[180px]"
+                />
+                <SearchableSelect
+                  label={t('filterByBranch')}
+                  options={[{ _id: '', name: t('all') }, ...(branches || [])]}
+                  value={prodBranchId}
+                  onChange={setProdBranchId}
+                  className="min-w-[180px]"
+                />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('fromMonth')}</label>
                   <input type="month" value={prodMonthFrom} onChange={(e) => setProdMonthFrom(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500" />
@@ -577,20 +577,20 @@ export default function ReportsPage() {
             </div>
             <div className="p-6">
               <div className="flex flex-wrap gap-4 items-end mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('vendor')}</label>
-                  <select value={vendorProdVendorId} onChange={(e) => setVendorProdVendorId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500">
-                    <option value="">{t('all')}</option>
-                    {(vendors || []).map((v: { _id: string; name: string }) => <option key={v._id} value={v._id}>{v.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
-                  <select value={vendorProdBranchId} onChange={(e) => setVendorProdBranchId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg min-w-[180px] focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500">
-                    <option value="">{t('all')}</option>
-                    {(branches || []).map((b: { _id: string; name: string }) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
+                <SearchableSelect
+                  label={t('vendor')}
+                  options={[{ _id: '', name: t('all') }, ...(vendors || [])]}
+                  value={vendorProdVendorId}
+                  onChange={setVendorProdVendorId}
+                  className="min-w-[180px]"
+                />
+                <SearchableSelect
+                  label={t('filterByBranch')}
+                  options={[{ _id: '', name: t('all') }, ...(branches || [])]}
+                  value={vendorProdBranchId}
+                  onChange={setVendorProdBranchId}
+                  className="min-w-[180px]"
+                />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('fromMonth')}</label>
                   <input type="month" value={vendorProdMonthFrom} onChange={(e) => setVendorProdMonthFrom(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500" />

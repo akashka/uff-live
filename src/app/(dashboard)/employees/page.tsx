@@ -40,6 +40,7 @@ import ImportModal from '@/components/ImportModal';
 import { EmployeeDocuments } from '@/components/EmployeeDocuments';
 import { toast } from '@/lib/toast';
 import { formatAmount } from '@/lib/utils';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 interface Branch {
   _id: string;
@@ -112,8 +113,8 @@ export default function EmployeesPage() {
     branchId: filterBranch || undefined,
     employeeType: (filterEmployeeType as 'full_time' | 'contractor') || undefined,
   });
-  const { branches } = useBranches(true);
-  const { departments } = useDepartments(true);
+  const { branches } = useBranches(false);
+  const { departments } = useDepartments();
   const [modal, setModal] = useState<'create' | 'edit' | 'view' | null>(null);
   const [passwordModal, setPasswordModal] = useState<{ email: string; contactNumber: string; employeeId: string; password: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -180,7 +181,7 @@ export default function EmployeesPage() {
         .then((emp) => {
           if (emp._id) openEdit(emp as Employee);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [searchParams.get('edit'), employees, editingId]);
 
@@ -197,7 +198,7 @@ export default function EmployeesPage() {
         .then((emp) => {
           if (emp._id) openView(emp as Employee);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
     window.history.replaceState(null, '', '/employees');
   }, [searchParams.get('view'), employees, editingId]);
@@ -499,22 +500,22 @@ export default function EmployeesPage() {
 
   /* Full-screen add/edit form */
   if (modal) return (
-      <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
-        {/* Sticky block: breadcrumb + form header — sticks below dashboard header (h-14) */}
-        <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm -mx-4 -mt-6 px-4 pt-6 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-8 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
-          <div className="pb-2">
-            <Breadcrumb
-              items={[
-                { label: t('employees'), onClick: closeForm },
-                { label: modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit') },
-              ]}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4 py-4">
-            <h1 className="text-xl font-semibold text-slate-900 truncate">
-              {modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit')} {t('employees')}
-            </h1>
-            <div className="flex items-center gap-2 shrink-0">
+    <div className="flex flex-col h-full min-h-[calc(100vh-12rem)]">
+      {/* Sticky block: breadcrumb + form header — sticks below dashboard header (h-14) */}
+      <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm -mx-4 -mt-6 px-4 pt-6 sm:-mx-6 sm:-mt-8 sm:px-6 sm:pt-8 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
+        <div className="pb-2">
+          <Breadcrumb
+            items={[
+              { label: t('employees'), onClick: closeForm },
+              { label: modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit') },
+            ]}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4 py-4">
+          <h1 className="text-xl font-semibold text-slate-900 truncate">
+            {modal === 'create' ? t('add') : modal === 'view' ? t('view') : t('edit')} {t('employees')}
+          </h1>
+          <div className="flex items-center gap-2 shrink-0">
             {modal !== 'view' && (
               <button
                 onClick={handleSave}
@@ -537,299 +538,294 @@ export default function EmployeesPage() {
             </button>
           </div>
         </div>
-        </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto px-1">
-          <div className="max-w-5xl space-y-8">
-            <FormSection title={t('photo')}>
-              <div className="flex items-center gap-6">
-                <div className="shrink-0">
-                  {photoFile ? (
-                    <img src={URL.createObjectURL(photoFile)} alt="Preview" className="w-24 h-24 rounded-full object-cover border-2 border-slate-200" />
-                  ) : (
-                    <UserAvatar photo={form.photo || undefined} name={form.name} size="lg" className="w-24 h-24" />
-                  )}
+      <div className="flex-1 overflow-y-auto px-1">
+        <div className="max-w-5xl space-y-8">
+          <FormSection title={t('photo')}>
+            <div className="flex items-center gap-6">
+              <div className="shrink-0">
+                {photoFile ? (
+                  <img src={URL.createObjectURL(photoFile)} alt="Preview" className="w-24 h-24 rounded-full object-cover border-2 border-slate-200" />
+                ) : (
+                  <UserAvatar photo={form.photo || undefined} name={form.name} size="lg" className="w-24 h-24" />
+                )}
+              </div>
+              {modal !== 'view' && (
+                <div>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-uff-accent file:text-uff-primary file:font-medium hover:file:bg-uff-accent-hover"
+                  />
+                  <p className="text-xs text-slate-600 mt-1">JPEG, PNG, WebP or GIF. Max 2MB.</p>
                 </div>
-                {modal !== 'view' && (
-                  <div>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-uff-accent file:text-uff-primary file:font-medium hover:file:bg-uff-accent-hover"
-                    />
-                    <p className="text-xs text-slate-600 mt-1">JPEG, PNG, WebP or GIF. Max 2MB.</p>
+              )}
+            </div>
+          </FormSection>
+
+          <FormSection title={t('selectBranches') + ' & ' + t('department')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormField label={t('selectBranches')} required>
+                {branches.length === 0 && (
+                  <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
+                )}
+                <MultiselectDropdown
+                  options={Array.isArray(branches) ? branches : []}
+                  selectedIds={form.branches}
+                  onChange={(ids) => setForm((f) => ({ ...f, branches: ids }))}
+                  placeholder={t('selectBranches')}
+                  label={undefined}
+                  disabled={modal === 'view'}
+                  selectAllLabel={t('selectAll')}
+                  searchPlaceholder={t('search')}
+                />
+              </FormField>
+              <SearchableSelect
+                label={t('selectDepartment')}
+                options={Array.isArray(departments) ? departments : []}
+                value={form.department}
+                onChange={(val) => setForm((f) => ({ ...f, department: val }))}
+                disabled={modal === 'view'}
+                required
+              />
+            </div>
+          </FormSection>
+
+          <FormSection title={t('employeeName') + ' & ' + t('contactNumber')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <FormField label={t('employeeId')}>
+                <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono font-semibold text-slate-800 cursor-not-allowed">
+                  {form.employeeId || '—'}
+                </div>
+              </FormField>
+              <FormField label={t('employeeName')} required>
+                <ValidatedInput
+                  type="text"
+                  value={form.name}
+                  onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+                  fieldType="name"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('contactNumber')} required>
+                <ValidatedInput
+                  type="tel"
+                  value={form.contactNumber}
+                  onChange={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
+                  fieldType="phone"
+                  readOnly={modal === 'edit' || modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('email')} required>
+                <ValidatedInput
+                  type="email"
+                  value={form.email}
+                  onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+                  fieldType="email"
+                  readOnly={modal === 'edit' || modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('emergencyNumber')} required>
+                <ValidatedInput
+                  type="tel"
+                  value={form.emergencyNumber}
+                  onChange={(v) => setForm((f) => ({ ...f, emergencyNumber: v }))}
+                  fieldType="phone"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('dateOfBirth')} required>
+                <ValidatedInput
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))}
+                  fieldType="date"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('gender')} required>
+                <select
+                  value={form.gender}
+                  onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value as 'male' | 'female' | 'other' }))}
+                  disabled={modal === 'view'}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                >
+                  <option value="male">{t('male')}</option>
+                  <option value="female">{t('female')}</option>
+                  <option value="other">{t('other')}</option>
+                </select>
+              </FormField>
+              <FormField label={t('maritalStatus')}>
+                <select
+                  value={form.maritalStatus}
+                  onChange={(e) => setForm((f) => ({ ...f, maritalStatus: e.target.value as '' | 'single' | 'married' | 'other' }))}
+                  disabled={modal === 'view'}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                >
+                  <option value="">—</option>
+                  <option value="single">{t('single')}</option>
+                  <option value="married">{t('married')}</option>
+                  <option value="other">{t('other')}</option>
+                </select>
+              </FormField>
+              <FormField label={t('employeeType')} required>
+                <select
+                  value={form.employeeType}
+                  onChange={(e) => setForm((f) => ({ ...f, employeeType: e.target.value as 'full_time' | 'contractor' }))}
+                  disabled={modal === 'view'}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
+                >
+                  <option value="full_time">{t('fullTime')}</option>
+                  <option value="contractor">{t('contractor')}</option>
+                </select>
+              </FormField>
+              {modal === 'create' && (
+                <FormField label={t('role')}>
+                  <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent">
+                    <option value="employee">{t('employee')}</option>
+                    {user?.role === 'admin' && (
+                      <>
+                        <option value="hr">{t('hr')}</option>
+                        <option value="finance">{t('finance')}</option>
+                        <option value="accountancy">{t('accountancy')}</option>
+                        <option value="admin">{t('admin')}</option>
+                      </>
+                    )}
+                  </select>
+                </FormField>
+              )}
+            </div>
+          </FormSection>
+
+          {/* PF & ESI - nice card section for both full-time and contractor */}
+          <FormSection title={t('pf') + ' & ' + t('esi')}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
+                  <span className="font-medium text-slate-800">{t('applicable')} — {t('pf')}</span>
+                </label>
+                {form.pfOpted && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
+                    <FormField label={t('pfNumber')} required>
+                      <ValidatedInput type="text" value={form.pfNumber || ''} onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))} fieldType="pfNumber" readOnly={modal === 'view'} />
+                    </FormField>
+                    <FormField label={`${form.employeeType === 'contractor' ? t('monthlyPfAmount') : t('pf')} (₹)`} required>
+                      <ValidatedInput
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={String(form.employeeType === 'contractor' ? (form.monthlyPfAmount ?? '') : (form.salaryBreakup?.pf ?? ''))}
+                        onChange={(v) => setForm((f) => ({
+                          ...f,
+                          ...(f.employeeType === 'contractor' ? { monthlyPfAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }),
+                        }))}
+                        fieldType="number"
+                        placeholderHint={form.employeeType === 'contractor' ? 'e.g. 500' : 'e.g. 2100'}
+                        readOnly={modal === 'view'}
+                      />
+                    </FormField>
                   </div>
                 )}
               </div>
-            </FormSection>
-
-            <FormSection title={t('selectBranches') + ' & ' + t('department')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <FormField label={t('selectBranches')} required>
-                  {branches.length === 0 && (
-                    <p className="text-uff-accent text-sm mb-2">{t('addBranchFirst')}</p>
-                  )}
-                  <MultiselectDropdown
-                    options={Array.isArray(branches) ? branches : []}
-                    selectedIds={form.branches}
-                    onChange={(ids) => setForm((f) => ({ ...f, branches: ids }))}
-                    placeholder={t('selectBranches')}
-                    label={undefined}
-                    disabled={modal === 'view'}
-                    selectAllLabel={t('selectAll')}
-                    searchPlaceholder={t('search')}
-                  />
-                </FormField>
-                <FormField label={t('selectDepartment')} required>
-                  <select
-                    value={form.department}
-                    onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  >
-                    <option value="">—</option>
-                    {(Array.isArray(departments) ? departments : []).map((d: Department) => (
-                      <option key={d._id} value={d._id}>{d.name}</option>
-                    ))}
-                  </select>
-                </FormField>
-              </div>
-            </FormSection>
-
-            <FormSection title={t('employeeName') + ' & ' + t('contactNumber')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                <FormField label={t('employeeId')}>
-                  <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono font-semibold text-slate-800 cursor-not-allowed">
-                    {form.employeeId || '—'}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
+                  <span className="font-medium text-slate-800">{t('applicable')} — {t('esi')}</span>
+                </label>
+                {form.esiOpted && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
+                    <FormField label={t('esiNumber')} required>
+                      <ValidatedInput type="text" value={form.esiNumber || ''} onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))} fieldType="esiNumber" readOnly={modal === 'view'} />
+                    </FormField>
+                    <FormField label={`${form.employeeType === 'contractor' ? t('monthlyEsiAmount') : t('esi')} (₹)`} required>
+                      <ValidatedInput
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={String(form.employeeType === 'contractor' ? (form.monthlyEsiAmount ?? '') : (form.salaryBreakup?.esi ?? ''))}
+                        onChange={(v) => setForm((f) => ({
+                          ...f,
+                          ...(f.employeeType === 'contractor' ? { monthlyEsiAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }),
+                        }))}
+                        fieldType="number"
+                        placeholderHint={form.employeeType === 'contractor' ? 'e.g. 200' : 'e.g. 525'}
+                        readOnly={modal === 'view'}
+                      />
+                    </FormField>
                   </div>
-                </FormField>
-                <FormField label={t('employeeName')} required>
-                  <ValidatedInput
-                    type="text"
-                    value={form.name}
-                    onChange={(v) => setForm((f) => ({ ...f, name: v }))}
-                    fieldType="name"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('contactNumber')} required>
-                  <ValidatedInput
-                    type="tel"
-                    value={form.contactNumber}
-                    onChange={(v) => setForm((f) => ({ ...f, contactNumber: v }))}
-                    fieldType="phone"
-                    readOnly={modal === 'edit' || modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('email')} required>
-                  <ValidatedInput
-                    type="email"
-                    value={form.email}
-                    onChange={(v) => setForm((f) => ({ ...f, email: v }))}
-                    fieldType="email"
-                    readOnly={modal === 'edit' || modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('emergencyNumber')} required>
-                  <ValidatedInput
-                    type="tel"
-                    value={form.emergencyNumber}
-                    onChange={(v) => setForm((f) => ({ ...f, emergencyNumber: v }))}
-                    fieldType="phone"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('dateOfBirth')} required>
-                  <ValidatedInput
-                    type="date"
-                    value={form.dateOfBirth}
-                    onChange={(v) => setForm((f) => ({ ...f, dateOfBirth: v }))}
-                    fieldType="date"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('gender')} required>
-                  <select
-                    value={form.gender}
-                    onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value as 'male' | 'female' | 'other' }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  >
-                    <option value="male">{t('male')}</option>
-                    <option value="female">{t('female')}</option>
-                    <option value="other">{t('other')}</option>
-                  </select>
-                </FormField>
-                <FormField label={t('maritalStatus')}>
-                  <select
-                    value={form.maritalStatus}
-                    onChange={(e) => setForm((f) => ({ ...f, maritalStatus: e.target.value as '' | 'single' | 'married' | 'other' }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  >
-                    <option value="">—</option>
-                    <option value="single">{t('single')}</option>
-                    <option value="married">{t('married')}</option>
-                    <option value="other">{t('other')}</option>
-                  </select>
-                </FormField>
-                <FormField label={t('employeeType')} required>
-                  <select
-                    value={form.employeeType}
-                    onChange={(e) => setForm((f) => ({ ...f, employeeType: e.target.value as 'full_time' | 'contractor' }))}
-                    disabled={modal === 'view'}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg ${modal === 'view' ? 'bg-slate-50 cursor-default' : 'focus:ring-2 focus:ring-uff-accent'}`}
-                  >
-                    <option value="full_time">{t('fullTime')}</option>
-                    <option value="contractor">{t('contractor')}</option>
-                  </select>
-                </FormField>
-                {modal === 'create' && (
-                  <FormField label={t('role')}>
-                    <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent">
-                      <option value="employee">{t('employee')}</option>
-                      {user?.role === 'admin' && (
-                        <>
-                          <option value="hr">{t('hr')}</option>
-                          <option value="finance">{t('finance')}</option>
-                          <option value="accountancy">{t('accountancy')}</option>
-                          <option value="admin">{t('admin')}</option>
-                        </>
-                      )}
-                    </select>
-                  </FormField>
                 )}
               </div>
-            </FormSection>
+            </div>
+          </FormSection>
 
-            {/* PF & ESI - nice card section for both full-time and contractor */}
-            <FormSection title={t('pf') + ' & ' + t('esi')}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.pfOpted} onChange={(e) => setForm((f) => ({ ...f, pfOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
-                    <span className="font-medium text-slate-800">{t('applicable')} — {t('pf')}</span>
-                  </label>
-                  {form.pfOpted && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
-                      <FormField label={t('pfNumber')} required>
-                        <ValidatedInput type="text" value={form.pfNumber || ''} onChange={(v) => setForm((f) => ({ ...f, pfNumber: v }))} fieldType="pfNumber" readOnly={modal === 'view'} />
-                      </FormField>
-                      <FormField label={`${form.employeeType === 'contractor' ? t('monthlyPfAmount') : t('pf')} (₹)`} required>
-                        <ValidatedInput
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={String(form.employeeType === 'contractor' ? (form.monthlyPfAmount ?? '') : (form.salaryBreakup?.pf ?? ''))}
-                          onChange={(v) => setForm((f) => ({
-                            ...f,
-                            ...(f.employeeType === 'contractor' ? { monthlyPfAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, pf: parseFloat(v) || 0 } }),
-                          }))}
-                          fieldType="number"
-                          placeholderHint={form.employeeType === 'contractor' ? 'e.g. 500' : 'e.g. 2100'}
-                          readOnly={modal === 'view'}
-                        />
-                      </FormField>
-                    </div>
-                  )}
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={form.esiOpted} onChange={(e) => setForm((f) => ({ ...f, esiOpted: e.target.checked }))} disabled={modal === 'view'} className="rounded border-slate-400" />
-                    <span className="font-medium text-slate-800">{t('applicable')} — {t('esi')}</span>
-                  </label>
-                  {form.esiOpted && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
-                      <FormField label={t('esiNumber')} required>
-                        <ValidatedInput type="text" value={form.esiNumber || ''} onChange={(v) => setForm((f) => ({ ...f, esiNumber: v }))} fieldType="esiNumber" readOnly={modal === 'view'} />
-                      </FormField>
-                      <FormField label={`${form.employeeType === 'contractor' ? t('monthlyEsiAmount') : t('esi')} (₹)`} required>
-                        <ValidatedInput
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={String(form.employeeType === 'contractor' ? (form.monthlyEsiAmount ?? '') : (form.salaryBreakup?.esi ?? ''))}
-                          onChange={(v) => setForm((f) => ({
-                            ...f,
-                            ...(f.employeeType === 'contractor' ? { monthlyEsiAmount: parseFloat(v) || 0 } : { salaryBreakup: { ...f.salaryBreakup, esi: parseFloat(v) || 0 } }),
-                          }))}
-                          fieldType="number"
-                          placeholderHint={form.employeeType === 'contractor' ? 'e.g. 200' : 'e.g. 525'}
-                          readOnly={modal === 'view'}
-                        />
-                      </FormField>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </FormSection>
-
-            {/* Full-time: Salary (monthly OR daily) + OT cost */}
-            {form.employeeType === 'full_time' && (
-              <FormSection title={t('salaryBreakup')}>
-                <p className="text-sm text-slate-600 mb-4">{t('salaryBasis')}: Enter either {t('salaryBasisMonthly')} or {t('salaryBasisDaily')} (not both)</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <FormField label={`${t('monthlySalary')} (₹)`}>
-                    <ValidatedInput
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={hasMonthly ? String(form.monthlySalary) : ''}
-                      onChange={(v) => setForm((f) => {
-                        const val = parseFloat(v) || 0;
-                        return { ...f, monthlySalary: val, dailySalary: val > 0 ? 0 : f.dailySalary };
-                      })}
-                      fieldType="number"
-                      placeholderHint="e.g. 35000"
-                      readOnly={modal === 'view'}
-                    />
-                  </FormField>
-                  <FormField label={`${t('dailySalary')} (₹)`}>
-                    <ValidatedInput
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={hasDaily ? String(form.dailySalary) : ''}
-                      onChange={(v) => setForm((f) => {
-                        const val = parseFloat(v) || 0;
-                        return { ...f, dailySalary: val, monthlySalary: val > 0 ? 0 : f.monthlySalary };
-                      })}
-                      fieldType="number"
-                      placeholderHint="e.g. 1500"
-                      readOnly={modal === 'view'}
-                    />
-                  </FormField>
-                </div>
-                <FormField label={`${t('overtimeCostPerHour')} (₹)`} required>
+          {/* Full-time: Salary (monthly OR daily) + OT cost */}
+          {form.employeeType === 'full_time' && (
+            <FormSection title={t('salaryBreakup')}>
+              <p className="text-sm text-slate-600 mb-4">{t('salaryBasis')}: Enter either {t('salaryBasisMonthly')} or {t('salaryBasisDaily')} (not both)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <FormField label={`${t('monthlySalary')} (₹)`}>
                   <ValidatedInput
                     type="number"
                     min={0}
                     step={0.01}
-                    value={String(form.overtimeCostPerHour ?? '')}
-                    onChange={(v) => setForm((f) => ({ ...f, overtimeCostPerHour: parseFloat(v) || 0 }))}
+                    value={hasMonthly ? String(form.monthlySalary) : ''}
+                    onChange={(v) => setForm((f) => {
+                      const val = parseFloat(v) || 0;
+                      return { ...f, monthlySalary: val, dailySalary: val > 0 ? 0 : f.dailySalary };
+                    })}
                     fieldType="number"
-                    placeholderHint="e.g. 80"
+                    placeholderHint="e.g. 35000"
                     readOnly={modal === 'view'}
                   />
                 </FormField>
-                <p className="text-xs text-slate-500 mt-1">{t('overtimeCostPerHourHint')}</p>
-                {((form.monthlySalary || 0) > 0 || (form.dailySalary || 0) > 0) && (
-                  <p className="text-sm text-slate-700 mt-2">
-                    {t('netSalary')} (approx): ₹{formatAmount(
-                      (form.monthlySalary || 0) + (form.dailySalary || 0) * 26 - (form.pfOpted ? (form.salaryBreakup?.pf || 0) : 0) - (form.esiOpted ? (form.salaryBreakup?.esi || 0) : 0) - otherTotal
-                    )}
-                  </p>
-                )}
-              </FormSection>
-            )}
+                <FormField label={`${t('dailySalary')} (₹)`}>
+                  <ValidatedInput
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={hasDaily ? String(form.dailySalary) : ''}
+                    onChange={(v) => setForm((f) => {
+                      const val = parseFloat(v) || 0;
+                      return { ...f, dailySalary: val, monthlySalary: val > 0 ? 0 : f.monthlySalary };
+                    })}
+                    fieldType="number"
+                    placeholderHint="e.g. 1500"
+                    readOnly={modal === 'view'}
+                  />
+                </FormField>
+              </div>
+              <FormField label={`${t('overtimeCostPerHour')} (₹)`} required>
+                <ValidatedInput
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={String(form.overtimeCostPerHour ?? '')}
+                  onChange={(v) => setForm((f) => ({ ...f, overtimeCostPerHour: parseFloat(v) || 0 }))}
+                  fieldType="number"
+                  placeholderHint="e.g. 80"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <p className="text-xs text-slate-500 mt-1">{t('overtimeCostPerHourHint')}</p>
+              {((form.monthlySalary || 0) > 0 || (form.dailySalary || 0) > 0) && (
+                <p className="text-sm text-slate-700 mt-2">
+                  {t('netSalary')} (approx): ₹{formatAmount(
+                    (form.monthlySalary || 0) + (form.dailySalary || 0) * 26 - (form.pfOpted ? (form.salaryBreakup?.pf || 0) : 0) - (form.esiOpted ? (form.salaryBreakup?.esi || 0) : 0) - otherTotal
+                  )}
+                </p>
+              )}
+            </FormSection>
+          )}
 
-            {/* Other deductions - multiple with add/remove */}
-            <FormSection title={t('otherDeductions')}>
-              <div className="space-y-3">
-                {form.otherDeductions.map((d, idx) => (
-                  <div key={idx} className="flex gap-3 items-end">
-                    <div className="flex-1 min-w-0">
+          {/* Other deductions - multiple with add/remove */}
+          <FormSection title={t('otherDeductions')}>
+            <div className="space-y-3">
+              {form.otherDeductions.map((d, idx) => (
+                <div key={idx} className="flex gap-3 items-end">
+                  <div className="flex-1 min-w-0">
                     <FormField label={t('reasonForDeduction')}>
                       <ValidatedInput
                         type="text"
@@ -843,8 +839,8 @@ export default function EmployeesPage() {
                         readOnly={modal === 'view'}
                       />
                     </FormField>
-                    </div>
-                    <div className="w-32 shrink-0">
+                  </div>
+                  <div className="w-32 shrink-0">
                     <FormField label={`${t('amount')} (₹)`}>
                       <ValidatedInput
                         type="number"
@@ -859,169 +855,169 @@ export default function EmployeesPage() {
                         readOnly={modal === 'view'}
                       />
                     </FormField>
-                    </div>
-                    {modal !== 'view' && (
-                      <button
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, otherDeductions: f.otherDeductions.filter((_, i) => i !== idx) }))}
-                        className="shrink-0 p-2 rounded-lg text-red-600 hover:bg-red-50"
-                        aria-label={t('removeDeduction')}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    )}
                   </div>
-                ))}
-                {modal !== 'view' && (
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, otherDeductions: [...f.otherDeductions, { reason: '', amount: 0 }] }))}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    {t('addDeduction')}
-                  </button>
-                )}
-                {otherTotal > 0 && <p className="text-sm text-slate-600">Total: ₹{formatAmount(otherTotal)}</p>}
-              </div>
-            </FormSection>
+                  {modal !== 'view' && (
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, otherDeductions: f.otherDeductions.filter((_, i) => i !== idx) }))}
+                      className="shrink-0 p-2 rounded-lg text-red-600 hover:bg-red-50"
+                      aria-label={t('removeDeduction')}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {modal !== 'view' && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, otherDeductions: [...f.otherDeductions, { reason: '', amount: 0 }] }))}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 text-slate-600 hover:bg-slate-50 text-sm font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  {t('addDeduction')}
+                </button>
+              )}
+              {otherTotal > 0 && <p className="text-sm text-slate-600">Total: ₹{formatAmount(otherTotal)}</p>}
+            </div>
+          </FormSection>
 
-            <FormSection title={t('aadhaarNumber') + ' / ' + t('panNumber')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <FormField label={t('aadhaarNumber')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.aadhaarNumber || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, aadhaarNumber: v }))}
-                    fieldType="aadhaar"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('panNumber')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.panNumber || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, panNumber: v.toUpperCase() }))}
-                    fieldType="pan"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-              </div>
-            </FormSection>
-
-            <FormSection title={t('bankingDetails')}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                <FormField label={t('bankName')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.bankName || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
-                    fieldType="bankName"
-                    placeholderHint="e.g. State Bank of India"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('bankBranch')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.bankBranch || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, bankBranch: v }))}
-                    fieldType="text"
-                    placeholderHint="e.g. Main Branch, Bangalore"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('ifscCode')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.ifscCode || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, ifscCode: v.toUpperCase() }))}
-                    fieldType="ifsc"
-                    maxLength={11}
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('accountNumber')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.accountNumber || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, accountNumber: v.replace(/\D/g, '') }))}
-                    fieldType="accountNumber"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-                <FormField label={t('upiId')}>
-                  <ValidatedInput
-                    type="text"
-                    value={form.upiId || ''}
-                    onChange={(v) => setForm((f) => ({ ...f, upiId: v }))}
-                    fieldType="upi"
-                    readOnly={modal === 'view'}
-                  />
-                </FormField>
-              </div>
-            </FormSection>
-
-            {editingId && (
-              <FormSection title={t('documents')}>
-                <EmployeeDocuments
-                  documents={form.documents ?? []}
-                  employeeId={editingId}
-                  canUpload={modal !== 'view' && !!user && ['admin', 'finance', 'hr'].includes(user.role)}
-                  onUploadSuccess={async () => {
-                    const r = await fetch(`/api/employees/${editingId}`);
-                    const emp = await r.json();
-                    if (emp?.documents) setForm((f) => ({ ...f, documents: emp.documents }));
-                  }}
-                  uploadEndpoint={`/api/employees/${editingId}/documents`}
+          <FormSection title={t('aadhaarNumber') + ' / ' + t('panNumber')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormField label={t('aadhaarNumber')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.aadhaarNumber || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, aadhaarNumber: v }))}
+                  fieldType="aadhaar"
+                  readOnly={modal === 'view'}
                 />
-              </FormSection>
-            )}
+              </FormField>
+              <FormField label={t('panNumber')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.panNumber || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, panNumber: v.toUpperCase() }))}
+                  fieldType="pan"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+            </div>
+          </FormSection>
 
+          <FormSection title={t('bankingDetails')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <FormField label={t('bankName')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.bankName || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, bankName: v }))}
+                  fieldType="bankName"
+                  placeholderHint="e.g. State Bank of India"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('bankBranch')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.bankBranch || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, bankBranch: v }))}
+                  fieldType="text"
+                  placeholderHint="e.g. Main Branch, Bangalore"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('ifscCode')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.ifscCode || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, ifscCode: v.toUpperCase() }))}
+                  fieldType="ifsc"
+                  maxLength={11}
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('accountNumber')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.accountNumber || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, accountNumber: v.replace(/\D/g, '') }))}
+                  fieldType="accountNumber"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+              <FormField label={t('upiId')}>
+                <ValidatedInput
+                  type="text"
+                  value={form.upiId || ''}
+                  onChange={(v) => setForm((f) => ({ ...f, upiId: v }))}
+                  fieldType="upi"
+                  readOnly={modal === 'view'}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          {editingId && (
+            <FormSection title={t('documents')}>
+              <EmployeeDocuments
+                documents={form.documents ?? []}
+                employeeId={editingId}
+                canUpload={modal !== 'view' && !!user && ['admin', 'finance', 'hr'].includes(user.role)}
+                onUploadSuccess={async () => {
+                  const r = await fetch(`/api/employees/${editingId}`);
+                  const emp = await r.json();
+                  if (emp?.documents) setForm((f) => ({ ...f, documents: emp.documents }));
+                }}
+                uploadEndpoint={`/api/employees/${editingId}/documents`}
+              />
+            </FormSection>
+          )}
+
+        </div>
+      </div>
+
+      {passwordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('loginCredentials')}</h2>
+            <p className="text-slate-600 text-sm mb-4">Save these credentials securely. The password will not be shown again.</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('email')}</span>
+                  <p className="font-mono text-sm break-all">{passwordModal.email}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.email)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('contactNumber')}</span>
+                  <p className="font-mono text-sm">{passwordModal.contactNumber}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.contactNumber)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-slate-500 uppercase">{t('employeeId')}</span>
+                  <p className="font-mono text-sm font-semibold">{passwordModal.employeeId}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.employeeId)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
+              </div>
+              <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <div>
+                  <span className="text-xs font-medium text-amber-700 uppercase">{t('password')}</span>
+                  <p className="font-mono text-sm break-all">{passwordModal.password}</p>
+                </div>
+                <button onClick={() => copyCredentials(passwordModal.password)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copyPassword')}</button>
+              </div>
+            </div>
+            <button onClick={() => setPasswordModal(null)} className="mt-4 w-full py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white">{t('close')}</button>
           </div>
         </div>
-
-        {passwordModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-              <h2 className="text-lg font-semibold text-uff-accent mb-2">{t('loginCredentials')}</h2>
-              <p className="text-slate-600 text-sm mb-4">Save these credentials securely. The password will not be shown again.</p>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
-                  <div>
-                    <span className="text-xs font-medium text-slate-500 uppercase">{t('email')}</span>
-                    <p className="font-mono text-sm break-all">{passwordModal.email}</p>
-                  </div>
-                  <button onClick={() => copyCredentials(passwordModal.email)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
-                </div>
-                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
-                  <div>
-                    <span className="text-xs font-medium text-slate-500 uppercase">{t('contactNumber')}</span>
-                    <p className="font-mono text-sm">{passwordModal.contactNumber}</p>
-                  </div>
-                  <button onClick={() => copyCredentials(passwordModal.contactNumber)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
-                </div>
-                <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-lg">
-                  <div>
-                    <span className="text-xs font-medium text-slate-500 uppercase">{t('employeeId')}</span>
-                    <p className="font-mono text-sm font-semibold">{passwordModal.employeeId}</p>
-                  </div>
-                  <button onClick={() => copyCredentials(passwordModal.employeeId)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copy')}</button>
-                </div>
-                <div className="flex items-center justify-between gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <div>
-                    <span className="text-xs font-medium text-amber-700 uppercase">{t('password')}</span>
-                    <p className="font-mono text-sm break-all">{passwordModal.password}</p>
-                  </div>
-                  <button onClick={() => copyCredentials(passwordModal.password)} className="shrink-0 px-2 py-1 rounded bg-uff-accent text-uff-primary text-xs">{t('copyPassword')}</button>
-                </div>
-              </div>
-              <button onClick={() => setPasswordModal(null)} className="mt-4 w-full py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white">{t('close')}</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -1035,14 +1031,14 @@ export default function EmployeesPage() {
               >
                 {t('importFromExcel')}
               </button>
-          <button
-            onClick={openCreate}
-            disabled={branches.length === 0}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
-          >
-            {t('add')} {t('employees')}
-          </button>
+              <button
+                onClick={openCreate}
+                disabled={branches.length === 0}
+                className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!Array.isArray(branches) || branches.length === 0 ? t('addBranchFirst') : ''}
+              >
+                {t('add')} {t('employees')}
+              </button>
             </>
           )}
         </div>
@@ -1058,32 +1054,18 @@ export default function EmployeesPage() {
         onViewModeChange={setViewMode}
         searchPlaceholder={t('search')}
       >
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByBranch')}</label>
-          <select
-            value={filterBranch}
-            onChange={(e) => setFilterBranch(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-          >
-            <option value="">{t('all')}</option>
-            {(Array.isArray(branches) ? branches : []).map((b: Branch) => (
-              <option key={b._id} value={b._id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">{t('department')}</label>
-          <select
-            value={filterDepartment}
-            onChange={(e) => setFilterDepartment(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-          >
-            <option value="">{t('all')}</option>
-            {(Array.isArray(departments) ? departments : []).map((d: Department) => (
-              <option key={d._id} value={d._id}>{d.name}</option>
-            ))}
-          </select>
-        </div>
+        <SearchableSelect
+          label={t('filterByBranch')}
+          options={[{ _id: '', name: t('all') }, ...(Array.isArray(branches) ? branches : [])]}
+          value={filterBranch}
+          onChange={setFilterBranch}
+        />
+        <SearchableSelect
+          label={t('department')}
+          options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
+          value={filterDepartment}
+          onChange={setFilterDepartment}
+        />
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByType')}</label>
           <select
@@ -1151,16 +1133,16 @@ export default function EmployeesPage() {
                   </DataTableCell>
                   <DataTableCell align="right">
                     <ActionButtons
-                          onView={() => openView(e)}
-                          onEdit={canAdd ? () => openEdit(e) : undefined}
-                          onToggleActive={canAdd ? () => handleToggleActive(e) : undefined}
-                          passbookHref={`/employees/${e._id}/passbook`}
-                          isActive={e.isActive}
-                          viewLabel={t('view')}
-                          editLabel={t('edit')}
-                          toggleLabel={e.isActive ? t('makeInactive') : t('makeActive')}
-                          passbookLabel={t('viewPassbook')}
-                        />
+                      onView={() => openView(e)}
+                      onEdit={canAdd ? () => openEdit(e) : undefined}
+                      onToggleActive={canAdd ? () => handleToggleActive(e) : undefined}
+                      passbookHref={`/employees/${e._id}/passbook`}
+                      isActive={e.isActive}
+                      viewLabel={t('view')}
+                      editLabel={t('edit')}
+                      toggleLabel={e.isActive ? t('makeInactive') : t('makeActive')}
+                      passbookLabel={t('viewPassbook')}
+                    />
                   </DataTableCell>
                 </DataTableRow>
               ))

@@ -12,6 +12,7 @@ import { useEmployees, usePayments, useBranches, useDepartments } from '@/lib/ho
 import ValidatedInput from '@/components/ValidatedInput';
 import { formatMonth, formatAmount } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 
 function getCurrentMonth() {
   const now = new Date();
@@ -96,8 +97,8 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   );
   const { employees: allEmployees } = useEmployees(false, { limit: 0, branchId: filterBranch || undefined, departmentId: filterDepartment || undefined });
   const employees = (Array.isArray(allEmployees) ? allEmployees : []).filter((e: Employee) => e.employeeType === paymentType);
-  const { branches } = useBranches(true);
-  const { departments } = useDepartments(true);
+  const { branches } = useBranches(false);
+  const { departments } = useDepartments(false);
   const [form, setForm] = useState({
     branchId: '',
     departmentId: '',
@@ -138,6 +139,7 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
   const [advanceModal, setAdvanceModal] = useState(false);
   const [carryModal, setCarryModal] = useState<{ remaining: number; onConfirm: (amount: number, remarks: string) => void } | null>(null);
   const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
+  const [calc, setCalc] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
@@ -273,21 +275,25 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
     }
   };
 
-  const loadCalculation = async (empId: string, month: string) => {
+  const loadCalculation = async (empId: string, month: string, selectedIds?: string[]) => {
     if (!empId || !month) return;
-    const calc = await fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=${paymentType}`).then((r) => r.json());
+    const wrParam = selectedIds ? `&selectedWorkRecordIds=${selectedIds.join(',')}` : '';
+    const calc = await fetch(`/api/payments/calculate?employeeId=${empId}&month=${month}&type=${paymentType}${wrParam}`).then((r) => r.json());
     if (calc.error) return;
     const base = calc.baseAmount || 0;
     const pf = paymentType === 'contractor' ? (calc.pfToDeduct || 0) : 0;
     const esi = paymentType === 'contractor' ? (calc.esiToDeduct || 0) : 0;
     const total = base - pf - esi;
+    setCalc(calc);
+    const unpaidIds = (calc.workRecords || []).filter((r: any) => !r.isPaid && !r.isPendingApproval).map((r: any) => r._id);
+    const unpaidFtIds = (calc.fullTimeWorkRecords || []).filter((r: any) => !r.isPaid).map((r: any) => r._id);
     setForm((f) => ({
       ...f,
       baseAmount: base,
       pfDeducted: pf,
       esiDeducted: esi,
       totalPayable: total + f.addDeductAmount,
-      workRecordIds: paymentType === 'contractor' ? (calc.workRecords || []).map((r: WorkRecord) => r._id) : [],
+      workRecordIds: paymentType === 'contractor' ? (selectedIds ?? unpaidIds) : (selectedIds ?? unpaidFtIds),
     }));
   };
 
@@ -439,33 +445,27 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
         <div className="flex flex-wrap gap-3 items-center">
           {!isEmployee && (
             <>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectBranch')}</label>
-                <select value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setFilterDepartment(''); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                    <option key={b._id} value={b._id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('selectDepartment')}</label>
-                <select value={filterDepartment} onChange={(e) => { setFilterDepartment(e.target.value); setFilterEmployee(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                    <option key={d._id} value={d._id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-                <select value={filterEmployee} onChange={(e) => setFilterEmployee(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white">
-                  <option value="">{t('all')}</option>
-                  {employees.map((e) => (
-                    <option key={e._id} value={e._id}>{e.name}</option>
-                  ))}
-                </select>
-              </div>
+              <SearchableSelect
+                label={t('selectBranch')}
+                options={[{ _id: '', name: t('all') }, ...(Array.isArray(branches) ? branches : [])]}
+                value={filterBranch}
+                onChange={(val: string) => { setFilterBranch(val); setFilterDepartment(''); setFilterEmployee(''); }}
+                className="min-w-[140px]"
+              />
+              <SearchableSelect
+                label={t('selectDepartment')}
+                options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
+                value={filterDepartment}
+                onChange={(val: string) => { setFilterDepartment(val); setFilterEmployee(''); }}
+                className="min-w-[140px]"
+              />
+              <SearchableSelect
+                label={t('employeeName')}
+                options={[{ _id: '', name: t('all') }, ...employees]}
+                value={filterEmployee}
+                onChange={setFilterEmployee}
+                className="min-w-[160px]"
+              />
             </>
           )}
           <div>
@@ -630,33 +630,27 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       }>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')}</label>
-              <select value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
-                <option value="">{t('selectBranch')}...</option>
-                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')}</label>
-              <select value={form.departmentId} onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
-                <option value="">{form.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
-                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500" aria-hidden="true">*</span></label>
-              <select value={form.employeeId} onChange={(e) => onEmployeeChange(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">{employeesForForm.length === 0 && form.branchId ? (form.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}</option>
-                {employeesForForm.map((e) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('selectBranch')}
+              options={[{ _id: '', name: t('selectBranch') + '...' }, ...(Array.isArray(branches) ? branches : [])]}
+              value={form.branchId}
+              onChange={(val) => setForm((f) => ({ ...f, branchId: val, departmentId: '', employeeId: '' }))}
+            />
+            <SearchableSelect
+              label={t('selectDepartment')}
+              options={[{ _id: '', name: form.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first' }, ...(Array.isArray(departments) ? departments : [])]}
+              value={form.departmentId}
+              onChange={(val) => setForm((f) => ({ ...f, departmentId: val, employeeId: '' }))}
+              disabled={!form.branchId}
+            />
+            <SearchableSelect
+              label={t('employeeName')}
+              options={employeesForForm}
+              value={form.employeeId}
+              onChange={onEmployeeChange}
+              placeholder={employeesForForm.length === 0 && form.branchId ? (form.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}
+              required
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -667,6 +661,81 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
           <button type="button" onClick={() => form.employeeId && onMonthChange()} className="text-sm font-medium text-uff-accent hover:text-uff-accent-hover">
             {t('calculate')}
           </button>
+          {paymentType === 'contractor' && calc?.workRecords && calc.workRecords.length > 0 && (
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+              <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {calc.workRecords.map((wr: any) => {
+                  const isPaid = wr.isPaid || !!wr.paymentId;
+                  const isPendingApproval = wr.isPendingApproval ?? false;
+                  const isDisabled = isPaid || isPendingApproval;
+                  const isSelected = form.workRecordIds.includes(wr._id);
+                  return (
+                    <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => {
+                          if (isDisabled) return;
+                          const next = isSelected ? form.workRecordIds.filter((id) => id !== wr._id) : [...form.workRecordIds, wr._id];
+                          setForm((f) => ({ ...f, workRecordIds: next }));
+                          loadCalculation(form.employeeId, form.month, next);
+                        }}
+                        className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700">
+                          {(wr.branch as { name?: string })?.name || t('workRecord')}
+                          {wr.styleOrder ? ` – ${wr.styleOrder.styleCode}` : ''}
+                          {isPaid ? ` (${t('paid')})` : isPendingApproval ? ` (${t('awaitingApproval')})` : ''}
+                        </p>
+                        {((wr.workItems || []).map((item: any, i: number) => (
+                          <p key={i} className="text-slate-600 text-xs ml-2">{item.rateName}: {item.quantity} × ₹{formatAmount(item.ratePerUnit)} = ₹{formatAmount(item.amount)}</p>
+                        )))}
+                        <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount || 0)}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {paymentType === 'full_time' && calc?.fullTimeWorkRecords && calc.fullTimeWorkRecords.length > 0 && (
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+              <p className="text-sm font-medium text-slate-800">{t('workOrders')} – {t('selectPaymentAgainst')}</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {calc.fullTimeWorkRecords.map((wr: any) => {
+                  const isPaid = wr.isPaid || !!wr.paymentId;
+                  const isDisabled = isPaid;
+                  const isSelected = form.workRecordIds.includes(wr._id);
+                  return (
+                    <label key={wr._id} className={`flex items-start gap-3 p-2 rounded-lg border cursor-pointer ${isDisabled ? 'bg-slate-100 border-slate-200 opacity-75' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={isDisabled}
+                        onChange={() => {
+                          if (isDisabled) return;
+                          const next = isSelected ? form.workRecordIds.filter((id) => id !== wr._id) : [...form.workRecordIds, wr._id];
+                          setForm((f) => ({ ...f, workRecordIds: next }));
+                          loadCalculation(form.employeeId, form.month, next);
+                        }}
+                        className="mt-1 rounded border-slate-300 text-uff-accent disabled:opacity-50"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700">
+                          {(wr.branch as { name?: string })?.name || t('branch')} – {wr.daysWorked} {t('daysWorked')}, {wr.otHours} {t('otHours')}
+                          {isPaid ? ` (${t('paid')})` : ''}
+                        </p>
+                        <p className="text-slate-800 font-medium mt-0.5">₹{formatAmount(wr.totalAmount || 0)}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
@@ -741,33 +810,28 @@ export default function PaymentsByType({ paymentType, pageTitle }: PaymentsByTyp
       }>
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectBranch')} <span className="text-red-500">*</span></label>
-              <select value={advanceForm.branchId} onChange={(e) => setAdvanceForm((f) => ({ ...f, branchId: e.target.value, departmentId: '', employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
-                <option value="">{t('selectBranch')}...</option>
-                {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('selectDepartment')} <span className="text-red-500">*</span></label>
-              <select value={advanceForm.departmentId} onChange={(e) => setAdvanceForm((f) => ({ ...f, departmentId: e.target.value, employeeId: '' }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent">
-                <option value="">{advanceForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first'}</option>
-                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-800 mb-1.5">{t('employeeName')} <span className="text-red-500">*</span></label>
-              <select value={advanceForm.employeeId} onChange={(e) => setAdvanceForm((f) => ({ ...f, employeeId: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-uff-accent focus:border-uff-accent" required>
-                <option value="">{employeesForAdvanceForm.length === 0 && advanceForm.branchId ? (advanceForm.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}</option>
-                {employeesForAdvanceForm.map((e) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('selectBranch')}
+              options={[{ _id: '', name: t('selectBranch') + '...' }, ...(Array.isArray(branches) ? branches : [])]}
+              value={advanceForm.branchId}
+              onChange={(val) => setAdvanceForm((f) => ({ ...f, branchId: val, departmentId: '', employeeId: '' }))}
+              required
+            />
+            <SearchableSelect
+              label={t('selectDepartment')}
+              options={[{ _id: '', name: advanceForm.branchId ? `${t('selectDepartment')}...` : t('selectBranch') + ' first' }, ...(Array.isArray(departments) ? departments : [])]}
+              value={advanceForm.departmentId}
+              onChange={(val) => setAdvanceForm((f) => ({ ...f, departmentId: val, employeeId: '' }))}
+              required
+            />
+            <SearchableSelect
+              label={t('employeeName')}
+              options={employeesForAdvanceForm}
+              value={advanceForm.employeeId}
+              onChange={(val) => setAdvanceForm((f) => ({ ...f, employeeId: val }))}
+              placeholder={employeesForAdvanceForm.length === 0 && advanceForm.branchId ? (advanceForm.departmentId ? noEmployeesMsg : t('selectDepartment') + ' first') : 'Select...'}
+              required
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

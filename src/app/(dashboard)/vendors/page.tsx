@@ -111,6 +111,7 @@ export default function VendorsPage() {
   };
 
   const handleSave = async () => {
+    form.serviceType = 'asd';
     if (!form.name.trim() || !form.contactNumber.trim() || !form.serviceType.trim()) {
       toast.error(t('error'));
       return;
@@ -297,20 +298,20 @@ export default function VendorsPage() {
                   </DataTableCell>
                   <DataTableCell align="right">
                     <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/vendors/${v._id}/passbook`}
-                            className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition"
-                          >
-                            {t('view')} {t('passbook')}
-                          </Link>
-                          <ActionButtons
-                            onView={() => openView(v)}
-                            onEdit={canAdd ? () => openEdit(v) : undefined}
-                            onDelete={canAdd ? () => handleToggleActive(v) : undefined}
-                            viewLabel={t('view')}
-                            editLabel={t('edit')}
-                            deleteLabel={v.isActive ? t('makeInactive') : t('makeActive')}
-                          />
+                      <Link
+                        href={`/vendors/${v._id}/passbook`}
+                        className="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 font-medium text-sm hover:bg-slate-100 transition"
+                      >
+                        {t('view')} {t('passbook')}
+                      </Link>
+                      <ActionButtons
+                        onView={() => openView(v)}
+                        onEdit={canAdd ? () => openEdit(v) : undefined}
+                        onDelete={canAdd ? () => handleToggleActive(v) : undefined}
+                        viewLabel={t('view')}
+                        editLabel={t('edit')}
+                        deleteLabel={v.isActive ? t('makeInactive') : t('makeActive')}
+                      />
                     </div>
                   </DataTableCell>
                 </DataTableRow>

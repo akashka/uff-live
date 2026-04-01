@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/components/PageHeader';
@@ -14,6 +14,7 @@ import { formatMonth, formatAmount } from '@/lib/utils';
 import ConfirmModal from '@/components/ConfirmModal';
 import Modal from '@/components/Modal';
 import { toast } from '@/lib/toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
 import WorkOrderFormContractor from '@/components/work-orders/WorkOrderFormContractor';
 import WorkOrderFormFullTime from '@/components/work-orders/WorkOrderFormFullTime';
 import WorkOrderFormVendor from '@/components/work-orders/WorkOrderFormVendor';
@@ -34,6 +35,7 @@ interface WorkOrderRow {
 export default function WorkOrdersPage() {
   const { t } = useApp();
   const { user } = useAuth();
+  const router = useRouter();
   const canAccessAll = ['admin', 'finance', 'accountancy', 'hr'].includes(user?.role || '');
   const isContractorEmployee = !!user?.employeeId && user?.employeeType === 'contractor';
   const canAdd = ['admin', 'finance', 'hr'].includes(user?.role || '');
@@ -67,7 +69,7 @@ export default function WorkOrdersPage() {
   );
 
   const { branches } = useBranches(false);
-  const { departments } = useDepartments(true);
+  const { departments } = useDepartments(false);
   const { employees: empList } = useEmployees(false, { limit: 0, departmentId: filterDepartment || undefined });
   const { vendors: vendorList } = useVendors(false, { limit: 0 });
 
@@ -105,7 +107,7 @@ export default function WorkOrdersPage() {
               setModal('view');
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [recordIdFromUrl, records, loading, canAccessAll]);
@@ -129,7 +131,7 @@ export default function WorkOrdersPage() {
               setModal('view');
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [vendorWorkOrderIdFromUrl, records, loading, canAccessAll]);
@@ -150,12 +152,12 @@ export default function WorkOrdersPage() {
         const dummyRaw: any = {};
         if (qaMonth) dummyRaw.month = qaMonth;
         if (qaType === 'contractor' || qaType === 'full_time') {
-           if (qaEmployeeId) dummyRaw.employee = { _id: qaEmployeeId, name: qaEmployeeName };
+          if (qaEmployeeId) dummyRaw.employee = { _id: qaEmployeeId, name: qaEmployeeName };
         } else if (qaType === 'vendor') {
-           if (qaVendorId) dummyRaw.vendor = { _id: qaVendorId, name: qaVendorName };
+          if (qaVendorId) dummyRaw.vendor = { _id: qaVendorId, name: qaVendorName };
         }
         if (qaStyleCode) dummyRaw.styleOrder = { styleCode: qaStyleCode };
-        
+
         setCreateType(qaType);
         setCreateStep('form');
         setEditingRecord({
@@ -167,7 +169,7 @@ export default function WorkOrdersPage() {
           raw: dummyRaw
         });
         setModal('create');
-        
+
         // Remove params from URL so it doesn't reopen on refresh
         window.history.replaceState(null, '', '/work-orders');
       }
@@ -275,10 +277,13 @@ export default function WorkOrdersPage() {
       <PageHeader title={t('workOrders')}>
         {canAdd && (
           <button
-            onClick={openCreate}
-            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium"
+            onClick={() => router.push('/work-orders/bulk-add')}
+            className="px-4 py-2 rounded-lg bg-uff-accent hover:bg-uff-accent-hover text-uff-primary font-medium flex items-center gap-2"
           >
-            {t('add')} {t('workOrder')}
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Bulk Add
           </button>
         )}
       </PageHeader>
@@ -313,62 +318,34 @@ export default function WorkOrdersPage() {
             </select>
           </div>
           {canAccessAll && filterType === 'contractor' && (
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('employeeName')}</label>
-              <select
-                value={filterEmployee}
-                onChange={(e) => setFilterEmployee(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-              >
-                <option value="">{t('all')}</option>
-                {employees.map((e: { _id: string; name: string }) => (
-                  <option key={e._id} value={e._id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('employeeName')}
+              options={[{ _id: '', name: t('all') }, ...employees]}
+              value={filterEmployee}
+              onChange={setFilterEmployee}
+            />
           )}
           {canAccessAll && filterType === 'vendor' && (
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('vendor')}</label>
-              <select
-                value={filterVendor}
-                onChange={(e) => setFilterVendor(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-              >
-                <option value="">{t('all')}</option>
-                {vendors.map((v: { _id: string; name: string }) => (
-                  <option key={v._id} value={v._id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('vendor')}
+              options={[{ _id: '', name: t('all') }, ...vendors]}
+              value={filterVendor}
+              onChange={setFilterVendor}
+            />
           )}
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">{t('branches')}</label>
-            <select
-              value={filterBranch}
-              onChange={(e) => setFilterBranch(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-            >
-              <option value="">{t('all')}</option>
-              {(Array.isArray(branches) ? branches : []).map((b: { _id: string; name: string }) => (
-                <option key={b._id} value={b._id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            label={t('branches')}
+            options={[{ _id: '', name: t('all') }, ...(Array.isArray(branches) ? branches : [])]}
+            value={filterBranch}
+            onChange={setFilterBranch}
+          />
           {canAccessAll && (filterType === 'contractor' || filterType === 'full_time') && (
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">{t('filterByDepartment')}</label>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 bg-white"
-              >
-                <option value="">{t('all')}</option>
-                {(Array.isArray(departments) ? departments : []).map((d: { _id: string; name: string }) => (
-                  <option key={d._id} value={d._id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={t('filterByDepartment')}
+              options={[{ _id: '', name: t('all') }, ...(Array.isArray(departments) ? departments : [])]}
+              value={filterDepartment}
+              onChange={setFilterDepartment}
+            />
           )}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">{t('month')}</label>

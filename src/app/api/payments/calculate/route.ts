@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
         } else {
           gross = roundAmount(dailySalary * totalDaysWorked);
         }
-        baseAmount = roundAmount(gross - totalDeductions);
+        baseAmount = roundAmount(gross);
       }
 
       return NextResponse.json({
